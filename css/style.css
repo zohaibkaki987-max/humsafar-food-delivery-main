@@ -3251,3 +3251,23 @@ footer {
         gap: 10px;
     }
 }
+
+.restaurant-link{
+    text-decoration:none;
+    color:inherit;
+    display:block;
+}
+.restaurant-banner{
+    width:100%;
+    max-width:1200px;
+    margin:30px auto;
+    border-radius:15px;
+    overflow:hidden;
+}
+
+.restaurant-banner img{
+    width:100%;
+    height:300px;
+    object-fit:cover;
+    display:block;
+}

@@ -72,9 +72,40 @@
         </div>
     </div>
 
-    <div class="restaurants-grid" id="restaurants-grid">
-        <!-- Restaurants will be loaded by JavaScript -->
+   <?php include 'includes/load_restaurants.php'; ?>
+
+<div class="restaurants-grid">
+
+<?php while($restaurant = $result->fetch_assoc()) { ?>
+
+<a href="restaurant.php?id=<?php echo $restaurant['id']; ?>" class="restaurant-link">
+
+    <div class="restaurant-card">
+
+        <img src="assets/images/restaurants/<?php echo $restaurant['image']; ?>"
+             alt="<?php echo htmlspecialchars($restaurant['name']); ?>">
+
+        <div class="restaurant-info">
+
+            <h3><?php echo htmlspecialchars($restaurant['name']); ?></h3>
+
+            <p><?php echo htmlspecialchars($restaurant['description']); ?></p>
+
+            <div class="restaurant-meta">
+                ⭐ <?php echo $restaurant['rating']; ?> |
+                🕒 <?php echo htmlspecialchars($restaurant['delivery_time']); ?> |
+                🚚 Rs. <?php echo $restaurant['delivery_fee']; ?>
+            </div>
+
+        </div>
+
     </div>
+
+</a>
+
+<?php } ?>
+
+</div>
 
     <footer>
         <div class="footer-content">
@@ -125,6 +156,6 @@
         </div>
     </footer>
 
-    <script src="js/script.js"></script>
+    <!-- <script src="js/script.js"></script> -->
 </body>
 </html>

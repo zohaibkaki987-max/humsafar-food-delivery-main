@@ -6,11 +6,12 @@
 
 <?php while($restaurant = $result->fetch_assoc()) { ?>
 
+<a href="restaurant.php?id=<?php echo $restaurant['id']; ?>" class="restaurant-link">
+
 <div class="restaurant-card">
 
     <img src="assets/images/restaurants/<?php echo $restaurant['image']; ?>"
-     style="width:250px;height:180px;border:2px solid red;"
-     alt="">
+         alt="<?php echo htmlspecialchars($restaurant['name']); ?>">
 
     <div class="restaurant-info">
 
@@ -35,6 +36,8 @@
     </div>
 
 </div>
+
+</a>
 
 <?php } ?>
 
