@@ -1,0 +1,1500 @@
+/* =====================================================
+   HUMSAFAR FOOD DELIVERY
+   CART PAGE CSS
+   Part 1 : Layout + Header + Navigation
+===================================================== */
+
+/* ==========================
+   PAGE
+========================== */
+
+body{
+    margin:0;
+    padding:0;
+    background:#f5f6fa;
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    color:#333;
+}
+
+/* ==========================
+   LINKS
+========================== */
+
+a{
+    text-decoration:none;
+    color:inherit;
+}
+
+/* ==========================
+   CONTAINER
+========================== */
+
+.cart-container{
+    max-width:1400px;
+    margin:40px auto;
+    padding:0 30px;
+}
+
+/* ==========================
+   MAIN GRID
+========================== */
+
+.cart-content{
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:35px;
+    align-items:start;
+}
+
+/* ==========================
+   LEFT COLUMN
+========================== */
+
+.cart-items{
+    background:#fff;
+    border-radius:20px;
+    padding:35px;
+    box-shadow:0 10px 25px rgba(0,0,0,.08);
+}
+
+/* ==========================
+   PAGE TITLE
+========================== */
+
+.cart-header{
+    margin-bottom:25px;
+}
+
+.cart-header h1{
+    font-size:38px;
+    font-weight:700;
+    margin:0;
+    color:#222;
+}
+
+.cart-header p{
+    margin-top:10px;
+    color:#666;
+    font-size:16px;
+}
+
+/* ==========================
+   DIVIDER
+========================== */
+
+.cart-divider{
+    height:1px;
+    background:#ececec;
+    margin:25px 0;
+}
+
+/* ==========================
+   BUTTONS
+========================== */
+
+button{
+    cursor:pointer;
+    transition:.3s;
+    border:none;
+    outline:none;
+}
+
+button:hover{
+    opacity:.92;
+}
+
+/* ==========================
+   COMMON BUTTON
+========================== */
+
+.btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding:14px 28px;
+    border-radius:10px;
+    font-size:15px;
+    font-weight:600;
+    transition:.3s;
+}
+
+/* ==========================
+   PRIMARY BUTTON
+========================== */
+
+.btn-primary{
+    background:#E23744;
+    color:#fff;
+}
+
+.btn-primary:hover{
+    background:#c81d2d;
+}
+
+/* ==========================
+   SECONDARY BUTTON
+========================== */
+
+.btn-secondary{
+    background:#f2f2f2;
+    color:#444;
+}
+
+.btn-secondary:hover{
+    background:#e5e5e5;
+}
+
+/* ==========================
+   ICONS
+========================== */
+
+i{
+    vertical-align:middle;
+}
+
+/* ==========================
+   IMAGES
+========================== */
+
+img{
+    max-width:100%;
+    display:block;
+}
+
+/* ==========================
+   RESPONSIVE
+========================== */
+
+@media(max-width:992px){
+
+.cart-content{
+
+grid-template-columns:1fr;
+
+}
+
+.cart-container{
+
+padding:20px;
+
+}
+
+.cart-items{
+
+padding:25px;
+
+}
+
+}
+
+@media(max-width:576px){
+
+.cart-header h1{
+
+font-size:30px;
+
+}
+
+.cart-header p{
+
+font-size:14px;
+
+}
+
+}
+/* =====================================================
+   CART PAGE CSS
+   Part 2 : Restaurant Info + Cart Items
+===================================================== */
+
+
+/* ==========================
+   RESTAURANT INFO
+========================== */
+
+.cart-restaurant-info{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    background:#ffffff;
+    border-radius:18px;
+    padding:20px;
+    margin-bottom:30px;
+    box-shadow:0 5px 18px rgba(0,0,0,.08);
+}
+
+.cart-restaurant-avatar{
+    width:80px;
+    height:80px;
+    border-radius:50%;
+    overflow:hidden;
+    flex-shrink:0;
+    border:3px solid #E23744;
+    background:#fff;
+}
+
+.cart-restaurant-avatar img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+}
+
+.cart-restaurant-details{
+    flex:1;
+}
+
+.cart-restaurant-details h3{
+    margin:0;
+    font-size:24px;
+    color:#222;
+    font-weight:700;
+}
+
+.cart-restaurant-details p{
+    margin:8px 0;
+    color:#666;
+    font-size:15px;
+}
+
+.cart-restaurant-details .delivery-time{
+    display:inline-block;
+    background:#fff4f4;
+    color:#E23744;
+    padding:6px 12px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+}
+
+
+/* ==========================
+   CART ITEMS LIST
+========================== */
+
+.cart-items-list{
+
+display:flex;
+
+flex-direction:column;
+
+gap:20px;
+
+}
+
+
+/* ==========================
+   SINGLE CART ITEM
+========================== */
+
+.cart-item{
+
+display:grid;
+
+grid-template-columns:90px 1fr auto auto auto;
+
+align-items:center;
+
+gap:20px;
+
+background:#fff;
+
+padding:18px;
+
+border-radius:16px;
+
+border:1px solid #ececec;
+
+transition:.3s;
+
+}
+
+.cart-item:hover{
+
+box-shadow:0 10px 25px rgba(0,0,0,.08);
+
+}
+
+
+/* ==========================
+   PRODUCT IMAGE
+========================== */
+
+.item-image{
+
+width:90px;
+
+height:90px;
+
+border-radius:15px;
+
+overflow:hidden;
+
+background:#f8f8f8;
+
+display:flex;
+
+align-items:center;
+
+justify-content:center;
+
+}
+
+.item-image img{
+
+width:100%;
+
+height:100%;
+
+object-fit:cover;
+
+}
+
+.item-image i{
+
+font-size:36px;
+
+color:#bbb;
+
+}
+
+
+/* ==========================
+   ITEM DETAILS
+========================== */
+
+.item-details h4{
+
+margin:0;
+
+font-size:20px;
+
+font-weight:700;
+
+color:#222;
+
+}
+
+.item-details p{
+
+margin:8px 0;
+
+font-size:14px;
+
+color:#777;
+
+line-height:1.5;
+
+}
+
+.item-price{
+
+display:block;
+
+margin-top:10px;
+
+font-size:18px;
+
+font-weight:700;
+
+color:#E23744;
+
+}
+
+
+/* ==========================
+   QUANTITY
+========================== */
+
+.item-quantity{
+
+display:flex;
+
+align-items:center;
+
+gap:12px;
+
+}
+
+.quantity-btn{
+
+width:34px;
+
+height:34px;
+
+border:none;
+
+border-radius:50%;
+
+background:#E23744;
+
+color:#fff;
+
+font-size:18px;
+
+font-weight:bold;
+
+cursor:pointer;
+
+transition:.3s;
+
+}
+
+.quantity-btn:hover{
+
+background:#c61f2f;
+
+transform:scale(1.05);
+
+}
+
+.quantity{
+
+font-size:18px;
+
+font-weight:700;
+
+min-width:22px;
+
+text-align:center;
+
+}
+
+
+/* ==========================
+   ITEM TOTAL
+========================== */
+
+.item-total{
+
+font-size:20px;
+
+font-weight:700;
+
+color:#222;
+
+white-space:nowrap;
+
+}
+
+
+/* ==========================
+   REMOVE BUTTON
+========================== */
+
+.item-remove{
+
+width:45px;
+
+height:45px;
+
+border:none;
+
+border-radius:50%;
+
+background:#ffecec;
+
+color:#E23744;
+
+cursor:pointer;
+
+transition:.3s;
+
+display:flex;
+
+align-items:center;
+
+justify-content:center;
+
+font-size:18px;
+
+}
+
+.item-remove:hover{
+
+background:#E23744;
+
+color:#fff;
+
+transform:rotate(8deg);
+
+}
+
+
+/* ==========================
+   RESPONSIVE
+========================== */
+
+@media(max-width:992px){
+
+.cart-item{
+
+grid-template-columns:1fr;
+
+text-align:center;
+
+}
+
+.item-image{
+
+margin:auto;
+
+}
+
+.item-quantity{
+
+justify-content:center;
+
+}
+
+.item-total{
+
+text-align:center;
+
+}
+
+.item-remove{
+
+margin:auto;
+
+}
+
+.cart-restaurant-info{
+
+flex-direction:column;
+
+text-align:center;
+
+}
+
+}
+/* =====================================================
+   CART PAGE CSS
+   Part 3 : Order Summary + Payment + Voucher
+===================================================== */
+
+/* ==========================
+   ORDER SUMMARY
+========================== */
+
+.order-summary{
+    position:sticky;
+    top:30px;
+}
+
+.summary-card{
+    background:#fff;
+    border-radius:20px;
+    padding:30px;
+    box-shadow:0 10px 25px rgba(0,0,0,.08);
+}
+
+.summary-card h3{
+    margin:0 0 25px;
+    font-size:28px;
+    color:#222;
+    font-weight:700;
+}
+
+/* ==========================
+   SUMMARY ROW
+========================== */
+
+.summary-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:18px;
+    font-size:16px;
+    color:#555;
+}
+
+.summary-row span:last-child{
+    font-weight:600;
+}
+
+.summary-row .free{
+    color:#28a745;
+    font-weight:700;
+}
+
+.summary-divider{
+    height:1px;
+    background:#e9ecef;
+    margin:22px 0;
+}
+
+.summary-row.total{
+    font-size:22px;
+    font-weight:700;
+    color:#222;
+}
+
+.summary-row.total span:last-child{
+    color:#E23744;
+}
+
+/* ==========================
+   DELIVERY ADDRESS
+========================== */
+
+.delivery-address{
+    margin-top:30px;
+}
+
+.delivery-address h4{
+    margin-bottom:15px;
+    font-size:18px;
+    color:#222;
+}
+
+.address-card.small{
+    background:#f8f9fa;
+    border:1px solid #e9ecef;
+    border-radius:15px;
+    padding:18px;
+}
+
+.address-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+}
+
+.address-label{
+    font-weight:700;
+    color:#222;
+}
+
+.default-badge{
+    background:#E23744;
+    color:#fff;
+    padding:4px 10px;
+    border-radius:20px;
+    font-size:12px;
+}
+
+.address-card p{
+    color:#666;
+    line-height:1.6;
+    margin-bottom:15px;
+}
+
+.btn-change-address{
+    width:100%;
+    padding:12px;
+    background:#f1f1f1;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    font-weight:600;
+    transition:.3s;
+}
+
+.btn-change-address:hover{
+    background:#E23744;
+    color:#fff;
+}
+
+/* ==========================
+   PAYMENT METHOD
+========================== */
+
+.payment-method{
+    margin-top:30px;
+}
+
+.payment-method h4{
+    margin-bottom:15px;
+    font-size:18px;
+    color:#222;
+}
+
+.payment-option{
+    display:flex;
+    align-items:center;
+    padding:14px 15px;
+    border:1px solid #ececec;
+    border-radius:12px;
+    margin-bottom:12px;
+    transition:.3s;
+    cursor:pointer;
+}
+
+.payment-option:hover{
+    border-color:#E23744;
+    background:#fff7f8;
+}
+
+.payment-option input{
+    margin-right:12px;
+    accent-color:#E23744;
+}
+
+.payment-option label{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    width:100%;
+    cursor:pointer;
+    font-size:15px;
+    font-weight:600;
+}
+
+.payment-option i{
+    color:#E23744;
+    font-size:18px;
+}
+
+/* ==========================
+   VOUCHER
+========================== */
+
+.voucher-section{
+    margin-top:30px;
+}
+
+.voucher-input{
+    display:flex;
+    gap:10px;
+}
+
+.voucher-input input{
+    flex:1;
+    height:48px;
+    border:1px solid #ddd;
+    border-radius:10px;
+    padding:0 15px;
+    font-size:15px;
+    outline:none;
+    transition:.3s;
+}
+
+.voucher-input input:focus{
+    border-color:#E23744;
+}
+
+.btn-apply{
+    background:#E23744;
+    color:#fff;
+    border:none;
+    border-radius:10px;
+    padding:0 20px;
+    cursor:pointer;
+    font-weight:600;
+    transition:.3s;
+}
+
+.btn-apply:hover{
+    background:#c91f31;
+}
+
+/* ==========================
+   CHECKOUT BUTTON
+========================== */
+
+.btn-checkout{
+    width:100%;
+    margin-top:30px;
+    padding:16px;
+    background:#E23744;
+    color:#fff;
+    border:none;
+    border-radius:12px;
+    font-size:17px;
+    font-weight:700;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.btn-checkout:hover{
+    background:#c91f31;
+    transform:translateY(-2px);
+}
+
+.btn-checkout i{
+    margin-right:8px;
+}
+
+/* ==========================
+   SECURITY NOTE
+========================== */
+
+.security-note{
+    margin-top:18px;
+    text-align:center;
+    color:#777;
+    font-size:14px;
+}
+
+.security-note i{
+    color:#28a745;
+    margin-right:6px;
+}
+
+/* ==========================
+   RESPONSIVE
+========================== */
+
+@media(max-width:992px){
+
+.order-summary{
+    position:relative;
+    top:0;
+    margin-top:30px;
+}
+
+.voucher-input{
+    flex-direction:column;
+}
+
+.btn-apply{
+    height:48px;
+}
+
+}
+/* =====================================================
+   CART PAGE CSS
+   Part 4 : Add More + Empty Cart + Modal + Footer
+===================================================== */
+
+
+/* ==========================
+   ADD MORE ITEMS
+========================== */
+
+.add-more-section{
+    margin-top:35px;
+    text-align:center;
+}
+
+.add-more-section .btn-secondary{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    padding:15px 35px;
+    background:#E23744;
+    color:#fff;
+    font-size:16px;
+    font-weight:600;
+    border-radius:12px;
+    transition:.3s;
+    box-shadow:0 8px 20px rgba(226,55,68,.25);
+}
+
+.add-more-section .btn-secondary:hover{
+    background:#c91f31;
+    transform:translateY(-3px);
+}
+
+.add-more-section .btn-secondary i{
+    font-size:18px;
+}
+
+
+/* ==========================
+   EMPTY CART
+========================== */
+
+.empty-cart{
+    background:#fff;
+    border-radius:20px;
+    padding:80px 30px;
+    text-align:center;
+    box-shadow:0 10px 25px rgba(0,0,0,.08);
+}
+
+.empty-cart i{
+    font-size:80px;
+    color:#E23744;
+    margin-bottom:20px;
+}
+
+.empty-cart h2{
+    font-size:34px;
+    margin-bottom:15px;
+    color:#222;
+}
+
+.empty-cart p{
+    color:#777;
+    font-size:17px;
+    margin-bottom:30px;
+}
+
+.empty-cart a{
+    display:inline-block;
+    background:#E23744;
+    color:#fff;
+    padding:15px 35px;
+    border-radius:12px;
+    font-weight:600;
+    transition:.3s;
+}
+
+.empty-cart a:hover{
+    background:#c91f31;
+}
+
+
+/* ==========================
+   MODAL
+========================== */
+
+.modal{
+    display:none;
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,.45);
+    z-index:9999;
+}
+
+.modal-content{
+    width:95%;
+    max-width:650px;
+    background:#fff;
+    margin:60px auto;
+    border-radius:20px;
+    overflow:hidden;
+    animation:popup .3s ease;
+}
+
+@keyframes popup{
+
+from{
+
+opacity:0;
+transform:translateY(-30px);
+
+}
+
+to{
+
+opacity:1;
+transform:translateY(0);
+
+}
+
+}
+
+.modal-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:22px 25px;
+    border-bottom:1px solid #eee;
+}
+
+.modal-header h3{
+    margin:0;
+    font-size:24px;
+}
+
+.close-modal{
+    font-size:30px;
+    cursor:pointer;
+    color:#777;
+}
+
+.close-modal:hover{
+    color:#E23744;
+}
+
+
+/* ==========================
+   ADDRESS LIST
+========================== */
+
+.addresses-list-modal{
+    padding:25px;
+}
+
+.address-option{
+    display:flex;
+    gap:15px;
+    align-items:flex-start;
+    padding:18px;
+    border:1px solid #eee;
+    border-radius:12px;
+    margin-bottom:15px;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.address-option:hover{
+    border-color:#E23744;
+    background:#fff8f8;
+}
+
+.address-option.selected{
+    border-color:#E23744;
+    background:#fff4f4;
+}
+
+.address-details h4{
+    margin:0 0 8px;
+}
+
+.address-details p{
+    margin:4px 0;
+    color:#666;
+}
+
+
+/* ==========================
+   MODAL BUTTONS
+========================== */
+
+.modal-actions{
+    display:flex;
+    gap:12px;
+    padding:20px 25px;
+    border-top:1px solid #eee;
+    flex-wrap:wrap;
+}
+
+.modal-actions .btn-primary{
+
+flex:1;
+
+}
+
+.modal-actions .btn-secondary{
+
+flex:1;
+
+}
+
+.modal-actions .btn-link{
+
+width:100%;
+text-align:center;
+color:#E23744;
+font-weight:600;
+margin-top:10px;
+
+}
+
+
+/* ==========================
+   FOOTER SUPPORT
+========================== */
+
+footer{
+    margin-top:60px;
+}
+
+
+/* ==========================
+   SCROLLBAR
+========================== */
+
+::-webkit-scrollbar{
+
+width:10px;
+
+}
+
+::-webkit-scrollbar-thumb{
+
+background:#E23744;
+border-radius:20px;
+
+}
+
+::-webkit-scrollbar-track{
+
+background:#f3f3f3;
+
+}
+
+
+/* ==========================
+   RESPONSIVE
+========================== */
+
+@media(max-width:768px){
+
+.modal-content{
+
+width:96%;
+
+}
+
+.modal-actions{
+
+flex-direction:column;
+
+}
+
+.modal-actions .btn-primary,
+.modal-actions .btn-secondary{
+
+width:100%;
+
+}
+
+.empty-cart{
+
+padding:60px 20px;
+
+}
+
+.empty-cart h2{
+
+font-size:28px;
+
+}
+
+}
+/* =====================================================
+   CART PAGE CSS
+   Part 5 : Final Polish + Animations + Responsive
+===================================================== */
+
+
+/* ==========================
+   FADE ANIMATION
+========================== */
+
+@keyframes fadeIn{
+
+from{
+
+opacity:0;
+
+transform:translateY(20px);
+
+}
+
+to{
+
+opacity:1;
+
+transform:translateY(0);
+
+}
+
+}
+
+.cart-items,
+.order-summary,
+.cart-restaurant-info,
+.cart-item{
+
+animation:fadeIn .5s ease;
+
+}
+
+
+/* ==========================
+   CARD HOVER
+========================== */
+
+.cart-items,
+.summary-card{
+
+transition:.3s;
+
+}
+
+.cart-items:hover,
+.summary-card:hover{
+
+box-shadow:0 15px 35px rgba(0,0,0,.10);
+
+}
+
+
+/* ==========================
+   INPUTS
+========================== */
+
+input,
+select,
+textarea{
+
+font-family:inherit;
+
+font-size:15px;
+
+}
+
+input:focus,
+select:focus,
+textarea:focus{
+
+outline:none;
+
+border-color:#E23744;
+
+box-shadow:0 0 0 3px rgba(226,55,68,.12);
+
+}
+
+
+/* ==========================
+   DISABLED BUTTON
+========================== */
+
+button:disabled{
+
+opacity:.6;
+
+cursor:not-allowed;
+
+}
+
+
+/* ==========================
+   SUCCESS MESSAGE
+========================== */
+
+.success-message{
+
+background:#e9f8ee;
+
+color:#198754;
+
+padding:15px 20px;
+
+border-left:5px solid #198754;
+
+border-radius:10px;
+
+margin-bottom:20px;
+
+}
+
+
+/* ==========================
+   ERROR MESSAGE
+========================== */
+
+.error-message{
+
+background:#fdeaea;
+
+color:#dc3545;
+
+padding:15px 20px;
+
+border-left:5px solid #dc3545;
+
+border-radius:10px;
+
+margin-bottom:20px;
+
+}
+
+
+/* ==========================
+   BADGES
+========================== */
+
+.badge{
+
+display:inline-block;
+
+padding:5px 10px;
+
+border-radius:20px;
+
+font-size:12px;
+
+font-weight:600;
+
+background:#E23744;
+
+color:#fff;
+
+}
+
+
+/* ==========================
+   LOADING EFFECT
+========================== */
+
+.loading{
+
+pointer-events:none;
+
+opacity:.65;
+
+}
+
+.loading::after{
+
+content:"";
+
+display:inline-block;
+
+width:18px;
+
+height:18px;
+
+margin-left:8px;
+
+border:2px solid #fff;
+
+border-top:2px solid transparent;
+
+border-radius:50%;
+
+animation:spin .8s linear infinite;
+
+}
+
+@keyframes spin{
+
+100%{
+
+transform:rotate(360deg);
+
+}
+
+}
+
+
+/* ==========================
+   SMOOTH SCROLL
+========================== */
+
+html{
+
+scroll-behavior:smooth;
+
+}
+
+
+/* ==========================
+   SELECTION COLOR
+========================== */
+
+::selection{
+
+background:#E23744;
+
+color:#fff;
+
+}
+
+
+/* ==========================
+   MOBILE
+========================== */
+
+@media(max-width:768px){
+
+.cart-container{
+
+padding:15px;
+
+}
+
+.cart-items{
+
+padding:20px;
+
+}
+
+.summary-card{
+
+padding:20px;
+
+}
+
+.cart-item{
+
+padding:15px;
+
+}
+
+.item-details h4{
+
+font-size:18px;
+
+}
+
+.item-price{
+
+font-size:16px;
+
+}
+
+.item-total{
+
+font-size:18px;
+
+}
+
+.btn-checkout{
+
+font-size:16px;
+
+padding:15px;
+
+}
+
+}
+
+
+/* ==========================
+   EXTRA SMALL DEVICES
+========================== */
+
+@media(max-width:480px){
+
+.cart-header h1{
+
+font-size:28px;
+
+}
+
+.cart-header p{
+
+font-size:14px;
+
+}
+
+.cart-restaurant-avatar{
+
+width:65px;
+
+height:65px;
+
+}
+
+.cart-restaurant-details h3{
+
+font-size:20px;
+
+}
+
+.quantity-btn{
+
+width:32px;
+
+height:32px;
+
+}
+
+.item-remove{
+
+width:40px;
+
+height:40px;
+
+}
+
+}
+
+
+/* =====================================================
+   END OF CART CSS
+===================================================== */

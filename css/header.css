@@ -1,0 +1,241 @@
+/* ===========================
+   HUMSAFAR HEADER CSS
+=========================== */
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    background:#f8f9fa;
+}
+
+.main-header{
+    width:100%;
+    background:#fff;
+    box-shadow:0 3px 12px rgba(0,0,0,.08);
+    position:sticky;
+    top:0;
+    z-index:999;
+}
+
+.main-header .container{
+    width:95%;
+    max-width:1400px;
+    margin:auto;
+}
+
+.header-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:18px 0;
+    gap:20px;
+}
+
+.logo{
+    display:flex;
+    align-items:center;
+    text-decoration:none;
+    color:#e23744;
+    font-size:30px;
+    font-weight:700;
+}
+
+.logo i{
+    font-size:32px;
+    margin-right:10px;
+}
+
+.search-box{
+    flex:1;
+    display:flex;
+    max-width:600px;
+}
+
+.search-box input{
+    flex:1;
+    padding:14px 18px;
+    border:2px solid #eee;
+    border-right:none;
+    border-radius:12px 0 0 12px;
+    font-size:15px;
+    outline:none;
+}
+
+.search-box input:focus{
+    border-color:#e23744;
+}
+
+.search-box button{
+    width:60px;
+    border:none;
+    background:#e23744;
+    color:#fff;
+    border-radius:0 12px 12px 0;
+    cursor:pointer;
+    font-size:18px;
+}
+
+.search-box button:hover{
+    background:#c81f34;
+}
+
+.header-right{
+    display:flex;
+    align-items:center;
+    gap:15px;
+}
+
+.cart-btn{
+    position:relative;
+    text-decoration:none;
+    color:#222;
+    font-weight:600;
+    font-size:16px;
+}
+
+.cart-btn i{
+    margin-right:6px;
+}
+
+.cart-badge{
+    position:absolute;
+    top:-8px;
+    right:-14px;
+    background:#e23744;
+    color:#fff;
+    width:22px;
+    height:22px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:bold;
+}
+
+.username{
+    font-weight:600;
+    color:#444;
+}
+
+.login-btn,
+.register-btn,
+.logout-btn{
+    text-decoration:none;
+    padding:10px 20px;
+    border-radius:8px;
+    font-weight:600;
+    transition:.3s;
+}
+
+.login-btn{
+    color:#e23744;
+    border:2px solid #e23744;
+}
+
+.login-btn:hover{
+    background:#e23744;
+    color:#fff;
+}
+
+.register-btn,
+.logout-btn{
+    background:#e23744;
+    color:#fff;
+}
+
+.register-btn:hover,
+.logout-btn:hover{
+    background:#c81f34;
+}
+
+/* ===========================
+   NAVIGATION BAR
+=========================== */
+
+nav {
+    background: linear-gradient(135deg, var(--primary), #ff6b9d);
+    padding: 0 5%;
+}
+
+nav ul {
+    display: flex;
+    list-style: none;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+nav ul li {
+    position: relative;
+}
+
+nav ul li a {
+    display: block;
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 18px 20px;
+    transition: var(--transition);
+    position: relative;
+}
+
+nav ul li a:hover,
+nav ul li a.active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+nav ul li a.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 20px;
+    right: 20px;
+    height: 3px;
+    background: var(--secondary);
+}
+
+/* Responsive */
+
+@media (max-width:768px){
+
+    nav{
+        padding:0;
+    }
+
+    nav ul{
+        flex-wrap:wrap;
+        justify-content:center;
+    }
+
+    nav ul li a{
+        padding:15px 18px;
+        font-size:15px;
+    }
+
+}
+
+@media(max-width:576px){
+
+.logo{
+    font-size:24px;
+}
+
+.search-box input{
+    font-size:14px;
+}
+
+.header-right{
+    flex-wrap:wrap;
+    justify-content:center;
+}
+
+.navbar{
+    font-size:14px;
+}
+
+}

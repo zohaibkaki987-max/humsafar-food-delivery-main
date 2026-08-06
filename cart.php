@@ -1,255 +1,363 @@
-<!-- Cart -->
+<?php
+
+require_once 'includes/config.php';
+require_once 'includes/session.php';
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+
+$sql = "SELECT
+cart.id,
+cart.quantity,
+menu_items.id AS menu_id,
+menu_items.restaurant_id,
+menu_items.name,
+menu_items.description,
+menu_items.price,
+menu_items.image,
+restaurants.name AS restaurant_name,
+restaurants.image AS restaurant_image,
+restaurants.delivery_time,
+restaurants.delivery_fee
+FROM cart
+JOIN menu_items ON cart.menu_item_id = menu_items.id
+JOIN restaurants ON menu_items.restaurant_id = restaurants.id
+WHERE cart.user_id = ?";
+
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i",$user_id);
+$stmt->execute();
+
+$result = $stmt->get_result();
+
+$cartItems = [];
+$totalItems = 0;
+$subTotal = 0;
+$deliveryFee = 0;
+$restaurantID = 0;
+$restaurantImage = "";  
+$restaurantName = "";
+$deliveryTime = "";
+
+while($row = $result->fetch_assoc()){
+
+    if($restaurantID==0){
+        $restaurantImage = $row['restaurant_image'];
+        $restaurantID = $row['restaurant_id'];
+        $restaurantName = $row['restaurant_name'];
+        $deliveryTime = $row['delivery_time'];
+        $deliveryFee = $row['delivery_fee'];
+    }
+
+    $row['subtotal']=$row['price']*$row['quantity'];
+
+    $subTotal += $row['subtotal'];
+
+    $totalItems += $row['quantity'];
+
+    $cartItems[]=$row;
+
+}
+
+$grandTotal = $subTotal + $deliveryFee;
+
+?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Cart - Humsafar</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>My Cart | Humsafar</title>
+
+<link rel="stylesheet" href="css/cart.css">
+
+<link rel="stylesheet"
+href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 </head>
+
 <body>
-    <header>
-        <div class="top-bar">
-            <a href="index.html" class="logo">
-                <i class="fas fa-utensils"></i>
-                <h1>Humsafar</h1>
-            </a>
-            <div class="search-bar">
-                <input type="text" placeholder="Search for restaurants or food...">
-                <i class="fas fa-search"></i>
-            </div>
-            <div class="user-actions">
-                <a href="my-cart.html" id="cart-btn" class="active"><i class="fas fa-shopping-cart"></i> Cart <span class="cart-count">2</span></a>
-                <a href="login.html" class="sign-in">Logout</a>
-            </div>
-        </div>
-        <nav>
-            <ul>
-                <li><a href="index.html">Home</a></li>
-                <li><a href="restaurants.html">Restaurants</a></li>
-                <li><a href="#">Deals</a></li>
-                <li><a href="my-account.html">My Account</a></li>
-                <li><a href="#">Help</a></li>
-            </ul>
-        </nav>
-    </header>
 
-    <div class="cart-container">
-        <div class="cart-content">
-            <!-- Cart Items -->
-            <div class="cart-items">
-                <div class="cart-header">
-                    <h1>Your Cart</h1>
-                    <p>2 items from Pizza Palace</p>
-                </div>
+<?php include 'includes/header.php'; ?>
+<div class="cart-container">
 
-                <div class="restaurant-info">
-                    <div class="restaurant-avatar">
-                        <i class="fas fa-pizza-slice"></i>
-                    </div>
-                    <div class="restaurant-details">
-                        <h3>Pizza Palace</h3>
-                        <p>Italian • Pizza • Pasta</p>
-                        <span class="delivery-time">25-35 min • Free delivery</span>
-                    </div>
-                </div>
+<div class="cart-content">
 
-                <div class="cart-items-list">
-                    <div class="cart-item">
-                        <div class="item-image">
-                            <i class="fas fa-pizza-slice"></i>
-                        </div>
-                        <div class="item-details">
-                            <h4>Margherita Pizza</h4>
-                            <p>Classic pizza with tomato sauce and mozzarella</p>
-                            <span class="item-price">$14.99</span>
-                        </div>
-                        <div class="item-quantity">
-                            <button class="quantity-btn minus">-</button>
-                            <span class="quantity">1</span>
-                            <button class="quantity-btn plus">+</button>
-                        </div>
-                        <div class="item-total">$14.99</div>
-                        <button class="item-remove">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
+<div class="cart-items">
 
-                    <div class="cart-item">
-                        <div class="item-image">
-                            <i class="fas fa-bread-slice"></i>
-                        </div>
-                        <div class="item-details">
-                            <h4>Garlic Bread</h4>
-                            <p>Freshly baked bread with garlic butter</p>
-                            <span class="item-price">$5.99</span>
-                        </div>
-                        <div class="item-quantity">
-                            <button class="quantity-btn minus">-</button>
-                            <span class="quantity">1</span>
-                            <button class="quantity-btn plus">+</button>
-                        </div>
-                        <div class="item-total">$5.99</div>
-                        <button class="item-remove">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
+<div class="cart-header">
 
-                <!-- Add More Items -->
-                <div class="add-more-section">
-                    <button class="btn-secondary">
-                        <i class="fas fa-plus"></i> Add More Items
-                    </button>
-                </div>
-            </div>
+<h1>
+<i class="fas fa-shopping-cart"></i>
+My Cart
+</h1>
 
+<?php if($totalItems>0){ ?>
+
+<p>
+
+<strong><?php echo $totalItems; ?></strong>
+
+item(s) from
+
+<strong><?php echo htmlspecialchars($restaurantName); ?></strong>
+
+</p>
+
+<?php } else { ?>
+
+<p>Your cart is empty.</p>
+
+<?php } ?>
+
+</div>
+
+<?php if($totalItems>0){ ?>
+
+<div class="cart-restaurant-info">
+
+<div class="cart-restaurant-avatar">
+
+<?php if(!empty($restaurantImage)){ ?>
+
+    <img src="assets/images/restaurants/<?php echo htmlspecialchars($restaurantImage); ?>"
+         alt="<?php echo htmlspecialchars($restaurantName); ?>"
+         style="width:70px;height:70px;border-radius:50%;object-fit:cover;">
+
+<?php } else { ?>
+
+    <i class="fas fa-store"></i>
+
+<?php } ?>
+
+</div>
+</div>
+
+<div class="cart-restaurant-details">
+
+<h3><?php echo htmlspecialchars($restaurantName); ?></h3>
+
+<p>Delivery Time : <?php echo $deliveryTime; ?></p>
+
+<p>Delivery Fee : Rs. <?php echo number_format($deliveryFee,2); ?></p>
+
+</div>
+
+</div>
+
+<?php } ?>
+<div class="cart-items-list">
+
+<?php if($totalItems > 0){ ?>
+
+<?php foreach($cartItems as $item){ ?>
+
+<div class="cart-item">
+
+    <!-- Item Image -->
+    <div class="item-image">
+
+        <?php if(!empty($item['image'])){ ?>
+
+            <img src="assets/images/menu/<?php echo htmlspecialchars($item['image']); ?>"
+                 alt="<?php echo htmlspecialchars($item['name']); ?>"
+                 style="width:80px;height:80px;object-fit:cover;border-radius:10px;">
+
+        <?php }else{ ?>
+
+            <i class="fas fa-utensils" style="font-size:35px;"></i>
+
+        <?php } ?>
+
+    </div>
+
+    <!-- Item Details -->
+    <div class="item-details">
+
+        <h3><?php echo htmlspecialchars($item['name']); ?></h3>
+
+        <p><?php echo htmlspecialchars($item['description']); ?></p>
+
+        <strong>
+
+            Rs. <?php echo number_format($item['price'],2); ?>
+
+        </strong>
+
+    </div>
+
+    <!-- Quantity -->
+    <div class="quantity-box">
+
+        <a href="update_cart.php?action=minus&id=<?php echo $item['id']; ?>"
+           class="quantity-btn">
+
+            -
+
+        </a>
+
+        <span class="quantity">
+
+            <?php echo $item['quantity']; ?>
+
+        </span>
+
+        <a href="update_cart.php?action=plus&id=<?php echo $item['id']; ?>"
+           class="quantity-btn">
+
+            +
+
+        </a>
+
+    </div>
+
+    <!-- Subtotal -->
+
+    <div class="item-total">
+
+        Rs. <?php echo number_format($item['subtotal'],2); ?>
+
+    </div>
+
+    <!-- Remove -->
+
+    <div class="item-remove">
+
+        <a href="remove_from_cart.php?id=<?php echo $item['id']; ?>"
+
+           onclick="return confirm('Remove this item from cart?');">
+
+            <i class="fas fa-trash"></i>
+
+        </a>
+
+    </div>
+
+</div>
+
+<?php } ?>
+
+</div>
+<div class="add-more-section">
+
+<a href="restaurant.php?id=<?php echo $restaurantID; ?>"
+
+class="btn-secondary">
+
+<i class="fas fa-plus"></i>
+
+Add More Items
+
+</a>
+
+</div>
+
+<?php }else{ ?>
+
+<div class="empty-cart">
+
+<i class="fas fa-shopping-cart"
+style="font-size:80px;color:#bbb;"></i>
+
+<h2>Your Cart is Empty</h2>
+
+<p>
+
+Looks like you haven't added anything yet.
+
+</p>
+
+<br>
+
+<a href="restaurants.php"
+
+class="btn-primary">
+
+Browse Restaurants
+
+</a>
+
+</div>
+
+<?php } ?>
+
+</div>
             <!-- Order Summary -->
+
             <div class="order-summary">
+
                 <div class="summary-card">
-                    <h3>Order Summary</h3>
-                    
+
+                    <h2>Order Summary</h2>
+
                     <div class="summary-row">
-                        <span>Subtotal (2 items)</span>
-                        <span>$20.98</span>
+
+                        <span>Total Items</span>
+
+                        <span><?php echo $totalItems; ?></span>
+
                     </div>
+
                     <div class="summary-row">
+
+                        <span>Subtotal</span>
+
+                        <span>Rs. <?php echo number_format($subTotal,2); ?></span>
+
+                    </div>
+
+                    <div class="summary-row">
+
                         <span>Delivery Fee</span>
-                        <span class="free">FREE</span>
+
+                        <span>Rs. <?php echo number_format($deliveryFee,2); ?></span>
+
                     </div>
-                    <div class="summary-row">
-                        <span>Service Fee</span>
-                        <span>$1.50</span>
-                    </div>
-                    <div class="summary-row">
-                        <span>Tax</span>
-                        <span>$2.10</span>
-                    </div>
-                    
-                    <div class="summary-divider"></div>
-                    
+
+                    <hr>
+
                     <div class="summary-row total">
-                        <span>Total</span>
-                        <span>$24.58</span>
+
+                        <strong>Total</strong>
+
+                        <strong>
+
+                            Rs. <?php echo number_format($grandTotal,2); ?>
+
+                        </strong>
+
                     </div>
 
-                    <!-- Delivery Address -->
-                    <div class="delivery-address">
-                        <h4>Delivery Address</h4>
-                        <div class="address-card small">
-                            <div class="address-header">
-                                <span class="address-label">Home</span>
-                                <span class="default-badge">Default</span>
-                            </div>
-                            <p>123 Main Street, Apt 4B, New York, NY 10001</p>
-                            <button class="btn-change-address">Change</button>
-                        </div>
-                    </div>
+                    <?php if($totalItems>0){ ?>
 
-                    <!-- Payment Method -->
-                    <div class="payment-method">
-                        <h4>Payment Method</h4>
-                        <div class="payment-option">
-                            <input type="radio" id="credit-card" name="payment" checked>
-                            <label for="credit-card">
-                                <i class="fas fa-credit-card"></i>
-                                Credit/Debit Card
-                            </label>
-                        </div>
-                        <div class="payment-option">
-                            <input type="radio" id="paypal" name="payment">
-                            <label for="paypal">
-                                <i class="fab fa-paypal"></i>
-                                PayPal
-                            </label>
-                        </div>
-                        <div class="payment-option">
-                            <input type="radio" id="cash" name="payment">
-                            <label for="cash">
-                                <i class="fas fa-money-bill"></i>
-                                Cash on Delivery
-                            </label>
-                        </div>
-                    </div>
+                    <a href="checkout.php" class="btn-checkout">
 
-                    <!-- Apply Voucher -->
-                    <div class="voucher-section">
-                        <div class="voucher-input">
-                            <input type="text" placeholder="Enter voucher code">
-                            <button class="btn-apply">Apply</button>
-                        </div>
-                    </div>
+                        <i class="fas fa-credit-card"></i>
 
-                    <!-- Checkout Button -->
-                    <button class="btn-checkout">
-                        <i class="fas fa-lock"></i>
-                        Proceed to Checkout - $24.58
-                    </button>
+                        Proceed to Checkout
 
-                    <p class="security-note">
-                        <i class="fas fa-shield-alt"></i>
-                        Your payment information is secure and encrypted
-                    </p>
+                    </a>
+
+                    <?php } ?>
+
                 </div>
+
             </div>
+
         </div>
+
     </div>
 
-    <!-- Change Address Modal -->
-    <div id="change-address-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Select Delivery Address</h3>
-                <span class="close-modal">&times;</span>
-            </div>
-            <div class="addresses-list-modal">
-                <div class="address-option selected">
-                    <div class="address-radio">
-                        <input type="radio" name="delivery-address" checked>
-                    </div>
-                    <div class="address-details">
-                        <h4>Home</h4>
-                        <p>123 Main Street, Apt 4B</p>
-                        <p>New York, NY 10001</p>
-                        <span class="default-badge">Default</span>
-                    </div>
-                </div>
-                <div class="address-option">
-                    <div class="address-radio">
-                        <input type="radio" name="delivery-address">
-                    </div>
-                    <div class="address-details">
-                        <h4>Work</h4>
-                        <p>456 Business Avenue, Floor 12</p>
-                        <p>New York, NY 10002</p>
-                    </div>
-                </div>
-                <div class="address-option">
-                    <div class="address-radio">
-                        <input type="radio" name="delivery-address">
-                    </div>
-                    <div class="address-details">
-                        <h4>Parents' House</h4>
-                        <p>789 Family Road</p>
-                        <p>Brooklyn, NY 11201</p>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-actions">
-                <button class="btn-primary" id="confirm-address">Confirm Address</button>
-                <button class="btn-secondary close-modal">Cancel</button>
-                <a href="my-addresses.html" class="btn-link">Manage Addresses</a>
-            </div>
-        </div>
-    </div>
+<?php include 'includes/footer.php'; ?>
 
-    <footer>
-        <div class="footer-content">
-            <!-- Same footer as my-account.html -->
-        </div>
-    </footer>
-
-    <script src="js/script.js"></script>
 </body>
+
 </html>
