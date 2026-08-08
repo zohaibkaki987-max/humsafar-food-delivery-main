@@ -23,6 +23,11 @@ if ($isLoggedIn) {
 <html lang="en">
 
 <head>
+    <head>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/css_header.css">
+    <link rel="stylesheet" href="css/css_cart.css">
 
 <meta charset="UTF-8">
 
@@ -31,6 +36,7 @@ if ($isLoggedIn) {
 <title>Humsafar Food Delivery</title>
 
 <link rel="stylesheet" href="css/header.css">
+
 
 <link rel="stylesheet"
 href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
