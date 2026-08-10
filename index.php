@@ -63,7 +63,6 @@ $userName = $isLoggedIn ? $_SESSION['name'] : "";
                 <li><a href="deals.php">Deals</a></li>
                 <li><a href="my-account.php">My Account</a></li>
                 <li><a href="#">Help</a></li>
-                <li><a href="restaurant-owner.php">For Restaurants</a></li>
                 <li><a href="rider.php">Become a Rider</a></li>
             </ul>
         </nav>
@@ -117,7 +116,6 @@ $userName = $isLoggedIn ? $_SESSION['name'] : "";
                 <h3>Humsafar</h3>
                 <ul>
                     <li><a href="#">About Us</a></li>
-                    <li><a href="#">Careers</a></li>
                     <li><a href="#">Press</a></li>
                     <li><a href="#">Blog</a></li>
                 </ul>
@@ -131,21 +129,12 @@ $userName = $isLoggedIn ? $_SESSION['name'] : "";
                     <li><a href="#">Mobile Apps</a></li>
                 </ul>
             </div>
-            <div class="footer-column">
-                <h3>For Restaurants</h3>
-                <ul>
-                    <li><a href="restaurant-owner.php">Add Restaurant</a></li>
-                    <li><a href="#">Business App</a></li>
-                    <li><a href="#">Restaurant Widgets</a></li>
-                    <li><a href="#">Products for Businesses</a></li>
-                </ul>
-            </div>
+            
             <div class="footer-column">
                 <h3>Contact Us</h3>
                 <ul>
                     <li><a href="#">Help & Support</a></li>
                     <li><a href="#">Partner with us</a></li>
-                    <li><a href="rider.php  ">Ride with us</a></li>
                 </ul>
                 <div class="social-icons">
                     <a href="#"><i class="fab fa-facebook"></i></a>

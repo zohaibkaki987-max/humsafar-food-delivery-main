@@ -3324,6 +3324,22 @@ document.addEventListener(
         }
 
     }
+    if (!paymentMethod) {
+
+        alert('Please select a payment method.');
+
+        return false;
+
+    }
+
+
+    document.getElementById('formCustomerNote').value =
+        note;
+
+
+    return true;
+
+
 );
 
 </script>
