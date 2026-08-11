@@ -1602,11 +1602,12 @@ a {
     overflow: hidden;
     border-radius: 18px;
     background:
-        linear-gradient(
+    linear-gradient(
             135deg,
             #ed0038,
-            #fa578b
+            #f34c82
         );
+
 }
 
 .preview img {

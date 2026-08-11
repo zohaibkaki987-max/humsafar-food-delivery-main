@@ -744,7 +744,7 @@ function e($value)
 
         </a>
 
-        <a href="../index.php" class="back-button">
+        <a href="../join-humsafar.php" class="back-button">
 
             <i class="fas fa-arrow-left"></i>
 

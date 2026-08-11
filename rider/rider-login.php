@@ -1,74 +1,104 @@
 <?php
 
-session_start();
+require_once __DIR__ . '/../includes/config.php';
 
-require_once '../includes/config.php';
-
-/*
-|--------------------------------------------------------------------------
-| HUMSAFAR RIDER LOGIN
-|--------------------------------------------------------------------------
-*/
-
-if (!isset($conn) || !($conn instanceof mysqli)) {
-    die("Database connection is not available.");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| IF ALREADY LOGGED IN
-|--------------------------------------------------------------------------
-*/
+/* =========================================================
+   HELPER
+========================================================= */
 
-if (
-    isset($_SESSION['rider_logged_in']) &&
-    $_SESSION['rider_logged_in'] === true
-) {
-    header("Location: rider-dashboard.php");
-    exit;
+function e($value)
+{
+    return htmlspecialchars(
+        (string)$value,
+        ENT_QUOTES,
+        'UTF-8'
+    );
 }
 
 
-$error = "";
+/* =========================================================
+   VARIABLES
+========================================================= */
 
-$cnic = "";
+$cnic = '';
 
-
-/*
-|--------------------------------------------------------------------------
-| LOGIN PROCESS
-|--------------------------------------------------------------------------
-*/
-
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-
-    $cnic = trim($_POST["cnic"] ?? "");
-    $password = $_POST["password"] ?? "";
+$errorMessage = '';
 
 
-    if ($cnic === "" || $password === "") {
+/* =========================================================
+   LOGIN
+========================================================= */
 
-        $error = "Please enter your CNIC and password.";
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $cnic =
+        trim($_POST['cnic'] ?? '');
+
+    $password =
+        $_POST['password'] ?? '';
+
+
+    /* =====================================================
+       FORMAT CNIC
+    ===================================================== */
+
+    $digits =
+        preg_replace(
+            '/[^0-9]/',
+            '',
+            $cnic
+        );
+
+
+    if (strlen($digits) === 13) {
+
+        $cnic =
+            substr($digits, 0, 5)
+            . '-'
+            . substr($digits, 5, 7)
+            . '-'
+            . substr($digits, 12, 1);
+    }
+
+
+    /* =====================================================
+       VALIDATION
+    ===================================================== */
+
+    if (
+        !preg_match(
+            '/^[0-9]{5}-[0-9]{7}-[0-9]{1}$/',
+            $cnic
+        )
+    ) {
+
+        $errorMessage =
+            'Please enter a valid CNIC in the format 12345-1234567-1.';
+
+    } elseif ($password === '') {
+
+        $errorMessage =
+            'Please enter your password.';
 
     } else {
 
-        /*
-        |--------------------------------------------------------------------------
-        | FIND RIDER BY CNIC
-        |--------------------------------------------------------------------------
-        */
+
+        /* =================================================
+           FIND RIDER
+        ================================================= */
 
         $stmt = $conn->prepare("
             SELECT
                 id,
                 full_name,
-                email,
-                phone,
                 cnic,
+                phone,
                 password,
-                vehicle_type,
-                bike_number,
                 status
             FROM riders
             WHERE cnic = ?
@@ -78,93 +108,118 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if (!$stmt) {
 
-            $error = "Database error. Please try again.";
+            $errorMessage =
+                'Database error: ' . $conn->error;
 
         } else {
 
-            $stmt->bind_param("s", $cnic);
+
+            $stmt->bind_param(
+                "s",
+                $cnic
+            );
+
 
             $stmt->execute();
 
-            $result = $stmt->get_result();
 
-            $rider = $result->fetch_assoc();
-
-            $stmt->close();
+            $result =
+                $stmt->get_result();
 
 
-            /*
-            |--------------------------------------------------------------------------
-            | CHECK RIDER
-            |--------------------------------------------------------------------------
-            */
+            /* =============================================
+               RIDER NOT FOUND
+            ============================================= */
 
-            if (!$rider) {
-
-                $error = "Invalid CNIC or password.";
-
-            } elseif (
-                !password_verify(
-                    $password,
-                    $rider["password"]
-                )
+            if (
+                !$result ||
+                $result->num_rows === 0
             ) {
 
-                $error = "Invalid CNIC or password.";
+                $errorMessage =
+                    'No rider account was found with this CNIC.';
 
             } else {
 
-                /*
-                |--------------------------------------------------------------------------
-                | LOGIN SUCCESS
-                |--------------------------------------------------------------------------
-                */
 
-                session_regenerate_id(true);
+                $rider =
+                    $result->fetch_assoc();
 
 
-                $_SESSION["rider_logged_in"] = true;
+                /* =========================================
+                   PASSWORD CHECK ONLY
+                   
+                   STATUS IS NOT CHECKED HERE.
+                ========================================= */
 
-                $_SESSION["rider_id"] =
-                    (int)$rider["id"];
+                if (
+                    !password_verify(
+                        $password,
+                        $rider['password']
+                    )
+                ) {
 
-                $_SESSION["rider_name"] =
-                    $rider["full_name"];
+                    $errorMessage =
+                        'Incorrect password. Please try again.';
 
-                $_SESSION["rider_email"] =
-                    $rider["email"];
-
-                $_SESSION["rider_phone"] =
-                    $rider["phone"];
-
-                $_SESSION["rider_cnic"] =
-                    $rider["cnic"];
-
-                $_SESSION["rider_status"] =
-                    $rider["status"];
-
-                $_SESSION["rider_vehicle"] =
-                    $rider["vehicle_type"];
-
-                $_SESSION["rider_bike_number"] =
-                    $rider["bike_number"];
+                } else {
 
 
-                /*
-                |--------------------------------------------------------------------------
-                | REDIRECT
-                |--------------------------------------------------------------------------
-                */
+                    /* =====================================
+                       LOGIN SESSION
+                    ===================================== */
 
-                header("Location: rider-dashboard.php");
-                exit;
+                    $_SESSION['rider_logged_in'] =
+                        true;
+
+
+                    $_SESSION['rider_id'] =
+                        $rider['id'];
+
+
+                    $_SESSION['rider_name'] =
+                        $rider['full_name'];
+
+
+                    $_SESSION['rider_cnic'] =
+                        $rider['cnic'];
+
+
+                    $_SESSION['rider_phone'] =
+                        $rider['phone'];
+
+
+                    /*
+                     * Status dashboard par use hoga.
+                     *
+                     * pending
+                     * approved
+                     * rejected
+                     */
+
+                    $_SESSION['rider_status'] =
+                        $rider['status'];
+
+
+                    /* =====================================
+                       DIRECT DASHBOARD
+                    ===================================== */
+
+                    header(
+                        'Location: rider-dashboard.php'
+                    );
+
+                    exit;
+                }
             }
+
+
+            $stmt->close();
         }
     }
 }
 
 ?>
-
 
 <!DOCTYPE html>
 
@@ -172,723 +227,940 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <head>
 
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <title>
-        Rider Login | Humsafar
-    </title>
+<title>
+    Rider Login | Humsafar
+</title>
 
 
-    <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-    >
+<!-- FONT AWESOME -->
 
+<link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+>
 
-    <style>
 
-        * {
-            box-sizing: border-box;
-        }
+<style>
 
+/* =========================================================
+   RESET
+========================================================= */
 
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            min-height: 100%;
-        }
+* {
+    box-sizing: border-box;
+}
 
 
-        body {
+body {
 
-            font-family:
-                "Segoe UI",
-                Tahoma,
-                Geneva,
-                Verdana,
-                sans-serif;
+    margin: 0;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #fff8fb 0%,
-                    #ffeaf1 50%,
-                    #fff8fb 100%
-                );
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
 
-            color: #292929;
+    background: #f7f5f6;
 
-            min-height: 100vh;
+    color: #29232a;
+}
 
-            display: flex;
 
-            flex-direction: column;
+a {
 
-        }
+    text-decoration: none;
+}
 
 
-        /*
-        |--------------------------------------------------------------------------
-        | HEADER
-        |--------------------------------------------------------------------------
-        */
+/* =========================================================
+   HEADER
+========================================================= */
 
-        .header {
+.header {
 
-            height: 70px;
+    height: 70px;
 
-            background: #ffffff;
+    background: #ffffff;
 
-            border-top:
-                3px solid #ef0038;
+    border-bottom:
+        1px solid #eee5e8;
 
-            border-bottom:
-                1px solid #eeeeee;
+    display: flex;
 
-            display: flex;
+    align-items: center;
 
-            align-items: center;
+    justify-content: space-between;
 
-            justify-content: space-between;
+    padding:
+        0 35px;
+}
 
-            padding:
-                0 6%;
 
-        }
+/* =========================================================
+   LOGO
+========================================================= */
 
+.logo {
 
-        .logo {
+    display: flex;
 
-            display: flex;
+    align-items: center;
 
-            align-items: center;
+    gap: 10px;
 
-            gap: 9px;
+    color: #29232a;
 
-            color: #ed0038;
+    font-size: 23px;
 
-            font-size: 23px;
+    font-weight: 800;
+}
 
-            font-weight: 800;
 
-        }
+.logo-icon {
 
+    width: 40px;
 
-        .logo i {
-            font-size: 22px;
-        }
+    height: 40px;
 
+    display: flex;
 
-        .back-link {
+    align-items: center;
 
-            display: inline-flex;
+    justify-content: center;
 
-            align-items: center;
+    border-radius: 10px;
 
-            gap: 8px;
+    background: #ed0038;
 
-            padding:
-                9px 15px;
+    color: #ffffff;
 
-            border:
-                1px solid #f1c8d7;
+    font-size: 16px;
+}
 
-            border-radius: 9px;
 
-            color: #d90035;
+/* =========================================================
+   BACK BUTTON
+========================================================= */
 
-            font-size: 13px;
+.back-button {
 
-            font-weight: 700;
+    display: inline-flex;
 
-            transition: .2s ease;
+    align-items: center;
 
-        }
+    gap: 9px;
 
+    padding:
+        11px 18px;
 
-        .back-link:hover {
+    border:
+        1px solid #ed0038;
 
-            background: #fff0f5;
+    border-radius: 9px;
 
-            border-color: #ed0038;
+    background: #ffffff;
 
-        }
+    color: #ed0038;
 
+    font-size: 11px;
 
-        /*
-        |--------------------------------------------------------------------------
-        | MAIN
-        |--------------------------------------------------------------------------
-        */
+    font-weight: 800;
 
-        .main {
+    box-shadow:
+        0 4px 12px
+        rgba(237,0,56,.08);
 
-            flex: 1;
+    transition:
+        all .2s ease;
+}
 
-            display: flex;
 
-            align-items: center;
+.back-button:hover {
 
-            justify-content: center;
+    background: #ed0038;
 
-            padding:
-                40px 20px;
+    color: #ffffff;
 
-        }
+    transform:
+        translateY(-1px);
 
+    box-shadow:
+        0 8px 20px
+        rgba(237,0,56,.18);
+}
 
-        .login-card {
 
-            width: 100%;
+/* =========================================================
+   MAIN
+========================================================= */
 
-            max-width: 430px;
+.main {
 
-            background: #ffffff;
+    min-height:
+        calc(100vh - 125px);
 
-            border:
-                1px solid #f1d9e2;
+    padding:
+        38px 20px 45px;
 
-            border-radius: 22px;
+    display: flex;
 
-            padding:
-                38px 35px;
+    justify-content: center;
 
-            box-shadow:
-                0 18px 50px
-                rgba(180, 35, 85, .12);
+    align-items: flex-start;
+}
 
-        }
 
+/* =========================================================
+   CONTAINER
+========================================================= */
 
-        /*
-        |--------------------------------------------------------------------------
-        | ICON
-        |--------------------------------------------------------------------------
-        */
+.container {
 
-        .login-icon {
+    width:
+        min(1000px, 100%);
 
-            width: 72px;
+    display: grid;
 
-            height: 72px;
+    grid-template-columns:
+        45% 55%;
 
-            margin:
-                0 auto 20px;
+    background: #ffffff;
 
-            display: flex;
+    border:
+        1px solid #eee4e8;
 
-            align-items: center;
+    border-radius: 20px;
 
-            justify-content: center;
+    overflow: hidden;
 
-            border-radius: 20px;
+    box-shadow:
+        0 15px 45px
+        rgba(40,20,28,.07);
+}
 
-            color: #ffffff;
 
-            font-size: 29px;
+/* =========================================================
+   LEFT PROMOTIONAL AREA
+========================================================= */
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #ed0038,
-                    #f94f87
-                );
+.left {
 
-            box-shadow:
-                0 10px 25px
-                rgba(237, 0, 56, .22);
+    position: relative;
 
-        }
+    min-height: 610px;
 
+    padding:
+        58px 45px;
 
-        /*
-        |--------------------------------------------------------------------------
-        | HEADING
-        |--------------------------------------------------------------------------
-        */
+    background:
+        linear-gradient(
+            145deg,
+            #ed0038,
+            #fa578b
+        );
 
-        .heading {
+    color: #ffffff;
 
-            text-align: center;
+    overflow: hidden;
+}
 
-            margin-bottom: 27px;
 
-        }
+.left:before {
 
+    content: "";
 
-        .badge {
+    position: absolute;
 
-            display: inline-flex;
+    width: 280px;
 
-            align-items: center;
+    height: 280px;
 
-            gap: 6px;
+    border-radius: 50%;
 
-            padding:
-                7px 13px;
+    background:
+        rgba(255,255,255,.08);
 
-            margin-bottom: 12px;
+    top: -110px;
 
-            border-radius: 30px;
+    right: -100px;
+}
 
-            background: #fff0f4;
 
-            color: #df0038;
+.left:after {
 
-            font-size: 11px;
+    content: "";
 
-            font-weight: 800;
+    position: absolute;
 
-        }
+    width: 220px;
 
+    height: 220px;
 
-        .heading h1 {
+    border-radius: 50%;
 
-            margin:
-                0 0 8px;
+    background:
+        rgba(255,255,255,.07);
 
-            color: #292929;
+    bottom: -90px;
 
-            font-size: 28px;
+    left: -80px;
+}
 
-            font-weight: 800;
 
-        }
+.left-content {
 
+    position: relative;
 
-        .heading p {
+    z-index: 2;
+}
 
-            margin: 0;
 
-            color: #777777;
+/* =========================================================
+   BADGE
+========================================================= */
 
-            font-size: 13px;
+.badge {
 
-            line-height: 1.6;
+    display: inline-flex;
 
-        }
+    align-items: center;
 
+    gap: 8px;
 
-        /*
-        |--------------------------------------------------------------------------
-        | ERROR
-        |--------------------------------------------------------------------------
-        */
+    padding:
+        9px 13px;
 
-        .error {
+    border:
+        1px solid
+        rgba(255,255,255,.25);
 
-            padding:
-                12px 14px;
+    background:
+        rgba(255,255,255,.12);
 
-            margin-bottom:
-                19px;
+    border-radius: 50px;
 
-            border-radius: 9px;
+    font-size: 10px;
 
-            border:
-                1px solid #ffc3d1;
+    font-weight: 800;
 
-            background: #fff0f3;
+    margin-bottom: 23px;
+}
 
-            color: #a40027;
 
-            font-size: 12.5px;
+/* =========================================================
+   LEFT TITLE
+========================================================= */
 
-            line-height: 1.5;
+.left h1 {
 
-        }
+    margin:
+        0 0 15px;
 
+    font-size: 38px;
 
-        /*
-        |--------------------------------------------------------------------------
-        | FORM
-        |--------------------------------------------------------------------------
-        */
+    line-height: 1.15;
 
-        .form-group {
+    font-weight: 800;
+}
 
-            margin-bottom:
-                18px;
 
-        }
+.left-description {
 
+    margin: 0;
 
-        .form-group label {
+    color:
+        rgba(255,255,255,.88);
 
-            display: block;
+    font-size: 12px;
 
-            margin-bottom:
-                7px;
+    line-height: 1.8;
+}
 
-            color: #333333;
 
-            font-size: 12.5px;
+/* =========================================================
+   FEATURES
+========================================================= */
 
-            font-weight: 700;
+.features {
 
-        }
+    margin-top: 40px;
 
+    display: grid;
 
-        .input-wrapper {
+    gap: 20px;
+}
 
-            position: relative;
 
-        }
+.feature {
 
+    display: flex;
 
-        .input-wrapper > i {
+    gap: 13px;
 
-            position: absolute;
+    align-items: flex-start;
+}
 
-            left: 14px;
 
-            top: 50%;
+.feature-icon {
 
-            transform:
-                translateY(-50%);
+    width: 37px;
 
-            color: #e00038;
+    height: 37px;
 
-            font-size: 14px;
+    flex:
+        0 0 37px;
 
-            pointer-events: none;
+    display: flex;
 
-        }
+    align-items: center;
 
+    justify-content: center;
 
-        .form-control {
+    border-radius: 9px;
 
-            width: 100%;
+    background:
+        rgba(255,255,255,.13);
 
-            height: 48px;
+    font-size: 13px;
+}
 
-            padding:
-                0 48px 0 42px;
 
-            border:
-                1px solid #dddddd;
+.feature strong {
 
-            border-radius: 9px;
+    display: block;
 
-            outline: none;
+    margin-bottom: 4px;
 
-            background: #ffffff;
+    font-size: 11px;
+}
 
-            color: #333333;
 
-            font-size: 13px;
+.feature span {
 
-            transition: .2s ease;
+    display: block;
 
-        }
+    color:
+        rgba(255,255,255,.76);
 
+    font-size: 9px;
 
-        .form-control:focus {
+    line-height: 1.55;
+}
 
-            border-color:
-                #ed0038;
 
-            box-shadow:
-                0 0 0 3px
-                rgba(237, 0, 56, .08);
+/* =========================================================
+   MOTORCYCLE ICON
+========================================================= */
 
-        }
+.motorcycle-icon {
 
+    position: absolute;
 
-        /*
-        |--------------------------------------------------------------------------
-        | PASSWORD TOGGLE
-        |--------------------------------------------------------------------------
-        */
+    z-index: 2;
 
-        .password-toggle {
+    right: 35px;
 
-            position: absolute;
+    bottom: 35px;
 
-            right: 9px;
+    width: 115px;
 
-            top: 50%;
+    height: 115px;
 
-            transform:
-                translateY(-50%);
+    border-radius: 28px;
 
-            width: 34px;
+    display: flex;
 
-            height: 34px;
+    align-items: center;
 
-            border: none;
+    justify-content: center;
 
-            background: transparent;
+    background:
+        rgba(255,255,255,.11);
 
-            color: #999999;
+    border:
+        1px solid
+        rgba(255,255,255,.13);
 
-            cursor: pointer;
+    font-size: 48px;
+}
 
-            display: flex;
 
-            align-items: center;
+/* =========================================================
+   RIGHT AREA
+========================================================= */
 
-            justify-content: center;
+.right {
 
-            border-radius: 7px;
+    padding:
+        65px 55px;
 
-        }
+    background: #ffffff;
 
+    display: flex;
 
-        .password-toggle:hover {
+    flex-direction: column;
 
-            color: #ed0038;
+    justify-content: center;
+}
 
-            background: #fff0f4;
 
-        }
+/* =========================================================
+   HEADING
+========================================================= */
 
+.heading {
 
-        /*
-        |--------------------------------------------------------------------------
-        | LOGIN BUTTON
-        |--------------------------------------------------------------------------
-        */
+    margin-bottom: 28px;
+}
 
-        .login-button {
 
-            width: 100%;
+.heading h2 {
 
-            height: 48px;
+    margin:
+        0 0 7px;
 
-            border: none;
+    font-size: 30px;
 
-            border-radius: 9px;
+    font-weight: 800;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #ed0038,
-                    #f94f87
-                );
+    color: #29232a;
+}
 
-            color: #ffffff;
 
-            font-size: 13px;
+.heading p {
 
-            font-weight: 800;
+    margin: 0;
 
-            cursor: pointer;
+    color: #999999;
 
-            box-shadow:
-                0 7px 18px
-                rgba(237, 0, 56, .18);
+    font-size: 11px;
 
-            transition: .2s ease;
+    line-height: 1.6;
+}
 
-        }
 
+/* =========================================================
+   ERROR
+========================================================= */
 
-        .login-button:hover {
+.alert {
 
-            transform:
-                translateY(-1px);
+    padding:
+        12px 13px;
 
-            box-shadow:
-                0 10px 24px
-                rgba(237, 0, 56, .25);
+    border-radius: 8px;
 
-        }
+    margin-bottom: 18px;
 
+    display: flex;
 
-        /*
-        |--------------------------------------------------------------------------
-        | REGISTER LINK
-        |--------------------------------------------------------------------------
-        */
+    gap: 9px;
 
-        .register-text {
+    font-size: 10px;
 
-            margin-top:
-                21px;
+    line-height: 1.5;
+}
 
-            text-align:
-                center;
 
-            color:
-                #777777;
+.alert-error {
 
-            font-size:
-                12.5px;
+    color: #ad002c;
 
-        }
+    background: #fff0f3;
 
+    border:
+        1px solid #ffd3dc;
+}
 
-        .register-text a {
 
-            color:
-                #e00038;
+/* =========================================================
+   LABEL
+========================================================= */
 
-            font-weight:
-                800;
+label {
 
-        }
+    display: block;
 
+    margin-bottom: 7px;
 
-        /*
-        |--------------------------------------------------------------------------
-        | INFO
-        |--------------------------------------------------------------------------
-        */
+    color: #51494d;
 
-        .security-note {
+    font-size: 11px;
 
-            margin-top:
-                20px;
+    font-weight: 700;
+}
 
-            padding:
-                12px 14px;
 
-            border-radius:
-                9px;
+.required {
 
-            background:
-                #faf7f9;
+    color: #ed0038;
+}
 
-            border:
-                1px solid #eee1e8;
 
-            color:
-                #777777;
+/* =========================================================
+   INPUT
+========================================================= */
 
-            text-align:
-                center;
+.input {
 
-            font-size:
-                11px;
+    width: 100%;
 
-            line-height:
-                1.5;
+    height: 46px;
 
-        }
+    padding:
+        0 13px;
 
+    border:
+        1px solid #e3dcdf;
 
-        /*
-        |--------------------------------------------------------------------------
-        | FOOTER
-        |--------------------------------------------------------------------------
-        */
+    border-radius: 8px;
 
-        .footer {
+    outline: none;
 
-            padding:
-                17px 20px;
+    color: #3c3539;
 
-            background:
-                #29232a;
+    background: #ffffff;
 
-            color:
-                #aaaaaa;
+    font-family: inherit;
 
-            text-align:
-                center;
+    font-size: 12px;
 
-            font-size:
-                11px;
+    transition:
+        all .2s ease;
+}
 
-        }
 
+.input::placeholder {
 
-        .footer strong {
+    color: #b4abad;
+}
 
-            color:
-                #ffffff;
 
-        }
+.input:focus {
 
+    border-color:
+        #ed0038;
 
-        /*
-        |--------------------------------------------------------------------------
-        | MOBILE
-        |--------------------------------------------------------------------------
-        */
+    box-shadow:
+        0 0 0 3px
+        rgba(237,0,56,.06);
+}
 
-        @media (max-width: 500px) {
 
-            .header {
+/* =========================================================
+   CNIC HELP
+========================================================= */
 
-                height:
-                    62px;
+.help {
 
-                padding:
-                    0 16px;
+    margin-top: 6px;
 
-            }
+    color: #aaaaaa;
 
+    font-size: 8px;
+}
 
-            .logo {
 
-                font-size:
-                    20px;
+/* =========================================================
+   PASSWORD
+========================================================= */
 
-            }
+.password-box {
 
+    position: relative;
+}
 
-            .back-link {
 
-                padding:
-                    8px 10px;
+.password-box .input {
 
-                font-size:
-                    11px;
+    padding-right: 42px;
+}
 
-            }
 
+.password-toggle {
 
-            .main {
+    position: absolute;
 
-                padding:
-                    25px 14px;
+    right: 12px;
 
-            }
+    top: 50%;
 
+    transform:
+        translateY(-50%);
 
-            .login-card {
+    border: 0;
 
-                padding:
-                    30px 22px;
+    background: transparent;
 
-                border-radius:
-                    18px;
+    color: #999999;
 
-            }
+    cursor: pointer;
 
+    font-size: 11px;
+}
 
-            .login-icon {
 
-                width:
-                    64px;
+/* =========================================================
+   LOGIN OPTIONS
+========================================================= */
 
-                height:
-                    64px;
+.login-options {
 
-                font-size:
-                    26px;
+    display: flex;
 
-            }
+    align-items: center;
 
+    justify-content: space-between;
 
-            .heading h1 {
+    margin-top: 12px;
+}
 
-                font-size:
-                    24px;
 
-            }
+.remember {
 
-        }
+    display: flex;
 
-    </style>
+    align-items: center;
+
+    gap: 7px;
+
+    margin: 0;
+
+    color: #888888;
+
+    font-size: 9px;
+
+    font-weight: 500;
+}
+
+
+.remember input {
+
+    accent-color: #ed0038;
+}
+
+
+.forgot {
+
+    color: #ed0038;
+
+    font-size: 9px;
+
+    font-weight: 800;
+}
+
+
+/* =========================================================
+   LOGIN BUTTON
+========================================================= */
+
+.login-button {
+
+    width: 100%;
+
+    height: 48px;
+
+    margin-top: 22px;
+
+    border: 0;
+
+    border-radius: 8px;
+
+    background: #ed0038;
+
+    color: #ffffff;
+
+    cursor: pointer;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 8px;
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    box-shadow:
+        0 8px 20px
+        rgba(237,0,56,.17);
+
+    transition:
+        all .2s ease;
+}
+
+
+.login-button:hover {
+
+    background: #d90034;
+
+    transform:
+        translateY(-1px);
+
+    box-shadow:
+        0 11px 25px
+        rgba(237,0,56,.21);
+}
+
+
+/* =========================================================
+   REGISTER
+========================================================= */
+
+.register {
+
+    text-align: center;
+
+    margin-top: 18px;
+
+    color: #999999;
+
+    font-size: 9px;
+}
+
+
+.register a {
+
+    color: #ed0038;
+
+    font-weight: 800;
+}
+
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+.footer {
+
+    height: 55px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    background: #29232a;
+
+    color: #aaaaaa;
+
+    font-size: 9px;
+}
+
+
+.footer strong {
+
+    color: #ffffff;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 900px) {
+
+    .container {
+
+        grid-template-columns: 1fr;
+    }
+
+
+    .left {
+
+        min-height: 400px;
+    }
+
+
+    .motorcycle-icon {
+
+        display: none;
+    }
+}
+
+
+@media (max-width: 600px) {
+
+    .header {
+
+        height: 65px;
+
+        padding:
+            0 16px;
+    }
+
+
+    .logo {
+
+        font-size: 20px;
+    }
+
+
+    .back-button {
+
+        padding:
+            9px 12px;
+
+        font-size: 9px;
+    }
+
+
+    .main {
+
+        padding:
+            18px 10px 30px;
+    }
+
+
+    .left {
+
+        min-height: 350px;
+
+        padding:
+            35px 25px;
+    }
+
+
+    .left h1 {
+
+        font-size: 30px;
+    }
+
+
+    .right {
+
+        padding:
+            35px 22px;
+    }
+
+
+    .heading h2 {
+
+        font-size: 25px;
+    }
+
+
+    .login-options {
+
+        align-items: flex-start;
+
+        gap: 10px;
+    }
+
+}
+
+</style>
 
 </head>
 
@@ -908,28 +1180,31 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         class="logo"
     >
 
-        <i class="fas fa-utensils"></i>
+        <span class="logo-icon">
 
-        <span>
-            Humsafar
+            <i class="fas fa-utensils"></i>
+
         </span>
+
+        Humsafar
 
     </a>
 
 
     <a
-        href="rider-register.php"
-        class="back-link"
+        href="../join-humsafar.php"
+        class="back-button"
     >
 
-        <i class="fas fa-user-plus"></i>
+        <i class="fas fa-arrow-left"></i>
 
-        Register
+        Back to Humsafar
 
     </a>
 
 
 </header>
+
 
 
 <!-- =========================================================
@@ -939,64 +1214,219 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 <main class="main">
 
 
-    <div class="login-card">
+<div class="container">
 
 
-        <div class="login-icon">
+    <!-- =====================================================
+         LEFT SIDE
+    ====================================================== -->
+
+    <section class="left">
+
+
+        <div class="left-content">
+
+
+            <div class="badge">
+
+                <i class="fas fa-motorcycle"></i>
+
+                Humsafar Rider Partner
+
+            </div>
+
+
+            <h1>
+
+                Welcome Back,
+                Rider!
+
+            </h1>
+
+
+            <p class="left-description">
+
+                Login to your Humsafar rider account
+                and manage your deliveries from one
+                convenient place.
+
+            </p>
+
+
+            <div class="features">
+
+
+                <!-- FEATURE 1 -->
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+
+                        <i class="fas fa-box"></i>
+
+                    </div>
+
+
+                    <div>
+
+                        <strong>
+                            Manage Deliveries
+                        </strong>
+
+                        <span>
+                            View and manage your assigned
+                            customer orders.
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <!-- FEATURE 2 -->
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+
+                        <i class="fas fa-location-dot"></i>
+
+                    </div>
+
+
+                    <div>
+
+                        <strong>
+                            Track Your Orders
+                        </strong>
+
+                        <span>
+                            Keep track of your active
+                            delivery assignments.
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <!-- FEATURE 3 -->
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+
+                        <i class="fas fa-clock"></i>
+
+                    </div>
+
+
+                    <div>
+
+                        <strong>
+                            Stay Updated
+                        </strong>
+
+                        <span>
+                            Receive the latest order and
+                            delivery updates.
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <!-- FEATURE 4 -->
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+
+                        <i class="fas fa-shield-halved"></i>
+
+                    </div>
+
+
+                    <div>
+
+                        <strong>
+                            Secure Login
+                        </strong>
+
+                        <span>
+                            Your rider account is protected
+                            with your CNIC and password.
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+            </div>
+
+
+        </div>
+
+
+        <div class="motorcycle-icon">
 
             <i class="fas fa-motorcycle"></i>
 
         </div>
 
 
+    </section>
+
+
+
+    <!-- =====================================================
+         RIGHT SIDE
+    ====================================================== -->
+
+    <section class="right">
+
+
         <div class="heading">
 
-
-            <div class="badge">
-
-                <i class="fas fa-shield-halved"></i>
-
-                RIDER PARTNER
-
-            </div>
-
-
-            <h1>
+            <h2>
                 Rider Login
-            </h1>
+            </h2>
 
 
             <p>
-                Login to your Humsafar rider account
-                using your CNIC and password.
+                Login using your registered CNIC
+                number and password.
             </p>
-
 
         </div>
 
 
-        <?php if ($error !== ""): ?>
 
-            <div class="error">
+        <!-- =================================================
+             ERROR MESSAGE
+        ================================================== -->
+
+        <?php if ($errorMessage !== ''): ?>
+
+            <div class="alert alert-error">
 
                 <i class="fas fa-circle-exclamation"></i>
 
-                &nbsp;
-
-                <?php
-
-                echo htmlspecialchars(
-                    $error,
-                    ENT_QUOTES,
-                    "UTF-8"
-                );
-
-                ?>
+                <span>
+                    <?= e($errorMessage) ?>
+                </span>
 
             </div>
 
         <?php endif; ?>
 
+
+
+        <!-- =================================================
+             LOGIN FORM
+        ================================================== -->
 
         <form
             method="POST"
@@ -1007,57 +1437,73 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             <!-- CNIC -->
 
-            <div class="form-group">
+            <div
+                style="
+                    margin-bottom:18px;
+                "
+            >
 
-                <label for="cnic">
+                <label>
+
                     CNIC Number
+
+                    <span class="required">
+                        *
+                    </span>
+
                 </label>
 
 
-                <div class="input-wrapper">
+                <input
+                    type="text"
+                    name="cnic"
+                    id="cnic"
+                    class="input"
+                    value="<?= e($cnic) ?>"
+                    placeholder="12345-xxxxxxx-0"
+                    maxlength="15"
+                    inputmode="numeric"
+                    autocomplete="username"
+                    required
+                >
 
-                    <i class="fas fa-id-card"></i>
 
+                <div class="help">
 
-                    <input
-                        type="text"
-                        id="cnic"
-                        name="cnic"
-                        class="form-control"
-                        placeholder="XXXXX-XXXXXXX-X"
-                        value="<?php echo htmlspecialchars(
-                            $cnic,
-                            ENT_QUOTES,
-                            "UTF-8"
-                        ); ?>"
-                        required
-                    >
+                    Format:
+                    12345-1234567-1
 
                 </div>
 
             </div>
 
 
+
             <!-- PASSWORD -->
 
-            <div class="form-group">
+            <div>
 
-                <label for="password">
+                <label>
+
                     Password
+
+                    <span class="required">
+                        *
+                    </span>
+
                 </label>
 
 
-                <div class="input-wrapper">
-
-                    <i class="fas fa-lock"></i>
+                <div class="password-box">
 
 
                     <input
                         type="password"
-                        id="password"
                         name="password"
-                        class="form-control"
+                        id="password"
+                        class="input"
                         placeholder="Enter your password"
+                        autocomplete="current-password"
                         required
                     >
 
@@ -1065,14 +1511,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     <button
                         type="button"
                         class="password-toggle"
-                        onclick="togglePassword()"
-                        aria-label="Show password"
+                        id="passwordToggle"
                     >
 
-                        <i
-                            class="fas fa-eye"
-                            id="passwordIcon"
-                        ></i>
+                        <i class="fas fa-eye"></i>
 
                     </button>
 
@@ -1082,7 +1524,44 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             </div>
 
 
-            <!-- LOGIN -->
+
+            <!-- OPTIONS -->
+
+            <div class="login-options">
+
+
+                <label class="remember">
+
+                    <input
+                        type="checkbox"
+                        name="remember"
+                        value="1"
+                    >
+
+                    Remember me
+
+                </label>
+
+
+                <a
+                    href="#"
+                    class="forgot"
+                    onclick="
+                        alert('Please contact Humsafar administration for password assistance.');
+                        return false;
+                    "
+                >
+
+                    Forgot Password?
+
+                </a>
+
+
+            </div>
+
+
+
+            <!-- LOGIN BUTTON -->
 
             <button
                 type="submit"
@@ -1091,9 +1570,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 <i class="fas fa-right-to-bracket"></i>
 
-                &nbsp;
-
-                Login to Rider Account
+                Login as Rider
 
             </button>
 
@@ -1101,37 +1578,29 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         </form>
 
 
+
         <!-- REGISTER -->
 
-        <div class="register-text">
+        <div class="register">
 
-            Don't have a rider account?
+            Don't have a Rider account?
 
             <a href="rider-register.php">
-                Register as Rider
+
+                Register Now
+
             </a>
 
         </div>
 
 
-        <!-- SECURITY -->
-
-        <div class="security-note">
-
-            <i class="fas fa-shield-halved"></i>
-
-            &nbsp;
-
-            Your rider account information is protected
-            by Humsafar's secure login system.
-
-        </div>
+    </section>
 
 
-    </div>
-
+</div>
 
 </main>
+
 
 
 <!-- =========================================================
@@ -1144,47 +1613,157 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         Humsafar
     </strong>
 
-    Food Delivery
+    &nbsp; Food Delivery &nbsp;•&nbsp;
 
-    &nbsp;•&nbsp;
-
-    Rider Partner Portal
-
-    &nbsp;•&nbsp;
-
-    © <?php echo date("Y"); ?>
+    © <?= date('Y') ?>
 
 </footer>
 
 
+
 <script>
 
-function togglePassword() {
+/* =========================================================
+   CNIC AUTO FORMAT
+========================================================= */
 
-    const input =
-        document.getElementById("password");
-
-    const icon =
-        document.getElementById("passwordIcon");
+const cnicInput =
+    document.getElementById('cnic');
 
 
-    if (input.type === "password") {
+if (cnicInput) {
 
-        input.type = "text";
+    cnicInput.addEventListener(
+        'input',
+        function () {
 
-        icon.classList.remove("fa-eye");
+            let digits =
+                this.value.replace(
+                    /[^0-9]/g,
+                    ''
+                );
 
-        icon.classList.add("fa-eye-slash");
 
-    } else {
+            digits =
+                digits.substring(
+                    0,
+                    13
+                );
 
-        input.type = "password";
 
-        icon.classList.remove("fa-eye-slash");
+            if (digits.length <= 5) {
 
-        icon.classList.add("fa-eye");
+                this.value =
+                    digits;
 
-    }
+            }
+            else if (
+                digits.length <= 12
+            ) {
+
+                this.value =
+                    digits.substring(
+                        0,
+                        5
+                    )
+                    + '-'
+                    + digits.substring(
+                        5
+                    );
+
+            }
+            else {
+
+                this.value =
+                    digits.substring(
+                        0,
+                        5
+                    )
+                    + '-'
+                    + digits.substring(
+                        5,
+                        12
+                    )
+                    + '-'
+                    + digits.substring(
+                        12
+                    );
+
+            }
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   PASSWORD SHOW / HIDE
+========================================================= */
+
+const password =
+    document.getElementById(
+        'password'
+    );
+
+
+const passwordToggle =
+    document.getElementById(
+        'passwordToggle'
+    );
+
+
+if (
+    password &&
+    passwordToggle
+) {
+
+    passwordToggle.addEventListener(
+        'click',
+        function () {
+
+            const icon =
+                this.querySelector('i');
+
+
+            if (
+                password.type ===
+                'password'
+            ) {
+
+                password.type =
+                    'text';
+
+
+                icon.classList.remove(
+                    'fa-eye'
+                );
+
+
+                icon.classList.add(
+                    'fa-eye-slash'
+                );
+
+            }
+            else {
+
+                password.type =
+                    'password';
+
+
+                icon.classList.remove(
+                    'fa-eye-slash'
+                );
+
+
+                icon.classList.add(
+                    'fa-eye'
+                );
+
+            }
+
+        }
+    );
 
 }
 

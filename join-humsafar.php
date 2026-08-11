@@ -1127,7 +1127,7 @@ footer {
 
 
                         <a
-                            href="signup.php"
+                            href="register.php"
                             class="account-btn register-btn"
                         >
 
