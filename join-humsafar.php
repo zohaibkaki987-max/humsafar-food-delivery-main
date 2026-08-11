@@ -1219,7 +1219,7 @@ footer {
 
 
                         <a
-                            href="restaurant-owner-login.php"
+                            href="restaurant/restaurant-owner-login.php"
                             class="account-btn login-btn"
                         >
 
@@ -1231,7 +1231,7 @@ footer {
 
 
                         <a
-                            href="restaurant-owner-register.php"
+                            href="restaurant/restaurant-owner-register.php"
                             class="account-btn register-btn"
                         >
 
