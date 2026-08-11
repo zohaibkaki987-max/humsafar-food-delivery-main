@@ -1,13 +1,23 @@
 <?php
 
+/* =========================================================
+   HUMSAFAR - RESTAURANT OWNER ORDER MANAGEMENT
+   File:
+   restaurant/restaurant-owner-manage-orders.php
+========================================================= */
+
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/session.php';
 
-/*
-|--------------------------------------------------------------------------
-| Helper
-|--------------------------------------------------------------------------
-*/
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+
+/* =========================================================
+   HELPER
+========================================================= */
+
 function h($value)
 {
     return htmlspecialchars(
@@ -17,53 +27,81 @@ function h($value)
     );
 }
 
-/*
-|--------------------------------------------------------------------------
-| Database check
-|--------------------------------------------------------------------------
-*/
+
+/* =========================================================
+   DATABASE CHECK
+========================================================= */
+
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die('Database connection is not available.');
 }
 
-/*
-|--------------------------------------------------------------------------
-| Find logged-in restaurant owner
-|--------------------------------------------------------------------------
-*/
+
+/* =========================================================
+   FIND OWNER
+========================================================= */
+
 $owner = null;
+
 $ownerId = 0;
+
 $ownerEmail = '';
 
+
 if (!empty($_SESSION['restaurant_owner_id'])) {
+
     $ownerId = (int)$_SESSION['restaurant_owner_id'];
+
 }
 
-if ($ownerId <= 0 && !empty($_SESSION['restaurant_user_id'])) {
+
+if (
+    $ownerId <= 0 &&
+    !empty($_SESSION['restaurant_user_id'])
+) {
+
     $ownerId = (int)$_SESSION['restaurant_user_id'];
+
 }
 
-if ($ownerId <= 0 && !empty($_SESSION['owner_id'])) {
+
+if (
+    $ownerId <= 0 &&
+    !empty($_SESSION['owner_id'])
+) {
+
     $ownerId = (int)$_SESSION['owner_id'];
+
 }
+
 
 if (!empty($_SESSION['restaurant_owner_email'])) {
-    $ownerEmail = trim(
-        (string)$_SESSION['restaurant_owner_email']
-    );
+
+    $ownerEmail =
+        trim(
+            (string)$_SESSION['restaurant_owner_email']
+        );
+
 }
 
-if ($ownerEmail === '' && !empty($_SESSION['email'])) {
-    $ownerEmail = trim(
-        (string)$_SESSION['email']
-    );
+
+if (
+    $ownerEmail === '' &&
+    !empty($_SESSION['email'])
+) {
+
+    $ownerEmail =
+        trim(
+            (string)$_SESSION['email']
+        );
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get owner by ID
-|--------------------------------------------------------------------------
-*/
+
+/* =========================================================
+   OWNER BY ID
+========================================================= */
+
 if ($ownerId > 0) {
 
     $stmt = $conn->prepare("
@@ -81,22 +119,34 @@ if ($ownerId > 0) {
 
     if ($stmt) {
 
-        $stmt->bind_param("i", $ownerId);
+        $stmt->bind_param(
+            "i",
+            $ownerId
+        );
+
         $stmt->execute();
 
-        $result = $stmt->get_result();
-        $owner = $result->fetch_assoc();
+        $result =
+            $stmt->get_result();
+
+        $owner =
+            $result->fetch_assoc();
 
         $stmt->close();
+
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Get owner by email if ID unavailable
-|--------------------------------------------------------------------------
-*/
-if (!$owner && $ownerEmail !== '') {
+
+/* =========================================================
+   OWNER BY EMAIL
+========================================================= */
+
+if (
+    !$owner &&
+    $ownerEmail !== ''
+) {
 
     $stmt = $conn->prepare("
         SELECT
@@ -113,21 +163,30 @@ if (!$owner && $ownerEmail !== '') {
 
     if ($stmt) {
 
-        $stmt->bind_param("s", $ownerEmail);
+        $stmt->bind_param(
+            "s",
+            $ownerEmail
+        );
+
         $stmt->execute();
 
-        $result = $stmt->get_result();
-        $owner = $result->fetch_assoc();
+        $result =
+            $stmt->get_result();
+
+        $owner =
+            $result->fetch_assoc();
 
         $stmt->close();
+
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Owner not found
-|--------------------------------------------------------------------------
-*/
+
+/* =========================================================
+   OWNER NOT FOUND
+========================================================= */
+
 if (!$owner) {
 
     header(
@@ -135,211 +194,261 @@ if (!$owner) {
     );
 
     exit;
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Owner data
-|--------------------------------------------------------------------------
-*/
-$ownerId = (int)$owner['id'];
 
-$restaurantName = trim(
-    (string)$owner['restaurant_name']
-);
+/* =========================================================
+   OWNER DATA
+========================================================= */
 
-$ownerName = trim(
-    (string)$owner['full_name']
-);
+$ownerId =
+    (int)$owner['id'];
 
-$ownerStatus = strtolower(
+$ownerName =
     trim(
-        (string)$owner['status']
-    )
-);
+        (string)$owner['full_name']
+    );
 
-/*
-|--------------------------------------------------------------------------
-| Find restaurant
-|--------------------------------------------------------------------------
-*/
+$restaurantName =
+    trim(
+        (string)$owner['restaurant_name']
+    );
+
+$ownerStatus =
+    strtolower(
+        trim(
+            (string)$owner['status']
+        )
+    );
+
+
+/* =========================================================
+   APPROVAL CHECK
+
+   approved OR active = allowed
+========================================================= */
+
+$isApproved =
+    in_array(
+        $ownerStatus,
+        array(
+            'approved',
+            'active'
+        ),
+        true
+    );
+
+
+if (!$isApproved) {
+
+    header(
+        "Location: restaurant-owner-dashboard.php"
+    );
+
+    exit;
+
+}
+
+
+/* =========================================================
+   FIND RESTAURANT
+========================================================= */
+
 $restaurant = null;
+
 $restaurantId = 0;
 
-if ($restaurantName !== '') {
 
-    $stmt = $conn->prepare("
-        SELECT
-            id,
-            name,
-            status
-        FROM restaurants
-        WHERE name = ?
-        LIMIT 1
-    ");
+/*
+ * Existing project connects restaurant owner
+ * to restaurant using restaurant name.
+ */
 
-    if ($stmt) {
+$stmt = $conn->prepare("
+    SELECT
+        id,
+        name,
+        status
+    FROM restaurants
+    WHERE name = ?
+    LIMIT 1
+");
 
-        $stmt->bind_param(
-            "s",
-            $restaurantName
-        );
+if ($stmt) {
 
-        $stmt->execute();
+    $stmt->bind_param(
+        "s",
+        $restaurantName
+    );
 
-        $result = $stmt->get_result();
+    $stmt->execute();
 
-        $restaurant = $result->fetch_assoc();
+    $result =
+        $stmt->get_result();
 
-        $stmt->close();
-    }
+    $restaurant =
+        $result->fetch_assoc();
+
+    $stmt->close();
+
 }
+
 
 if ($restaurant) {
-    $restaurantId = (int)$restaurant['id'];
+
+    $restaurantId =
+        (int)$restaurant['id'];
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Messages
-|--------------------------------------------------------------------------
-*/
+
+/* =========================================================
+   MESSAGES
+========================================================= */
+
 $successMessage = '';
+
 $errorMessage = '';
 
-/*
-|--------------------------------------------------------------------------
-| Update order status
-|--------------------------------------------------------------------------
-*/
+
+/* =========================================================
+   UPDATE ORDER STATUS
+========================================================= */
+
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST' &&
-    isset($_POST['update_order'])
+    isset($_POST['update_order_status'])
 ) {
 
-    /*
-    |--------------------------------------------------------------------------
-    | Only approved owner can manage orders
-    |--------------------------------------------------------------------------
-    */
-    if ($ownerStatus !== 'approved') {
-
-        $errorMessage =
-            'Your restaurant owner account is not approved yet.';
-
-    } else {
-
-        $orderId = isset($_POST['order_id'])
+    $orderId =
+        isset($_POST['order_id'])
             ? (int)$_POST['order_id']
             : 0;
 
-        $newStatus = isset($_POST['order_status'])
-            ? trim((string)$_POST['order_status'])
+    $newStatus =
+        isset($_POST['order_status'])
+            ? trim(
+                (string)$_POST['order_status']
+            )
             : '';
 
-        $allowedStatuses = [
-            'pending',
-            'confirmed',
-            'preparing',
-            'out_for_delivery',
-            'delivered',
-            'cancelled'
-        ];
 
-        if ($orderId <= 0) {
+    $allowedStatuses = array(
+        'pending',
+        'confirmed',
+        'preparing',
+        'out_for_delivery',
+        'delivered',
+        'cancelled'
+    );
+
+
+    if ($orderId <= 0) {
+
+        $errorMessage =
+            'Invalid order selected.';
+
+    } elseif (
+        !in_array(
+            $newStatus,
+            $allowedStatuses,
+            true
+        )
+    ) {
+
+        $errorMessage =
+            'Invalid order status.';
+
+    } elseif ($restaurantId <= 0) {
+
+        $errorMessage =
+            'Restaurant record not found.';
+
+    } else {
+
+        /*
+         * IMPORTANT:
+         * Restaurant owner can only update
+         * orders belonging to his restaurant.
+         */
+
+        $stmt = $conn->prepare("
+            UPDATE orders
+            SET order_status = ?
+            WHERE id = ?
+            AND restaurant_id = ?
+            LIMIT 1
+        ");
+
+
+        if (!$stmt) {
 
             $errorMessage =
-                'Invalid order selected.';
-
-        } elseif (
-            !in_array(
-                $newStatus,
-                $allowedStatuses,
-                true
-            )
-        ) {
-
-            $errorMessage =
-                'Invalid order status.';
-
-        } elseif ($restaurantId <= 0) {
-
-            $errorMessage =
-                'Your restaurant record was not found.';
+                'Database error: ' .
+                $conn->error;
 
         } else {
 
-            /*
-            |--------------------------------------------------------------------------
-            | Security:
-            | Owner can update only his own restaurant orders
-            |--------------------------------------------------------------------------
-            */
-            $stmt = $conn->prepare("
-                UPDATE orders
-                SET order_status = ?
-                WHERE id = ?
-                AND restaurant_id = ?
-                LIMIT 1
-            ");
+            $stmt->bind_param(
+                "sii",
+                $newStatus,
+                $orderId,
+                $restaurantId
+            );
 
-            if (!$stmt) {
 
-                $errorMessage =
-                    'Database error: ' .
-                    $conn->error;
+            if ($stmt->execute()) {
 
-            } else {
+                if ($stmt->affected_rows > 0) {
 
-                $stmt->bind_param(
-                    "sii",
-                    $newStatus,
-                    $orderId,
-                    $restaurantId
-                );
+                    $successMessage =
+                        'Order status updated successfully.';
 
-                if ($stmt->execute()) {
+                } else {
 
-                    if ($stmt->affected_rows > 0) {
-
-                        $successMessage =
-                            'Order status updated successfully.';
-
-                    } else {
-
-                        $successMessage =
-                            'Order status is already ' .
+                    $successMessage =
+                        'Order status is already ' .
+                        ucwords(
                             str_replace(
                                 '_',
                                 ' ',
                                 $newStatus
-                            ) .
-                            '.';
-                    }
+                            )
+                        ) .
+                        '.';
 
-                } else {
-
-                    $errorMessage =
-                        'Could not update order status.';
                 }
 
-                $stmt->close();
+            } else {
+
+                $errorMessage =
+                    'Could not update order status.';
+
             }
+
+
+            $stmt->close();
+
         }
+
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Orders
-|--------------------------------------------------------------------------
-*/
-$orders = [];
+
+/* =========================================================
+   GET ORDERS
+========================================================= */
+
+$orders = array();
+
 
 if ($restaurantId > 0) {
 
     $stmt = $conn->prepare("
         SELECT
+
             o.id,
             o.order_number,
             o.user_id,
@@ -368,6 +477,7 @@ if ($restaurantId > 0) {
         ORDER BY o.id DESC
     ");
 
+
     if ($stmt) {
 
         $stmt->bind_param(
@@ -377,29 +487,43 @@ if ($restaurantId > 0) {
 
         $stmt->execute();
 
-        $result = $stmt->get_result();
+        $result =
+            $stmt->get_result();
 
-        while ($row = $result->fetch_assoc()) {
 
-            $orders[] = $row;
+        while (
+            $row =
+                $result->fetch_assoc()
+        ) {
+
+            $orders[] =
+                $row;
+
         }
 
+
         $stmt->close();
+
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Items
-|--------------------------------------------------------------------------
-*/
-$orderItems = [];
+
+/* =========================================================
+   GET ORDER ITEMS
+========================================================= */
+
+$orderItems = array();
+
 
 foreach ($orders as $order) {
 
-    $orderId = (int)$order['id'];
+    $orderId =
+        (int)$order['id'];
 
-    $orderItems[$orderId] = [];
+    $orderItems[$orderId] =
+        array();
+
 
     $stmt = $conn->prepare("
         SELECT
@@ -413,6 +537,7 @@ foreach ($orders as $order) {
         ORDER BY id ASC
     ");
 
+
     if ($stmt) {
 
         $stmt->bind_param(
@@ -422,35 +547,52 @@ foreach ($orders as $order) {
 
         $stmt->execute();
 
-        $result = $stmt->get_result();
+        $result =
+            $stmt->get_result();
 
-        while ($item = $result->fetch_assoc()) {
 
-            $orderItems[$orderId][] = $item;
+        while (
+            $item =
+                $result->fetch_assoc()
+        ) {
+
+            $orderItems[$orderId][] =
+                $item;
+
         }
 
+
         $stmt->close();
+
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Addresses
-|--------------------------------------------------------------------------
-*/
-$orderAddresses = [];
+
+/* =========================================================
+   GET CUSTOMER ADDRESSES
+========================================================= */
+
+$orderAddresses = array();
+
 
 foreach ($orders as $order) {
 
-    $orderId = (int)$order['id'];
+    $orderId =
+        (int)$order['id'];
 
-    $addressId = (int)$order['address_id'];
+    $addressId =
+        (int)$order['address_id'];
 
-    $orderAddresses[$orderId] = null;
+
+    $orderAddresses[$orderId] =
+        null;
+
 
     if ($addressId <= 0) {
         continue;
     }
+
 
     $stmt = $conn->prepare("
         SELECT
@@ -464,6 +606,7 @@ foreach ($orders as $order) {
         LIMIT 1
     ");
 
+
     if ($stmt) {
 
         $stmt->bind_param(
@@ -473,36 +616,46 @@ foreach ($orders as $order) {
 
         $stmt->execute();
 
-        $result = $stmt->get_result();
+        $result =
+            $stmt->get_result();
 
         $orderAddresses[$orderId] =
             $result->fetch_assoc();
 
         $stmt->close();
+
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Statistics
-|--------------------------------------------------------------------------
-*/
-$totalOrders = count($orders);
+
+/* =========================================================
+   STATISTICS
+========================================================= */
+
+$totalOrders =
+    count($orders);
 
 $pendingOrders = 0;
+
 $confirmedOrders = 0;
+
 $preparingOrders = 0;
+
 $deliveryOrders = 0;
+
 $completedOrders = 0;
-$cancelledOrders = 0;
+
 
 foreach ($orders as $order) {
 
-    $status = strtolower(
-        trim(
-            (string)$order['order_status']
-        )
-    );
+    $status =
+        strtolower(
+            trim(
+                (string)$order['order_status']
+            )
+        );
+
 
     if ($status === 'pending') {
 
@@ -533,42 +686,77 @@ foreach ($orders as $order) {
 
         $completedOrders++;
 
-    } elseif (
-        $status === 'cancelled' ||
-        $status === 'canceled'
-    ) {
-
-        $cancelledOrders++;
     }
+
 }
 
-/*
-|--------------------------------------------------------------------------
-| Status helper
-|--------------------------------------------------------------------------
-*/
-function statusLabel($status)
+
+/* =========================================================
+   TOTAL SALES
+========================================================= */
+
+$totalSales = 0;
+
+
+foreach ($orders as $order) {
+
+    $status =
+        strtolower(
+            trim(
+                (string)$order['order_status']
+            )
+        );
+
+
+    if (
+        $status !== 'cancelled' &&
+        $status !== 'canceled'
+    ) {
+
+        $totalSales +=
+            (float)$order['total'];
+
+    }
+
+}
+
+
+/* =========================================================
+   STATUS FUNCTIONS
+========================================================= */
+
+function orderStatusLabel($status)
 {
+
+    $status =
+        strtolower(
+            trim(
+                (string)$status
+            )
+        );
+
+
     return ucwords(
         str_replace(
             '_',
             ' ',
-            strtolower(
-                trim(
-                    (string)$status
-                )
-            )
+            $status
         )
     );
+
 }
 
-function statusClass($status)
+
+function orderStatusClass($status)
 {
-    $status = strtolower(
-        trim(
-            (string)$status
-        )
-    );
+
+    $status =
+        strtolower(
+            trim(
+                (string)$status
+            )
+        );
+
 
     switch ($status) {
 
@@ -588,7 +776,7 @@ function statusClass($status)
 
         case 'delivered':
         case 'completed':
-            return 'completed';
+            return 'delivered';
 
         case 'cancelled':
         case 'canceled':
@@ -596,11 +784,19 @@ function statusClass($status)
 
         default:
             return 'default';
+
     }
+
 }
+
+
+/* =========================================================
+   HTML
+========================================================= */
 
 ?>
 <!DOCTYPE html>
+
 <html lang="en">
 
 <head>
@@ -613,187 +809,38 @@ function statusClass($status)
 >
 
 <title>
-    Restaurant Orders - Humsafar
+    Manage Orders - Humsafar
 </title>
 
+
+<link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+>
+
+
 <style>
+
+/* =========================================================
+   RESET
+========================================================= */
 
 * {
     box-sizing: border-box;
 }
 
+
 body {
     margin: 0;
-    background: #fff7fa;
-    color: #292929;
+    background: #f5f6fa;
+    color: #111827;
     font-family:
         Arial,
         Helvetica,
         sans-serif;
 }
 
-/* =========================================================
-   SIDEBAR
-========================================================= */
 
-.sidebar {
-
-    position: fixed;
-
-    left: 0;
-    top: 0;
-
-    width: 245px;
-    height: 100vh;
-
-    background: #ffffff;
-
-    border-right: 1px solid #eeeeee;
-
-    padding: 25px 16px;
-
-    z-index: 1000;
-}
-
-.logo {
-
-    font-size: 23px;
-
-    font-weight: 900;
-
-    color: #e00038;
-
-    text-decoration: none;
-
-    display: block;
-
-    padding: 0 12px 28px;
-}
-
-.logo span {
-
-    color: #292929;
-}
-
-.restaurant-label {
-
-    font-size: 10px;
-
-    color: #999999;
-
-    text-transform: uppercase;
-
-    letter-spacing: 1px;
-
-    padding: 0 12px 8px;
-}
-
-.restaurant-title {
-
-    font-size: 14px;
-
-    font-weight: 800;
-
-    padding: 0 12px 22px;
-
-    color: #333333;
-
-    white-space: nowrap;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-}
-
-.menu {
-
-    display: flex;
-
-    flex-direction: column;
-
-    gap: 5px;
-}
-
-.menu a {
-
-    text-decoration: none;
-
-    color: #555555;
-
-    padding: 12px 13px;
-
-    border-radius: 10px;
-
-    font-size: 13px;
-
-    font-weight: 700;
-
-    transition: .2s;
-}
-
-.menu a:hover {
-
-    background: #fff0f3;
-
-    color: #e00038;
-}
-
-.menu a.active {
-
-    background: #e00038;
-
-    color: #ffffff;
-}
-
-.menu a.disabled {
-
-    color: #aaaaaa;
-
-    cursor: not-allowed;
-
-    background: #fafafa;
-}
-
-.sidebar-bottom {
-
-    position: absolute;
-
-    left: 16px;
-    right: 16px;
-    bottom: 20px;
-}
-
-.logout {
-
-    display: block;
-
-    text-align: center;
-
-    text-decoration: none;
-
-    color: #e00038;
-
-    background: #fff0f3;
-
-    padding: 12px;
-
-    border-radius: 10px;
-
-    font-size: 13px;
-
-    font-weight: 800;
-}
-
-/* =========================================================
-   MAIN
-========================================================= */
-
-.main {
-
-    margin-left: 245px;
-
-    min-height: 100vh;
-}
 
 /* =========================================================
    TOPBAR
@@ -801,11 +848,21 @@ body {
 
 .topbar {
 
-    height: 72px;
+    position: fixed;
+
+    left: 223px;
+    right: 0;
+    top: 0;
+
+    height: 64px;
 
     background: #ffffff;
 
-    border-bottom: 1px solid #eeeeee;
+    border-bottom:
+        1px solid
+        #e5e7eb;
+
+    z-index: 90;
 
     display: flex;
 
@@ -813,35 +870,60 @@ body {
 
     justify-content: space-between;
 
-    padding: 0 35px;
+    padding:
+        0
+        25px;
+
 }
 
-.page-title {
 
-    font-size: 20px;
+.portal-label {
 
-    font-weight: 900;
+    font-size: 8px;
+
+    color: #9ca3af;
+
+    font-weight: 800;
+
+    letter-spacing: 1.6px;
+
+    text-transform: uppercase;
+
 }
 
-.owner-area {
+
+.page-top-title {
+
+    margin-top: 4px;
+
+    font-size: 14px;
+
+    font-weight: 800;
+
+}
+
+
+.top-right {
 
     display: flex;
 
     align-items: center;
 
-    gap: 12px;
+    gap: 14px;
+
 }
 
-.owner-avatar {
 
-    width: 38px;
-    height: 38px;
+.notification {
 
-    border-radius: 50%;
+    width: 34px;
+    height: 34px;
 
-    background: #fff0f3;
+    border:
+        1px solid
+        #e5e7eb;
 
-    color: #e00038;
+    border-radius: 8px;
 
     display: flex;
 
@@ -849,95 +931,198 @@ body {
 
     justify-content: center;
 
-    font-weight: 900;
+    color: #6b7280;
+
 }
 
-.owner-name {
 
-    font-size: 13px;
+.top-avatar {
+
+    width: 31px;
+    height: 31px;
+
+    background: #ffc400;
+
+    border-radius: 50%;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 11px;
 
     font-weight: 800;
+
 }
 
-.owner-status {
 
-    font-size: 10px;
+.top-user {
 
-    color: #18733e;
-
-    margin-top: 3px;
-
-    text-transform: uppercase;
+    font-size: 9px;
 
     font-weight: 800;
+
 }
+
+
+.top-role {
+
+    font-size: 7px;
+
+    color: #9ca3af;
+
+    margin-top: 2px;
+
+}
+
 
 /* =========================================================
-   CONTENT
+   MAIN
 ========================================================= */
+
+.main {
+
+    margin-left: 223px;
+
+    padding-top: 64px;
+
+    min-height: 100vh;
+
+}
+
 
 .content {
 
-    width: 94%;
+    padding:
+        31px
+        27px
+        60px;
 
-    max-width: 1350px;
-
-    margin: auto;
-
-    padding: 30px 0 60px;
 }
 
-.heading {
 
-    margin-bottom: 24px;
+/* =========================================================
+   PAGE HEADING
+========================================================= */
+
+.page-heading {
+
+    margin-bottom: 22px;
+
 }
 
-.heading h1 {
 
-    margin: 0 0 6px;
+.page-eyebrow {
 
-    font-size: 30px;
+    color: #ef003c;
+
+    font-size: 8px;
+
+    font-weight: 800;
+
+    letter-spacing: 1.5px;
+
+    text-transform: uppercase;
+
 }
 
-.heading p {
+
+.page-heading h1 {
+
+    margin:
+        7px
+        0
+        5px;
+
+    font-size: 27px;
+
+    line-height: 1.1;
+
+}
+
+
+.page-heading p {
 
     margin: 0;
 
-    color: #777777;
+    color: #8a94a6;
 
-    font-size: 13px;
+    font-size: 11px;
+
 }
+
 
 /* =========================================================
-   ALERTS
+   RESTAURANT CHIP
 ========================================================= */
 
-.alert {
+.restaurant-chip {
 
-    padding: 14px 17px;
+    display: inline-flex;
 
-    border-radius: 10px;
+    align-items: center;
 
-    margin-bottom: 20px;
+    gap: 7px;
 
-    font-size: 13px;
+    background: #fff0f4;
 
-    font-weight: 700;
+    color: #ef003c;
+
+    padding:
+        7px
+        11px;
+
+    border-radius: 20px;
+
+    font-size: 9px;
+
+    font-weight: 800;
+
+    margin-top: 12px;
+
 }
 
-.alert-success {
+
+/* =========================================================
+   MESSAGES
+========================================================= */
+
+.message {
+
+    padding:
+        13px
+        16px;
+
+    border-radius: 9px;
+
+    margin-bottom: 18px;
+
+    font-size: 11px;
+
+    font-weight: 700;
+
+}
+
+
+.message.success {
 
     background: #eaf8ef;
 
-    color: #18733e;
+    color: #17733e;
+
 }
 
-.alert-error {
 
-    background: #fff0f0;
+.message.error {
 
-    color: #c52323;
+    background: #fff0f1;
+
+    color: #c82333;
+
 }
+
 
 /* =========================================================
    STATS
@@ -948,59 +1133,79 @@ body {
     display: grid;
 
     grid-template-columns:
-        repeat(6, 1fr);
+        repeat(5, 1fr);
 
     gap: 13px;
 
     margin-bottom: 25px;
+
 }
 
-.stat {
+
+.stat-card {
 
     background: #ffffff;
 
-    border: 1px solid #eee5e9;
+    border:
+        1px solid
+        #e3e6eb;
 
-    border-radius: 14px;
+    border-radius: 11px;
 
-    padding: 18px;
+    padding: 17px;
+
 }
+
+
+.stat-icon {
+
+    width: 34px;
+    height: 34px;
+
+    background: #fff0f4;
+
+    color: #ef003c;
+
+    border-radius: 8px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 12px;
+
+    margin-bottom: 12px;
+
+}
+
 
 .stat-number {
 
-    font-size: 25px;
+    font-size: 22px;
 
-    font-weight: 900;
+    font-weight: 800;
 
-    color: #e00038;
 }
+
 
 .stat-label {
 
-    color: #777777;
+    margin-top: 5px;
 
-    font-size: 11px;
+    color: #9299a6;
 
-    margin-top: 6px;
+    font-size: 9px;
 
-    font-weight: 700;
 }
 
+
 /* =========================================================
-   FILTER
+   ORDERS HEADER
 ========================================================= */
 
-.toolbar {
-
-    background: #ffffff;
-
-    border: 1px solid #eee5e9;
-
-    border-radius: 14px;
-
-    padding: 16px;
-
-    margin-bottom: 20px;
+.section-header {
 
     display: flex;
 
@@ -1008,43 +1213,49 @@ body {
 
     justify-content: space-between;
 
-    gap: 15px;
+    margin-bottom: 12px;
+
 }
 
-.search {
 
-    width: 300px;
+.section-title {
 
-    border: 1px solid #dddddd;
+    font-size: 14px;
 
-    border-radius: 9px;
+    font-weight: 800;
 
-    padding: 11px 13px;
-
-    outline: none;
-
-    font-size: 13px;
 }
 
-.search:focus {
 
-    border-color: #e00038;
+.section-subtitle {
+
+    color: #9ca3af;
+
+    font-size: 9px;
+
+    margin-top: 4px;
+
 }
 
-.filter-select {
 
-    border: 1px solid #dddddd;
+.order-count {
 
-    border-radius: 9px;
+    background: #fff0f4;
 
-    padding: 11px 13px;
+    color: #ef003c;
 
-    background: #ffffff;
+    padding:
+        7px
+        11px;
 
-    outline: none;
+    border-radius: 20px;
 
-    font-size: 13px;
+    font-size: 9px;
+
+    font-weight: 800;
+
 }
+
 
 /* =========================================================
    ORDER CARD
@@ -1054,107 +1265,176 @@ body {
 
     background: #ffffff;
 
-    border: 1px solid #eee5e9;
+    border:
+        1px solid
+        #e2e5ea;
 
-    border-radius: 17px;
+    border-radius: 12px;
 
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 
     overflow: hidden;
+
 }
+
 
 .order-header {
 
-    padding: 18px 20px;
+    min-height: 67px;
+
+    padding:
+        14px
+        17px;
+
+    border-bottom:
+        1px solid
+        #edf0f3;
 
     display: flex;
 
+    align-items: center;
+
     justify-content: space-between;
+
+    gap: 15px;
+
+}
+
+
+.order-left {
+
+    display: flex;
 
     align-items: center;
 
-    border-bottom: 1px solid #eeeeee;
+    gap: 12px;
 
-    gap: 15px;
 }
 
-.order-id {
 
-    font-size: 17px;
+.order-icon {
 
-    font-weight: 900;
+    width: 38px;
+    height: 38px;
+
+    border-radius: 9px;
+
+    background: #fff0f4;
+
+    color: #ef003c;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
 }
+
+
+.order-number {
+
+    font-size: 13px;
+
+    font-weight: 800;
+
+}
+
 
 .order-date {
 
-    font-size: 11px;
+    color: #9ca3af;
 
-    color: #888888;
+    font-size: 8px;
 
-    margin-top: 5px;
+    margin-top: 4px;
+
 }
+
+
+/* =========================================================
+   STATUS
+========================================================= */
 
 .status {
 
-    display: inline-flex;
-
-    padding: 8px 13px;
+    padding:
+        7px
+        11px;
 
     border-radius: 20px;
 
-    font-size: 11px;
+    font-size: 8px;
 
-    font-weight: 900;
+    font-weight: 800;
+
+    text-transform: uppercase;
+
 }
 
-.pending {
 
-    background: #fff4d9;
+.status.pending {
 
-    color: #956500;
+    background: #fff5dc;
+
+    color: #9a6700;
+
 }
 
-.confirmed {
 
-    background: #eaf3ff;
+.status.confirmed {
+
+    background: #e8f3ff;
 
     color: #1769aa;
+
 }
 
-.preparing {
+
+.status.preparing {
 
     background: #fff0df;
 
     color: #a85d00;
+
 }
 
-.delivery {
+
+.status.delivery {
 
     background: #f0eaff;
 
     color: #6641a3;
+
 }
 
-.completed {
 
-    background: #e7f8ed;
+.status.delivered {
+
+    background: #e8f8ed;
 
     color: #18733e;
+
 }
 
-.cancelled {
+
+.status.cancelled {
 
     background: #fff0f0;
 
     color: #c52323;
+
 }
 
-.default {
+
+.status.default {
 
     background: #eeeeee;
 
     color: #777777;
+
 }
+
 
 /* =========================================================
    ORDER BODY
@@ -1162,96 +1442,116 @@ body {
 
 .order-body {
 
-    padding: 20px;
+    padding: 17px;
+
 }
 
-.info-grid {
+
+.order-grid {
 
     display: grid;
 
     grid-template-columns:
-        repeat(3, 1fr);
+        1fr
+        1fr
+        1fr;
 
-    gap: 13px;
+    gap: 12px;
 
-    margin-bottom: 20px;
+    margin-bottom: 16px;
+
 }
+
 
 .info-box {
 
-    background: #faf8f9;
+    background: #f8f9fb;
 
-    border-radius: 11px;
+    border-radius: 9px;
 
-    padding: 15px;
+    padding: 13px;
+
 }
+
 
 .info-title {
 
-    font-size: 10px;
+    color: #9aa1ad;
 
-    color: #999999;
+    font-size: 8px;
+
+    font-weight: 800;
 
     text-transform: uppercase;
 
     letter-spacing: .5px;
 
-    font-weight: 800;
-
     margin-bottom: 7px;
+
 }
+
 
 .info-main {
 
-    font-size: 13px;
+    font-size: 11px;
 
     font-weight: 800;
 
-    line-height: 1.5;
 }
+
 
 .info-small {
 
-    font-size: 11px;
+    color: #7f8794;
 
-    color: #777777;
-
-    margin-top: 3px;
+    font-size: 9px;
 
     line-height: 1.5;
+
+    margin-top: 4px;
+
 }
+
 
 /* =========================================================
    ITEMS
 ========================================================= */
 
-.items {
+.items-box {
 
-    border: 1px solid #eeeeee;
+    border:
+        1px solid
+        #edf0f3;
 
-    border-radius: 11px;
+    border-radius: 9px;
 
     overflow: hidden;
 
-    margin-bottom: 20px;
+    margin-bottom: 15px;
+
 }
+
 
 .items-heading {
 
-    padding: 12px 15px;
+    padding:
+        10px
+        13px;
 
-    background: #faf8f9;
+    background: #fafbfc;
 
-    font-size: 11px;
+    border-bottom:
+        1px solid
+        #edf0f3;
 
-    text-transform: uppercase;
+    font-size: 9px;
 
-    color: #777777;
+    font-weight: 800;
 
-    font-weight: 900;
 }
 
-.item {
+
+.item-row {
 
     display: flex;
 
@@ -1259,178 +1559,271 @@ body {
 
     justify-content: space-between;
 
-    padding: 13px 15px;
+    gap: 10px;
 
-    border-top: 1px solid #eeeeee;
+    padding:
+        11px
+        13px;
 
-    gap: 15px;
+    border-bottom:
+        1px solid
+        #f0f1f3;
+
 }
+
+
+.item-row:last-child {
+
+    border-bottom: 0;
+
+}
+
 
 .item-name {
 
-    font-size: 13px;
+    font-size: 10px;
 
     font-weight: 800;
+
 }
+
 
 .item-meta {
 
-    color: #888888;
+    color: #9aa1ad;
 
-    font-size: 11px;
+    font-size: 8px;
 
     margin-top: 3px;
+
 }
 
-.item-total {
 
-    color: #e00038;
+.item-price {
 
-    font-weight: 900;
+    color: #ef003c;
 
-    font-size: 13px;
+    font-size: 10px;
+
+    font-weight: 800;
+
+    white-space: nowrap;
+
 }
+
 
 /* =========================================================
    TOTAL
 ========================================================= */
 
+.bottom-grid {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        300px;
+
+    gap: 15px;
+
+}
+
+
+.customer-note {
+
+    background: #fffaf0;
+
+    border-radius: 9px;
+
+    padding: 13px;
+
+}
+
+
+.customer-note-title {
+
+    color: #9a6700;
+
+    font-size: 8px;
+
+    font-weight: 800;
+
+    text-transform: uppercase;
+
+    margin-bottom: 6px;
+
+}
+
+
+.customer-note-text {
+
+    color: #6b7280;
+
+    font-size: 9px;
+
+    line-height: 1.5;
+
+}
+
+
+.total-box {
+
+    background: #fff5f8;
+
+    border-radius: 9px;
+
+    padding: 13px;
+
+}
+
+
 .total-row {
 
     display: flex;
 
-    justify-content: flex-end;
-
-    margin-bottom: 20px;
-}
-
-.total-box {
-
-    min-width: 250px;
-
-    background: #fff0f3;
-
-    border-radius: 12px;
-
-    padding: 15px 18px;
-}
-
-.total-line {
-
-    display: flex;
-
     justify-content: space-between;
 
-    gap: 25px;
+    padding: 5px 0;
 
-    font-size: 12px;
+    font-size: 9px;
 
-    color: #666666;
+    color: #697180;
 
-    margin-bottom: 6px;
 }
 
-.total-final {
 
-    border-top: 1px solid #f1cfd8;
+.total-row strong {
 
-    padding-top: 9px;
+    color: #111827;
 
-    margin-top: 9px;
-
-    display: flex;
-
-    justify-content: space-between;
-
-    font-size: 17px;
-
-    font-weight: 900;
-
-    color: #e00038;
 }
+
+
+.total-row.grand {
+
+    border-top:
+        1px solid
+        #f0dbe2;
+
+    margin-top: 6px;
+
+    padding-top: 10px;
+
+    color: #ef003c;
+
+    font-size: 13px;
+
+    font-weight: 800;
+
+}
+
+
+.total-row.grand strong {
+
+    color: #ef003c;
+
+}
+
 
 /* =========================================================
-   ACTIONS
+   STATUS CONTROL
 ========================================================= */
 
-.order-actions {
+.status-control {
+
+    margin-top: 15px;
+
+    padding-top: 15px;
+
+    border-top:
+        1px solid
+        #edf0f3;
 
     display: flex;
-
-    justify-content: flex-end;
 
     align-items: center;
 
-    gap: 9px;
+    justify-content: space-between;
 
-    flex-wrap: wrap;
+    gap: 12px;
+
 }
+
+
+.status-label {
+
+    font-size: 9px;
+
+    font-weight: 800;
+
+}
+
 
 .status-form {
 
-    margin: 0;
+    display: flex;
+
+    gap: 8px;
+
 }
 
-.status-btn {
+
+.status-form select {
+
+    height: 37px;
+
+    min-width: 180px;
+
+    border:
+        1px solid
+        #dfe3e8;
+
+    border-radius: 7px;
+
+    padding:
+        0
+        10px;
+
+    background: #ffffff;
+
+    font-size: 9px;
+
+    outline: none;
+
+}
+
+
+.update-btn {
+
+    height: 37px;
 
     border: 0;
 
-    padding: 10px 14px;
+    border-radius: 7px;
 
-    border-radius: 8px;
+    background: #ef003c;
+
+    color: #ffffff;
+
+    padding:
+        0
+        15px;
+
+    font-size: 9px;
+
+    font-weight: 800;
 
     cursor: pointer;
 
-    font-size: 11px;
-
-    font-weight: 900;
-
-    background: #f1f1f1;
-
-    color: #444444;
 }
 
-.status-btn:hover {
 
-    background: #e00038;
+.update-btn:hover {
 
-    color: #ffffff;
+    background: #d90035;
+
 }
 
-.status-btn.accept {
-
-    background: #eaf3ff;
-
-    color: #1769aa;
-}
-
-.status-btn.prepare {
-
-    background: #fff0df;
-
-    color: #a85d00;
-}
-
-.status-btn.delivery-btn {
-
-    background: #f0eaff;
-
-    color: #6641a3;
-}
-
-.status-btn.complete {
-
-    background: #e7f8ed;
-
-    color: #18733e;
-}
-
-.status-btn.cancel {
-
-    background: #fff0f0;
-
-    color: #c52323;
-}
 
 /* =========================================================
    EMPTY
@@ -1440,26 +1833,34 @@ body {
 
     background: #ffffff;
 
-    border: 1px solid #eee5e9;
+    border:
+        1px solid
+        #e3e6eb;
 
-    border-radius: 17px;
+    border-radius: 12px;
 
-    padding: 70px 25px;
+    padding: 70px 20px;
 
     text-align: center;
+
 }
+
 
 .empty-icon {
 
-    width: 65px;
+    width: 58px;
+    height: 58px;
 
-    height: 65px;
+    margin:
+        0
+        auto
+        15px;
+
+    background: #fff0f4;
+
+    color: #ef003c;
 
     border-radius: 50%;
-
-    background: #fff0f3;
-
-    color: #e00038;
 
     display: flex;
 
@@ -1467,87 +1868,33 @@ body {
 
     justify-content: center;
 
-    margin: 0 auto 17px;
+    font-size: 21px;
 
-    font-size: 27px;
-
-    font-weight: 900;
 }
 
-.empty h3 {
 
-    margin: 0 0 7px;
+.empty h2 {
 
-    font-size: 19px;
+    margin:
+        0
+        0
+        7px;
+
+    font-size: 17px;
+
 }
+
 
 .empty p {
 
     margin: 0;
 
-    color: #888888;
+    color: #9ca3af;
 
-    font-size: 13px;
+    font-size: 10px;
+
 }
 
-/* =========================================================
-   PENDING LOCK
-========================================================= */
-
-.lock-box {
-
-    background: #fffaf0;
-
-    border: 1px solid #f2dfae;
-
-    border-radius: 14px;
-
-    padding: 18px;
-
-    margin-bottom: 20px;
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 15px;
-}
-
-.lock-icon {
-
-    width: 42px;
-    height: 42px;
-
-    background: #fff0d0;
-
-    color: #956500;
-
-    border-radius: 50%;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    font-size: 18px;
-}
-
-.lock-text strong {
-
-    display: block;
-
-    font-size: 13px;
-
-    margin-bottom: 4px;
-}
-
-.lock-text span {
-
-    color: #777777;
-
-    font-size: 11px;
-}
 
 /* =========================================================
    RESPONSIVE
@@ -1559,343 +1906,367 @@ body {
 
         grid-template-columns:
             repeat(3, 1fr);
+
     }
 
-    .info-grid {
-
-        grid-template-columns:
-            1fr 1fr;
-    }
 }
 
-@media (max-width: 800px) {
+
+@media (max-width: 850px) {
 
     .sidebar {
 
-        width: 75px;
+        width: 70px;
 
-        padding: 20px 8px;
     }
 
-    .logo {
 
-        font-size: 0;
-
-        text-align: center;
-    }
-
-    .logo::after {
-
-        content: "H";
-
-        font-size: 24px;
-
-        color: #e00038;
-    }
-
-    .restaurant-label,
-    .restaurant-title,
-    .menu a span,
-    .logout span {
+    .brand-text,
+    .brand-sub,
+    .menu-title,
+    .nav-item span,
+    .sidebar-bottom .profile-info {
 
         display: none;
+
     }
 
-    .menu a {
 
-        text-align: center;
+    .brand {
 
-        font-size: 18px;
+        justify-content: center;
+
+        padding: 10px;
+
     }
 
-    .main {
 
-        margin-left: 75px;
+    .nav-item {
+
+        justify-content: center;
+
+        padding: 14px 5px;
+
     }
+
+
+    .sidebar-bottom {
+
+        justify-content: center;
+
+    }
+
 
     .topbar {
 
-        padding: 0 18px;
+        left: 70px;
+
     }
 
-    .content {
 
-        width: 92%;
+    .main {
+
+        margin-left: 70px;
+
     }
+
+
+    .order-grid {
+
+        grid-template-columns:
+            1fr 1fr;
+
+    }
+
+
+    .bottom-grid {
+
+        grid-template-columns:
+            1fr;
+
+    }
+
+}
+
+
+@media (max-width: 650px) {
 
     .stats {
 
         grid-template-columns:
             1fr 1fr;
+
     }
 
-    .toolbar {
 
-        flex-direction: column;
+    .content {
 
-        align-items: stretch;
+        padding:
+            20px 14px 50px;
+
     }
 
-    .search {
-
-        width: 100%;
-    }
-}
-
-@media (max-width: 600px) {
-
-    .info-grid {
-
-        grid-template-columns: 1fr;
-    }
-
-    .stats {
-
-        grid-template-columns: 1fr 1fr;
-    }
 
     .order-header {
 
         align-items: flex-start;
 
         flex-direction: column;
+
     }
 
-    .order-actions {
 
-        justify-content: flex-start;
+    .order-grid {
+
+        grid-template-columns:
+            1fr;
+
     }
 
-    .total-row {
 
-        justify-content: stretch;
+    .status-control {
+
+        align-items:
+            flex-start;
+
+        flex-direction: column;
+
     }
 
-    .total-box {
+
+    .status-form {
 
         width: 100%;
+
     }
 
-    .owner-name {
 
-        display: none;
+    .status-form select {
+
+        flex: 1;
+
+        min-width: 0;
+
     }
+
+
+    .update-btn {
+
+        padding:
+            0
+            12px;
+
+    }
+
 }
 
 </style>
 
 </head>
 
+
 <body>
 
-<!-- =========================================================
-     SIDEBAR
-========================================================= -->
+<?php include __DIR__ . '/restaurant-sidebar.php'; ?>
 
-<aside class="sidebar">
+<!-- ======================================================
+     TOPBAR
+====================================================== -->
 
-    <a
-        href="restaurant-owner-dashboard.php"
-        class="logo"
-    >
-        Humsafar <span>Food</span>
-    </a>
+<header class="topbar">
 
-    <div class="restaurant-label">
-        Restaurant
-    </div>
 
-    <div
-        class="restaurant-title"
-        title="<?php echo h($restaurantName); ?>"
-    >
-        <?php
-        echo h(
-            $restaurantName !== ''
-                ? $restaurantName
-                : 'My Restaurant'
-        );
-        ?>
-    </div>
+    <div>
 
-    <nav class="menu">
+        <div class="portal-label">
+            RESTAURANT PARTNER PORTAL
+        </div>
 
-        <a href="restaurant-owner-dashboard.php">
-            <span>🏠 Dashboard</span>
-        </a>
-
-        <a href="restaurant-owner-manage.php">
-            <span>🍽 Manage Restaurant</span>
-        </a>
-
-        <a href="restaurant-owner-menu.php">
-            <span>📋 Menu Management</span>
-        </a>
-
-        <a
-            href="restaurant-owner-orders.php"
-            class="active"
-        >
-            <span>🛒 Orders</span>
-        </a>
-
-        <a href="restaurant-owner-settings.php">
-            <span>⚙ Restaurant Settings</span>
-        </a>
-
-    </nav>
-
-    <div class="sidebar-bottom">
-
-        <a
-            href="restaurant-owner-logout.php"
-            class="logout"
-        >
-            <span>Logout</span>
-        </a>
+        <div class="page-top-title">
+            Order Management
+        </div>
 
     </div>
 
-</aside>
+
+    <div class="top-right">
+
+        <div class="notification">
+
+            <i class="far fa-bell"></i>
+
+        </div>
 
 
-<!-- =========================================================
+        <div class="top-avatar">
+
+            <?= h(
+                strtoupper(
+                    substr(
+                        $ownerName !== ''
+                            ? $ownerName
+                            : 'Z',
+                        0,
+                        1
+                    )
+                )
+            ) ?>
+
+        </div>
+
+
+        <div>
+
+            <div class="top-user">
+
+                <?= h(
+                    $ownerName !== ''
+                        ? $ownerName
+                        : 'Restaurant Owner'
+                ) ?>
+
+            </div>
+
+            <div class="top-role">
+                Restaurant Owner
+            </div>
+
+        </div>
+
+    </div>
+
+
+</header>
+
+
+<!-- ======================================================
      MAIN
-========================================================= -->
+====================================================== -->
 
 <main class="main">
 
-    <!-- TOPBAR -->
 
-    <header class="topbar">
+<div class="content">
 
-        <div class="page-title">
-            Orders
+
+    <!-- PAGE HEADING -->
+
+    <section class="page-heading">
+
+        <div class="page-eyebrow">
+            ORDER MANAGEMENT
         </div>
 
-        <div class="owner-area">
 
-            <div class="owner-avatar">
-                <?php
-                echo h(
-                    strtoupper(
-                        substr(
-                            $ownerName !== ''
-                                ? $ownerName
-                                : 'O',
-                            0,
-                            1
-                        )
-                    )
-                );
-                ?>
-            </div>
+        <h1>
+            Manage Orders
+        </h1>
 
-            <div>
 
-                <div class="owner-name">
-                    <?php
-                    echo h(
-                        $ownerName !== ''
-                            ? $ownerName
-                            : 'Restaurant Owner'
-                    );
-                    ?>
-                </div>
+        <p>
+            View customer orders, order details and update order status.
+        </p>
 
-                <div class="owner-status">
-                    <?php
-                    echo h($ownerStatus);
-                    ?>
-                </div>
 
-            </div>
+        <div class="restaurant-chip">
+
+            <i class="fas fa-store"></i>
+
+            <?= h(
+                $restaurantName !== ''
+                    ? $restaurantName
+                    : 'Your Restaurant'
+            ) ?>
 
         </div>
 
-    </header>
+    </section>
 
 
-    <!-- CONTENT -->
+    <!-- MESSAGES -->
 
-    <section class="content">
+    <?php if ($successMessage !== ''): ?>
 
-        <div class="heading">
+        <div class="message success">
 
-            <h1>
-                Restaurant Orders
-            </h1>
+            <i class="fas fa-circle-check"></i>
+
+            &nbsp;
+
+            <?= h($successMessage) ?>
+
+        </div>
+
+    <?php endif; ?>
+
+
+    <?php if ($errorMessage !== ''): ?>
+
+        <div class="message error">
+
+            <i class="fas fa-circle-exclamation"></i>
+
+            &nbsp;
+
+            <?= h($errorMessage) ?>
+
+        </div>
+
+    <?php endif; ?>
+
+
+    <!-- RESTAURANT NOT FOUND -->
+
+    <?php if (!$restaurant): ?>
+
+
+        <div class="empty">
+
+            <div class="empty-icon">
+
+                <i class="fas fa-store-slash"></i>
+
+            </div>
+
+
+            <h2>
+                Restaurant Record Not Found
+            </h2>
+
 
             <p>
-                View and manage orders received by your restaurant.
+
+                Your owner account is approved, but
+                no restaurant is linked with this account.
+
             </p>
 
         </div>
 
 
-        <?php if ($successMessage !== ''): ?>
-
-            <div class="alert alert-success">
-
-                <?php
-                echo h($successMessage);
-                ?>
-
-            </div>
-
-        <?php endif; ?>
+    <?php else: ?>
 
 
-        <?php if ($errorMessage !== ''): ?>
+        <!-- ==================================================
+             STATISTICS
+        =================================================== -->
 
-            <div class="alert alert-error">
-
-                <?php
-                echo h($errorMessage);
-                ?>
-
-            </div>
-
-        <?php endif; ?>
+        <section class="stats">
 
 
-        <?php if ($ownerStatus !== 'approved'): ?>
+            <div class="stat-card">
 
-            <div class="lock-box">
+                <div class="stat-icon">
 
-                <div class="lock-icon">
-                    🔒
-                </div>
-
-                <div class="lock-text">
-
-                    <strong>
-                        Restaurant Orders Are Locked
-                    </strong>
-
-                    <span>
-                        Your account is currently
-                        <?php echo h($ownerStatus); ?>.
-                        Orders management will become available
-                        after admin approval.
-                    </span>
+                    <i class="fas fa-receipt"></i>
 
                 </div>
 
-            </div>
-
-        <?php endif; ?>
-
-
-        <!-- STATS -->
-
-        <div class="stats">
-
-            <div class="stat">
 
                 <div class="stat-number">
-                    <?php echo $totalOrders; ?>
+                    <?= $totalOrders ?>
                 </div>
+
 
                 <div class="stat-label">
                     Total Orders
@@ -1904,270 +2275,281 @@ body {
             </div>
 
 
-            <div class="stat">
+            <div class="stat-card">
 
-                <div class="stat-number">
-                    <?php echo $pendingOrders; ?>
+                <div class="stat-icon">
+
+                    <i class="fas fa-clock"></i>
+
                 </div>
 
+
+                <div class="stat-number">
+                    <?= $pendingOrders ?>
+                </div>
+
+
                 <div class="stat-label">
-                    Pending
+                    Pending Orders
                 </div>
 
             </div>
 
 
-            <div class="stat">
+            <div class="stat-card">
 
-                <div class="stat-number">
-                    <?php echo $confirmedOrders; ?>
+                <div class="stat-icon">
+
+                    <i class="fas fa-circle-check"></i>
+
                 </div>
 
+
+                <div class="stat-number">
+                    <?= $confirmedOrders ?>
+                </div>
+
+
                 <div class="stat-label">
-                    Confirmed
+                    Confirmed Orders
                 </div>
 
             </div>
 
 
-            <div class="stat">
+            <div class="stat-card">
 
-                <div class="stat-number">
-                    <?php echo $preparingOrders; ?>
+                <div class="stat-icon">
+
+                    <i class="fas fa-fire-burner"></i>
+
                 </div>
 
+
+                <div class="stat-number">
+                    <?= $preparingOrders ?>
+                </div>
+
+
                 <div class="stat-label">
-                    Preparing
+                    Preparing Orders
                 </div>
 
             </div>
 
 
-            <div class="stat">
+            <div class="stat-card">
 
-                <div class="stat-number">
-                    <?php echo $deliveryOrders; ?>
+                <div class="stat-icon">
+
+                    <i class="fas fa-wallet"></i>
+
                 </div>
 
+
+                <div class="stat-number">
+
+                    Rs.
+                    <?= number_format(
+                        $totalSales,
+                        0
+                    ) ?>
+
+                </div>
+
+
                 <div class="stat-label">
-                    Out for Delivery
+                    Total Order Value
                 </div>
 
             </div>
 
 
-            <div class="stat">
+        </section>
 
-                <div class="stat-number">
-                    <?php echo $completedOrders; ?>
+
+        <!-- ==================================================
+             ORDERS TITLE
+        =================================================== -->
+
+        <div class="section-header">
+
+            <div>
+
+                <div class="section-title">
+                    Customer Orders
                 </div>
 
-                <div class="stat-label">
-                    Completed
+                <div class="section-subtitle">
+                    Orders placed for your restaurant.
                 </div>
+
+            </div>
+
+
+            <div class="order-count">
+
+                <?= $totalOrders ?>
+
+                Orders
 
             </div>
 
         </div>
 
 
-        <!-- TOOLBAR -->
+        <!-- ==================================================
+             ORDERS
+        =================================================== -->
 
-        <?php if ($ownerStatus === 'approved'): ?>
-
-            <div class="toolbar">
-
-                <input
-                    type="text"
-                    id="orderSearch"
-                    class="search"
-                    placeholder="Search order, customer or phone..."
-                    onkeyup="filterOrders()"
-                >
-
-                <select
-                    id="statusFilter"
-                    class="filter-select"
-                    onchange="filterOrders()"
-                >
-
-                    <option value="all">
-                        All Orders
-                    </option>
-
-                    <option value="pending">
-                        Pending
-                    </option>
-
-                    <option value="confirmed">
-                        Confirmed
-                    </option>
-
-                    <option value="preparing">
-                        Preparing
-                    </option>
-
-                    <option value="out_for_delivery">
-                        Out for Delivery
-                    </option>
-
-                    <option value="delivered">
-                        Delivered
-                    </option>
-
-                    <option value="cancelled">
-                        Cancelled
-                    </option>
-
-                </select>
-
-            </div>
-
-        <?php endif; ?>
-
-
-        <!-- ORDERS -->
-
-        <?php if (empty($orders)): ?>
-
-            <div class="empty">
-
-                <div class="empty-icon">
-                    🛒
-                </div>
-
-                <h3>
-                    No Orders Yet
-                </h3>
-
-                <p>
-                    When customers place orders
-                    from your restaurant, they will
-                    appear here.
-                </p>
-
-            </div>
-
-        <?php else: ?>
+        <?php if (!empty($orders)): ?>
 
 
             <?php foreach ($orders as $order): ?>
+
 
                 <?php
 
                 $orderId =
                     (int)$order['id'];
 
-                $status =
+
+                $currentStatus =
                     strtolower(
                         trim(
                             (string)$order['order_status']
                         )
                     );
 
+
                 $customerName =
-                    $order['customer_name']
-                    ?? 'Guest Customer';
+                    trim(
+                        (string)(
+                            $order['customer_name']
+                            ?? ''
+                        )
+                    );
 
-                $customerEmail =
-                    $order['customer_email']
-                    ?? '';
 
-                $customerPhone =
-                    $order['customer_phone']
-                    ?? '';
+                if ($customerName === '') {
+
+                    $customerName =
+                        'Customer';
+
+                }
+
+
+                $orderNumber =
+                    trim(
+                        (string)(
+                            $order['order_number']
+                            ?? $orderId
+                        )
+                    );
+
 
                 $items =
-                    $orderItems[$orderId]
-                    ?? [];
+                    isset(
+                        $orderItems[$orderId]
+                    )
+                        ? $orderItems[$orderId]
+                        : array();
+
 
                 $address =
-                    $orderAddresses[$orderId]
-                    ?? null;
+                    isset(
+                        $orderAddresses[$orderId]
+                    )
+                        ? $orderAddresses[$orderId]
+                        : null;
+
 
                 ?>
 
-                <article
-                    class="order-card"
-                    data-status="<?php echo h($status); ?>"
-                    data-search="<?php
-                        echo h(
-                            strtolower(
-                                $order['order_number']
-                                . ' '
-                                . $customerName
-                                . ' '
-                                . $customerPhone
-                            )
-                        );
-                    ?>"
-                >
+
+                <article class="order-card">
+
 
                     <!-- ORDER HEADER -->
 
                     <div class="order-header">
 
-                        <div>
 
-                            <div class="order-id">
+                        <div class="order-left">
 
-                                Order #
-                                <?php
 
-                                echo h(
-                                    $order['order_number']
-                                    ?: $orderId
-                                );
+                            <div class="order-icon">
 
-                                ?>
+                                <i class="fas fa-receipt"></i>
 
                             </div>
 
-                            <div class="order-date">
 
-                                <?php
+                            <div>
 
-                                echo h(
-                                    date(
-                                        'd M Y, h:i A',
-                                        strtotime(
+                                <div class="order-number">
+
+                                    Order #
+
+                                    <?= h(
+                                        $orderNumber
+                                    ) ?>
+
+                                </div>
+
+
+                                <div class="order-date">
+
+                                    <?php
+
+                                    if (
+                                        !empty(
                                             $order['created_at']
                                         )
-                                    )
-                                );
+                                    ) {
 
-                                ?>
+                                        echo h(
+                                            date(
+                                                'd M Y, h:i A',
+                                                strtotime(
+                                                    $order['created_at']
+                                                )
+                                            )
+                                        );
+
+                                    } else {
+
+                                        echo '-';
+
+                                    }
+
+                                    ?>
+
+                                </div>
 
                             </div>
 
-                        </div>
-
-
-                        <div>
-
-                            <span
-                                class="status <?php
-                                    echo h(
-                                        statusClass(
-                                            $status
-                                        )
-                                    );
-                                ?>"
-                            >
-
-                                <?php
-
-                                echo h(
-                                    statusLabel(
-                                        $status
-                                    )
-                                );
-
-                                ?>
-
-                            </span>
 
                         </div>
+
+
+                        <span
+                            class="status
+                            <?= h(
+                                orderStatusClass(
+                                    $currentStatus
+                                )
+                            ) ?>"
+                        >
+
+                            <?= h(
+                                orderStatusLabel(
+                                    $currentStatus
+                                )
+                            ) ?>
+
+                        </span>
+
 
                     </div>
 
@@ -2177,50 +2559,65 @@ body {
                     <div class="order-body">
 
 
-                        <!-- CUSTOMER / PAYMENT / ADDRESS -->
+                        <!-- CUSTOMER / ADDRESS / PAYMENT -->
 
-                        <div class="info-grid">
+                        <div class="order-grid">
+
+
+                            <!-- CUSTOMER -->
 
                             <div class="info-box">
 
                                 <div class="info-title">
+
+                                    <i class="fas fa-user"></i>
+
                                     Customer
+
                                 </div>
+
 
                                 <div class="info-main">
-                                    <?php
-                                    echo h(
+
+                                    <?= h(
                                         $customerName
-                                    );
-                                    ?>
+                                    ) ?>
+
                                 </div>
 
-                                <?php if ($customerPhone !== ''): ?>
+
+                                <?php if (
+                                    !empty(
+                                        $order['customer_phone']
+                                    )
+                                ): ?>
 
                                     <div class="info-small">
 
-                                        📞
-                                        <?php
-                                        echo h(
-                                            $customerPhone
-                                        );
-                                        ?>
+                                        <i class="fas fa-phone"></i>
+
+                                        <?= h(
+                                            $order['customer_phone']
+                                        ) ?>
 
                                     </div>
 
                                 <?php endif; ?>
 
 
-                                <?php if ($customerEmail !== ''): ?>
+                                <?php if (
+                                    !empty(
+                                        $order['customer_email']
+                                    )
+                                ): ?>
 
                                     <div class="info-small">
 
-                                        ✉
-                                        <?php
-                                        echo h(
-                                            $customerEmail
-                                        );
-                                        ?>
+                                        <i class="fas fa-envelope"></i>
+
+                                        <?= h(
+                                            $order['customer_email']
+                                        ) ?>
 
                                     </div>
 
@@ -2229,206 +2626,283 @@ body {
                             </div>
 
 
+                            <!-- ADDRESS -->
+
                             <div class="info-box">
 
                                 <div class="info-title">
+
+                                    <i class="fas fa-location-dot"></i>
+
                                     Delivery Address
+
                                 </div>
+
 
                                 <?php if ($address): ?>
 
+
                                     <div class="info-main">
 
-                                        <?php
-                                        echo h(
+                                        <?= h(
                                             $address['address_title']
                                             ?? 'Delivery Address'
-                                        );
-                                        ?>
+                                        ) ?>
 
                                     </div>
+
 
                                     <div class="info-small">
 
-                                        <?php
-                                        echo h(
+                                        <?= h(
                                             $address['address_line']
                                             ?? ''
-                                        );
-                                        ?>
+                                        ) ?>
 
-                                        <?php
-                                        if (
+                                        <?php if (
                                             !empty(
                                                 $address['area']
                                             )
-                                        ) {
-                                            echo ', ' .
-                                                h(
-                                                    $address['area']
-                                                );
-                                        }
-                                        ?>
+                                        ): ?>
 
-                                        <?php
-                                        if (
+                                            <br>
+
+                                            <?= h(
+                                                $address['area']
+                                            ) ?>
+
+                                        <?php endif; ?>
+
+
+                                        <?php if (
                                             !empty(
                                                 $address['city']
                                             )
-                                        ) {
-                                            echo ', ' .
-                                                h(
-                                                    $address['city']
-                                                );
-                                        }
-                                        ?>
+                                        ): ?>
+
+                                            ,
+
+                                            <?= h(
+                                                $address['city']
+                                            ) ?>
+
+                                        <?php endif; ?>
 
                                     </div>
+
 
                                 <?php else: ?>
 
-                                    <div class="info-main">
-                                        Address unavailable
+
+                                    <div class="info-small">
+                                        Address not available.
                                     </div>
+
 
                                 <?php endif; ?>
 
                             </div>
 
 
+                            <!-- PAYMENT -->
+
                             <div class="info-box">
 
                                 <div class="info-title">
+
+                                    <i class="fas fa-credit-card"></i>
+
                                     Payment
+
                                 </div>
+
 
                                 <div class="info-main">
 
-                                    <?php
-                                    echo h(
-                                        ucfirst(
+                                    <?= h(
+                                        ucwords(
                                             str_replace(
                                                 '_',
                                                 ' ',
-                                                (string)
                                                 $order['payment_method']
+                                                ?? 'Not specified'
                                             )
                                         )
-                                    );
-                                    ?>
+                                    ) ?>
 
                                 </div>
 
+
                                 <div class="info-small">
 
-                                    Payment status:
-                                    <?php
-                                    echo h(
-                                        ucfirst(
-                                            (string)(
-                                                $order['payment_status']
-                                                ?? 'pending'
-                                            )
-                                        )
-                                    );
-                                    ?>
+                                    Order Total
+
+                                    <strong>
+
+                                        Rs.
+
+                                        <?= number_format(
+                                            (float)$order['total'],
+                                            2
+                                        ) ?>
+
+                                    </strong>
 
                                 </div>
 
                             </div>
+
 
                         </div>
 
 
-                        <!-- ITEMS -->
+                        <!-- ORDER ITEMS -->
 
-                        <div class="items">
+                        <div class="items-box">
+
 
                             <div class="items-heading">
-                                Ordered Items
+
+                                <i class="fas fa-utensils"></i>
+
+                                &nbsp;
+
+                                Order Items
+
                             </div>
 
 
-                            <?php if (empty($items)): ?>
-
-                                <div class="item">
-
-                                    <div class="item-name">
-                                        No item information available.
-                                    </div>
-
-                                </div>
-
-                            <?php else: ?>
+                            <?php if (!empty($items)): ?>
 
 
                                 <?php foreach ($items as $item): ?>
 
-                                    <div class="item">
+
+                                    <div class="item-row">
+
 
                                         <div>
 
                                             <div class="item-name">
 
-                                                <?php
-                                                echo h(
+                                                <?= h(
                                                     $item['item_name']
-                                                );
-                                                ?>
+                                                ) ?>
 
                                             </div>
 
+
                                             <div class="item-meta">
 
-                                                <?php
-                                                echo h(
+                                                Qty:
+
+                                                <?= h(
                                                     $item['quantity']
-                                                );
-                                                ?>
-                                                × Rs.
-                                                <?php
-                                                echo number_format(
-                                                    (float)
-                                                    $item['item_price'],
+                                                ) ?>
+
+                                                ×
+
+                                                Rs.
+
+                                                <?= number_format(
+                                                    (float)$item['item_price'],
                                                     2
-                                                );
-                                                ?>
+                                                ) ?>
 
                                             </div>
 
                                         </div>
 
 
-                                        <div class="item-total">
+                                        <div class="item-price">
 
                                             Rs.
-                                            <?php
-                                            echo number_format(
-                                                (float)
-                                                $item['subtotal'],
+
+                                            <?= number_format(
+                                                (float)$item['subtotal'],
                                                 2
-                                            );
-                                            ?>
+                                            ) ?>
+
+                                        </div>
+
+
+                                    </div>
+
+
+                                <?php endforeach; ?>
+
+
+                            <?php else: ?>
+
+
+                                <div class="item-row">
+
+                                    <div class="item-meta">
+
+                                        No order items found.
+
+                                    </div>
+
+                                </div>
+
+
+                            <?php endif; ?>
+
+
+                        </div>
+
+
+                        <!-- BOTTOM -->
+
+                        <div class="bottom-grid">
+
+
+                            <div>
+
+
+                                <?php if (
+                                    !empty(
+                                        $order['customer_note']
+                                    )
+                                ): ?>
+
+
+                                    <div class="customer-note">
+
+                                        <div class="customer-note-title">
+
+                                            <i class="fas fa-note-sticky"></i>
+
+                                            Customer Note
+
+                                        </div>
+
+
+                                        <div class="customer-note-text">
+
+                                            <?= nl2br(
+                                                h(
+                                                    $order['customer_note']
+                                                )
+                                            ) ?>
 
                                         </div>
 
                                     </div>
 
-                                <?php endforeach; ?>
+
+                                <?php endif; ?>
 
 
-                            <?php endif; ?>
-
-                        </div>
+                            </div>
 
 
-                        <!-- TOTAL -->
-
-                        <div class="total-row">
+                            <!-- TOTAL -->
 
                             <div class="total-box">
 
-                                <div class="total-line">
+
+                                <div class="total-row">
 
                                     <span>
                                         Subtotal
@@ -2437,20 +2911,18 @@ body {
                                     <strong>
 
                                         Rs.
-                                        <?php
-                                        echo number_format(
-                                            (float)
-                                            $order['subtotal'],
+
+                                        <?= number_format(
+                                            (float)$order['subtotal'],
                                             2
-                                        );
-                                        ?>
+                                        ) ?>
 
                                     </strong>
 
                                 </div>
 
 
-                                <div class="total-line">
+                                <div class="total-row">
 
                                     <span>
                                         Delivery Fee
@@ -2459,395 +2931,238 @@ body {
                                     <strong>
 
                                         Rs.
-                                        <?php
-                                        echo number_format(
-                                            (float)
-                                            $order['delivery_fee'],
+
+                                        <?= number_format(
+                                            (float)$order['delivery_fee'],
                                             2
-                                        );
-                                        ?>
+                                        ) ?>
 
                                     </strong>
 
                                 </div>
 
 
-                                <?php if (
-                                    (float)
-                                    $order['discount'] > 0
-                                ): ?>
-
-                                    <div class="total-line">
-
-                                        <span>
-                                            Discount
-                                        </span>
-
-                                        <strong>
-
-                                            - Rs.
-                                            <?php
-                                            echo number_format(
-                                                (float)
-                                                $order['discount'],
-                                                2
-                                            );
-                                            ?>
-
-                                        </strong>
-
-                                    </div>
-
-                                <?php endif; ?>
-
-
-                                <div class="total-final">
+                                <div class="total-row">
 
                                     <span>
-                                        Order Total
+                                        Discount
                                     </span>
 
-                                    <span>
+                                    <strong>
 
                                         Rs.
-                                        <?php
-                                        echo number_format(
-                                            (float)
-                                            $order['total'],
-                                            2
-                                        );
-                                        ?>
 
-                                    </span>
+                                        <?= number_format(
+                                            (float)$order['discount'],
+                                            2
+                                        ) ?>
+
+                                    </strong>
 
                                 </div>
 
+
+                                <div class="total-row grand">
+
+                                    <span>
+                                        Total
+                                    </span>
+
+                                    <strong>
+
+                                        Rs.
+
+                                        <?= number_format(
+                                            (float)$order['total'],
+                                            2
+                                        ) ?>
+
+                                    </strong>
+
+                                </div>
+
+
                             </div>
+
 
                         </div>
 
 
-                        <!-- CUSTOMER NOTE -->
+                        <!-- STATUS -->
 
-                        <?php if (
-                            !empty(
-                                $order['customer_note']
-                            )
-                        ): ?>
+                        <div class="status-control">
 
-                            <div
-                                class="info-box"
-                                style="margin-bottom:20px;"
+
+                            <div class="status-label">
+
+                                <i class="fas fa-arrows-rotate"></i>
+
+                                Update Order Status
+
+                            </div>
+
+
+                            <form
+                                method="POST"
+                                class="status-form"
                             >
 
-                                <div class="info-title">
-                                    Customer Note
-                                </div>
 
-                                <div class="info-main">
+                                <input
+                                    type="hidden"
+                                    name="order_id"
+                                    value="<?= $orderId ?>"
+                                >
 
-                                    <?php
-                                    echo nl2br(
-                                        h(
-                                            $order['customer_note']
+
+                                <select
+                                    name="order_status"
+                                >
+
+                                    <option
+                                        value="pending"
+                                        <?= $currentStatus === 'pending'
+                                            ? 'selected'
+                                            : '' ?>
+                                    >
+                                        Pending
+                                    </option>
+
+
+                                    <option
+                                        value="confirmed"
+                                        <?= (
+                                            $currentStatus === 'confirmed' ||
+                                            $currentStatus === 'accepted'
                                         )
-                                    );
-                                    ?>
-
-                                </div>
-
-                            </div>
-
-                        <?php endif; ?>
-
-
-                        <!-- ACTIONS -->
-
-                        <?php if (
-                            $ownerStatus === 'approved'
-                        ): ?>
-
-                            <div class="order-actions">
-
-
-                                <?php if (
-                                    $status === 'pending'
-                                ): ?>
-
-                                    <form
-                                        method="POST"
-                                        class="status-form"
+                                            ? 'selected'
+                                            : '' ?>
                                     >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_id"
-                                            value="<?php
-                                                echo $orderId;
-                                            ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_status"
-                                            value="confirmed"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="update_order"
-                                            class="status-btn accept"
-                                        >
-                                            ✓ Accept Order
-                                        </button>
-
-                                    </form>
+                                        Confirmed
+                                    </option>
 
 
-                                    <form
-                                        method="POST"
-                                        class="status-form"
+                                    <option
+                                        value="preparing"
+                                        <?= $currentStatus === 'preparing'
+                                            ? 'selected'
+                                            : '' ?>
                                     >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_id"
-                                            value="<?php
-                                                echo $orderId;
-                                            ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_status"
-                                            value="cancelled"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="update_order"
-                                            class="status-btn cancel"
-                                        >
-                                            ✕ Cancel
-                                        </button>
-
-                                    </form>
-
-                                <?php endif; ?>
+                                        Preparing
+                                    </option>
 
 
-                                <?php if (
-                                    $status === 'confirmed'
-                                    ||
-                                    $status === 'accepted'
-                                ): ?>
-
-                                    <form
-                                        method="POST"
-                                        class="status-form"
+                                    <option
+                                        value="out_for_delivery"
+                                        <?= (
+                                            $currentStatus === 'out_for_delivery' ||
+                                            $currentStatus === 'on_the_way'
+                                        )
+                                            ? 'selected'
+                                            : '' ?>
                                     >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_id"
-                                            value="<?php
-                                                echo $orderId;
-                                            ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_status"
-                                            value="preparing"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="update_order"
-                                            class="status-btn prepare"
-                                        >
-                                            🍳 Start Preparing
-                                        </button>
-
-                                    </form>
-
-                                <?php endif; ?>
+                                        Out for Delivery
+                                    </option>
 
 
-                                <?php if (
-                                    $status === 'preparing'
-                                ): ?>
-
-                                    <form
-                                        method="POST"
-                                        class="status-form"
+                                    <option
+                                        value="delivered"
+                                        <?= (
+                                            $currentStatus === 'delivered' ||
+                                            $currentStatus === 'completed'
+                                        )
+                                            ? 'selected'
+                                            : '' ?>
                                     >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_id"
-                                            value="<?php
-                                                echo $orderId;
-                                            ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_status"
-                                            value="out_for_delivery"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="update_order"
-                                            class="status-btn delivery-btn"
-                                        >
-                                            🚴 Ready / Out for Delivery
-                                        </button>
-
-                                    </form>
-
-                                <?php endif; ?>
+                                        Delivered
+                                    </option>
 
 
-                                <?php if (
-                                    $status === 'out_for_delivery'
-                                    ||
-                                    $status === 'on_the_way'
-                                ): ?>
-
-                                    <form
-                                        method="POST"
-                                        class="status-form"
+                                    <option
+                                        value="cancelled"
+                                        <?= (
+                                            $currentStatus === 'cancelled' ||
+                                            $currentStatus === 'canceled'
+                                        )
+                                            ? 'selected'
+                                            : '' ?>
                                     >
+                                        Cancelled
+                                    </option>
 
-                                        <input
-                                            type="hidden"
-                                            name="order_id"
-                                            value="<?php
-                                                echo $orderId;
-                                            ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="order_status"
-                                            value="delivered"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="update_order"
-                                            class="status-btn complete"
-                                        >
-                                            ✓ Mark Delivered
-                                        </button>
-
-                                    </form>
-
-                                <?php endif; ?>
+                                </select>
 
 
-                            </div>
+                                <button
+                                    type="submit"
+                                    name="update_order_status"
+                                    value="1"
+                                    class="update-btn"
+                                >
 
-                        <?php endif; ?>
+                                    <i class="fas fa-check"></i>
+
+                                    Update
+
+                                </button>
+
+
+                            </form>
+
+
+                        </div>
 
 
                     </div>
 
+
                 </article>
 
+
             <?php endforeach; ?>
+
+
+        <?php else: ?>
+
+
+            <!-- NO ORDERS -->
+
+            <div class="empty">
+
+
+                <div class="empty-icon">
+
+                    <i class="fas fa-receipt"></i>
+
+                </div>
+
+
+                <h2>
+                    No Orders Yet
+                </h2>
+
+
+                <p>
+
+                    Customer orders for your restaurant
+                    will appear here.
+
+                </p>
+
+
+            </div>
 
 
         <?php endif; ?>
 
 
-    </section>
+    <?php endif; ?>
+
+
+</div>
 
 </main>
 
-
-<script>
-
-/*
-|--------------------------------------------------------------------------
-| Search + Status Filter
-|--------------------------------------------------------------------------
-*/
-
-function filterOrders() {
-
-    const searchInput =
-        document.getElementById(
-            'orderSearch'
-        );
-
-    const statusFilter =
-        document.getElementById(
-            'statusFilter'
-        );
-
-    if (!searchInput || !statusFilter) {
-        return;
-    }
-
-    const search =
-        searchInput.value
-        .toLowerCase()
-        .trim();
-
-    const status =
-        statusFilter.value;
-
-    const cards =
-        document.querySelectorAll(
-            '.order-card'
-        );
-
-    cards.forEach(function(card) {
-
-        const cardSearch =
-            card
-            .getAttribute(
-                'data-search'
-            )
-            .toLowerCase();
-
-        const cardStatus =
-            card
-            .getAttribute(
-                'data-status'
-            );
-
-        const matchesSearch =
-            cardSearch.includes(
-                search
-            );
-
-        const matchesStatus =
-            status === 'all'
-            ||
-            cardStatus === status;
-
-        if (
-            matchesSearch &&
-            matchesStatus
-        ) {
-
-            card.style.display =
-                '';
-
-        } else {
-
-            card.style.display =
-                'none';
-        }
-
-    });
-}
-
-</script>
 
 </body>
 
