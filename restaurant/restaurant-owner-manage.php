@@ -2073,7 +2073,7 @@ a {
 
 
         <a
-            href="restaurant-owner-manage-orders.php"
+            href="restaurant-owner-orders.php"
             class="<?php
                 echo $isApproved
                     ? ''

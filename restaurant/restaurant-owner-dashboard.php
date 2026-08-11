@@ -3131,7 +3131,7 @@ $currentDate =
             <?php if ($isApproved): ?>
 
                 <a
-                    href="restaurant-owner-manage-orders.php"
+                    href="restaurant-owner-orders.php"
                     class="nav-item"
                 >
 
@@ -4231,7 +4231,7 @@ $currentDate =
                 <?php if ($isApproved): ?>
 
                     <a
-                        href="restaurant-owner-manage-orders.php"
+                        href="restaurant-owner-orders.php"
                         class="
                             quick-card
                             enabled

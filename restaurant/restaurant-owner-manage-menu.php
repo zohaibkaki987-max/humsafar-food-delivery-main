@@ -2383,7 +2383,7 @@ a {
         </a>
 
 
-        <a href="restaurant-owner-manage-orders.php">
+        <a href="restaurant-owner-orders.php">
 
             <i class="fas fa-cart-shopping"></i>
 
