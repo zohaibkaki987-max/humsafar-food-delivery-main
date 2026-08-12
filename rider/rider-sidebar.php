@@ -4,11 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!function_exists('e')) {
-    function e($value)
+if (!function_exists('rider_e')) {
+    function rider_e($value)
     {
         return htmlspecialchars(
-            (string) $value,
+            (string)$value,
             ENT_QUOTES,
             'UTF-8'
         );
@@ -25,13 +25,37 @@ $currentPage = basename($_SERVER['PHP_SELF']);
 
 $isApproved = ($riderStatus === 'approved');
 
-function riderActive($page)
+function riderNavActive($page)
 {
     global $currentPage;
 
-    return $currentPage === $page
-        ? 'active'
-        : '';
+    return $currentPage === $page ? 'active' : '';
+}
+
+
+/* Rider initials */
+
+$nameParts = preg_split(
+    '/\s+/',
+    trim($riderName)
+);
+
+$initials = '';
+
+if (!empty($nameParts[0])) {
+    $initials .= strtoupper(
+        substr($nameParts[0], 0, 1)
+    );
+}
+
+if (!empty($nameParts[1])) {
+    $initials .= strtoupper(
+        substr($nameParts[1], 0, 1)
+    );
+}
+
+if ($initials === '') {
+    $initials = 'R';
 }
 
 ?>
@@ -41,26 +65,25 @@ function riderActive($page)
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
 >
 
-
 <style>
 
 /* =========================================================
-   RIDER SIDEBAR
+   HUMSAFAR RIDER SIDEBAR
 ========================================================= */
 
 .rider-sidebar {
 
     position: fixed;
 
-    left: 0;
     top: 0;
+    left: 0;
 
     width: 223px;
     height: 100vh;
 
     background: #ed0038;
 
-    color: #ffffff;
+    color: #fff;
 
     display: flex;
 
@@ -76,32 +99,34 @@ function riderActive($page)
    BRAND
 ========================================================= */
 
-.rider-brand {
+.rider-sidebar-brand {
 
     height: 96px;
 
-    padding: 0 20px;
+    padding: 0 14px;
 
     display: flex;
 
     align-items: center;
 
-    gap: 11px;
+    gap: 10px;
 
     border-bottom:
         1px solid
-        rgba(255,255,255,.13);
+        rgba(255,255,255,.14);
 }
 
 
-.rider-brand-icon {
+.rider-sidebar-brand-icon {
 
     width: 44px;
     height: 44px;
 
+    flex-shrink: 0;
+
     border-radius: 11px;
 
-    background: #ffffff;
+    background: #fff;
 
     color: #ed0038;
 
@@ -112,16 +137,14 @@ function riderActive($page)
     justify-content: center;
 
     font-size: 17px;
-
-    flex-shrink: 0;
 }
 
 
-.rider-brand-text {
+.rider-sidebar-brand-name {
 
-    color: #ffffff;
+    color: #fff;
 
-    font-size: 21px;
+    font-size: 22px;
 
     font-weight: 800;
 
@@ -129,20 +152,18 @@ function riderActive($page)
 }
 
 
-.rider-brand-subtitle {
+.rider-sidebar-brand-subtitle {
 
     margin-top: 5px;
 
     color:
-        rgba(255,255,255,.82);
+        rgba(255,255,255,.8);
 
     font-size: 7px;
 
     font-weight: 800;
 
-    letter-spacing: .5px;
-
-    text-transform: uppercase;
+    letter-spacing: .55px;
 }
 
 
@@ -150,18 +171,18 @@ function riderActive($page)
    NAVIGATION
 ========================================================= */
 
-.rider-navigation {
+.rider-sidebar-nav {
 
     flex: 1;
 
     padding:
-        18px 12px 10px;
+        18px 12px 8px;
 
     overflow-y: auto;
 }
 
 
-.rider-section-title {
+.rider-sidebar-section {
 
     margin:
         7px 11px 10px;
@@ -183,7 +204,7 @@ function riderActive($page)
    NAV ITEM
 ========================================================= */
 
-.rider-nav-item {
+.rider-sidebar-item {
 
     width: 100%;
 
@@ -194,15 +215,15 @@ function riderActive($page)
     padding:
         0 13px;
 
-    border-radius: 9px;
-
     display: flex;
 
     align-items: center;
 
-    gap: 13px;
+    gap: 12px;
 
-    color: #ffffff;
+    border-radius: 9px;
+
+    color: #fff;
 
     text-decoration: none;
 
@@ -211,18 +232,19 @@ function riderActive($page)
     font-weight: 700;
 
     transition:
-        background .2s ease,
-        color .2s ease;
+        all .18s ease;
 }
 
 
-.rider-nav-item i {
+.rider-sidebar-item i {
 
     width: 17px;
 
+    flex-shrink: 0;
+
     text-align: center;
 
-    color: #ffffff;
+    color: #fff;
 
     font-size: 12px;
 }
@@ -232,12 +254,12 @@ function riderActive($page)
    HOVER
 ========================================================= */
 
-.rider-nav-item:hover {
+.rider-sidebar-item:hover {
 
     background:
         rgba(255,255,255,.12);
 
-    color: #ffffff;
+    color: #fff;
 }
 
 
@@ -245,19 +267,15 @@ function riderActive($page)
    ACTIVE
 ========================================================= */
 
-.rider-nav-item.active {
+.rider-sidebar-item.active {
 
-    background: #ffffff;
+    background: #fff;
 
     color: #ed0038;
-
-    box-shadow:
-        0 4px 12px
-        rgba(0,0,0,.06);
 }
 
 
-.rider-nav-item.active i {
+.rider-sidebar-item.active i {
 
     color: #ed0038;
 }
@@ -267,81 +285,49 @@ function riderActive($page)
    LOCKED
 ========================================================= */
 
-.rider-nav-item.locked {
+.rider-sidebar-item.locked {
 
     opacity: .55;
 
     cursor: not-allowed;
+
+    user-select: none;
 }
 
 
-.rider-nav-item.locked:hover {
+.rider-sidebar-item.locked:hover {
 
     background:
         rgba(255,255,255,.05);
 }
 
 
-.rider-lock {
+.rider-sidebar-lock {
 
     margin-left: auto;
+
+    width: auto !important;
 
     font-size: 9px !important;
 }
 
 
 /* =========================================================
-   BADGE
+   BOTTOM PROFILE
 ========================================================= */
 
-.rider-badge {
-
-    margin-left: auto;
-
-    min-width: 18px;
-
-    height: 18px;
-
-    padding: 0 5px;
-
-    border-radius: 20px;
-
-    background: #ffffff;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    font-size: 7px;
-
-    font-weight: 800;
-}
-
-
-/* =========================================================
-   BOTTOM RIDER PROFILE
-========================================================= */
-
-.rider-bottom {
+.rider-sidebar-bottom {
 
     padding:
-        10px 11px 12px;
+        10px 11px 11px;
 
     border-top:
         1px solid
-        rgba(255,255,255,.13);
+        rgba(255,255,255,.14);
 }
 
 
-/* =========================================================
-   PROFILE CARD
-========================================================= */
-
-.rider-profile-card {
+.rider-sidebar-profile {
 
     min-height: 61px;
 
@@ -361,16 +347,18 @@ function riderActive($page)
 }
 
 
-.rider-avatar {
+.rider-sidebar-avatar {
 
     width: 37px;
     height: 37px;
+
+    flex-shrink: 0;
 
     border-radius: 50%;
 
     background: #ffd900;
 
-    color: #171717;
+    color: #111;
 
     display: flex;
 
@@ -378,25 +366,21 @@ function riderActive($page)
 
     justify-content: center;
 
-    font-size: 12px;
+    font-size: 11px;
 
     font-weight: 900;
-
-    flex-shrink: 0;
 }
 
 
-.rider-profile-info {
+.rider-sidebar-profile-info {
 
     min-width: 0;
-
-    flex: 1;
 }
 
 
-.rider-profile-name {
+.rider-sidebar-profile-name {
 
-    color: #ffffff;
+    color: #fff;
 
     font-size: 8px;
 
@@ -410,7 +394,7 @@ function riderActive($page)
 }
 
 
-.rider-profile-status {
+.rider-sidebar-profile-status {
 
     margin-top: 4px;
 
@@ -431,7 +415,7 @@ function riderActive($page)
 }
 
 
-.status-dot {
+.rider-status-dot {
 
     width: 5px;
     height: 5px;
@@ -442,13 +426,13 @@ function riderActive($page)
 }
 
 
-.status-dot.approved {
+.rider-status-dot.approved {
 
-    background: #43d17b;
+    background: #40d477;
 }
 
 
-.status-dot.rejected {
+.rider-status-dot.rejected {
 
     background: #ffb0bd;
 }
@@ -458,7 +442,7 @@ function riderActive($page)
    MOBILE
 ========================================================= */
 
-.rider-menu-button {
+.rider-sidebar-menu {
 
     display: none;
 
@@ -470,15 +454,15 @@ function riderActive($page)
     width: 40px;
     height: 40px;
 
-    border: none;
+    border: 0;
 
     border-radius: 8px;
 
     background: #ed0038;
 
-    color: #ffffff;
+    color: #fff;
 
-    z-index: 10001;
+    z-index: 10000;
 
     cursor: pointer;
 }
@@ -503,7 +487,7 @@ function riderActive($page)
     }
 
 
-    .rider-menu-button {
+    .rider-sidebar-menu {
 
         display: flex;
 
@@ -512,6 +496,25 @@ function riderActive($page)
         justify-content: center;
     }
 
+}
+
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+.rider-sidebar-nav::-webkit-scrollbar {
+
+    width: 3px;
+}
+
+
+.rider-sidebar-nav::-webkit-scrollbar-thumb {
+
+    background:
+        rgba(255,255,255,.3);
+
+    border-radius: 10px;
 }
 
 </style>
@@ -523,8 +526,8 @@ function riderActive($page)
 
 <button
     type="button"
-    class="rider-menu-button"
-    id="riderMenuButton"
+    class="rider-sidebar-menu"
+    id="riderSidebarMenu"
 >
 
     <i class="fas fa-bars"></i>
@@ -546,9 +549,9 @@ function riderActive($page)
          BRAND
     ====================================================== -->
 
-    <div class="rider-brand">
+    <div class="rider-sidebar-brand">
 
-        <div class="rider-brand-icon">
+        <div class="rider-sidebar-brand-icon">
 
             <i class="fas fa-motorcycle"></i>
 
@@ -557,11 +560,11 @@ function riderActive($page)
 
         <div>
 
-            <div class="rider-brand-text">
+            <div class="rider-sidebar-brand-name">
                 Humsafar
             </div>
 
-            <div class="rider-brand-subtitle">
+            <div class="rider-sidebar-brand-subtitle">
                 RIDER PARTNER
             </div>
 
@@ -575,10 +578,12 @@ function riderActive($page)
          NAVIGATION
     ====================================================== -->
 
-    <nav class="rider-navigation">
+    <nav class="rider-sidebar-nav">
 
 
-        <div class="rider-section-title">
+        <!-- MAIN MENU -->
+
+        <div class="rider-sidebar-section">
             MAIN MENU
         </div>
 
@@ -587,7 +592,7 @@ function riderActive($page)
 
         <a
             href="rider-dashboard.php"
-            class="rider-nav-item <?= riderActive('rider-dashboard.php') ?>"
+            class="rider-sidebar-item <?= riderNavActive('rider-dashboard.php') ?>"
         >
 
             <i class="fas fa-chart-line"></i>
@@ -605,7 +610,7 @@ function riderActive($page)
 
             <a
                 href="rider-orders.php"
-                class="rider-nav-item <?= riderActive('rider-orders.php') ?>"
+                class="rider-sidebar-item <?= riderNavActive('rider-orders.php') ?>"
             >
 
                 <i class="fas fa-receipt"></i>
@@ -619,7 +624,7 @@ function riderActive($page)
         <?php else: ?>
 
             <div
-                class="rider-nav-item locked"
+                class="rider-sidebar-item locked"
                 title="Available after admin approval"
             >
 
@@ -629,7 +634,7 @@ function riderActive($page)
                     Available Orders
                 </span>
 
-                <i class="fas fa-lock rider-lock"></i>
+                <i class="fas fa-lock rider-sidebar-lock"></i>
 
             </div>
 
@@ -642,7 +647,7 @@ function riderActive($page)
 
             <a
                 href="rider-deliveries.php"
-                class="rider-nav-item <?= riderActive('rider-deliveries.php') ?>"
+                class="rider-sidebar-item <?= riderNavActive('rider-deliveries.php') ?>"
             >
 
                 <i class="fas fa-motorcycle"></i>
@@ -656,7 +661,7 @@ function riderActive($page)
         <?php else: ?>
 
             <div
-                class="rider-nav-item locked"
+                class="rider-sidebar-item locked"
                 title="Available after admin approval"
             >
 
@@ -666,7 +671,7 @@ function riderActive($page)
                     My Deliveries
                 </span>
 
-                <i class="fas fa-lock rider-lock"></i>
+                <i class="fas fa-lock rider-sidebar-lock"></i>
 
             </div>
 
@@ -679,7 +684,7 @@ function riderActive($page)
 
             <a
                 href="rider-earnings.php"
-                class="rider-nav-item <?= riderActive('rider-earnings.php') ?>"
+                class="rider-sidebar-item <?= riderNavActive('rider-earnings.php') ?>"
             >
 
                 <i class="fas fa-wallet"></i>
@@ -693,7 +698,7 @@ function riderActive($page)
         <?php else: ?>
 
             <div
-                class="rider-nav-item locked"
+                class="rider-sidebar-item locked"
                 title="Available after admin approval"
             >
 
@@ -703,7 +708,7 @@ function riderActive($page)
                     Earnings
                 </span>
 
-                <i class="fas fa-lock rider-lock"></i>
+                <i class="fas fa-lock rider-sidebar-lock"></i>
 
             </div>
 
@@ -711,11 +716,9 @@ function riderActive($page)
 
 
 
-        <!-- =================================================
-             ACCOUNT
-        ================================================== -->
+        <!-- ACCOUNT -->
 
-        <div class="rider-section-title">
+        <div class="rider-sidebar-section">
 
             ACCOUNT
 
@@ -726,7 +729,7 @@ function riderActive($page)
 
         <a
             href="rider-profile.php"
-            class="rider-nav-item <?= riderActive('rider-profile.php') ?>"
+            class="rider-sidebar-item <?= riderNavActive('rider-profile.php') ?>"
         >
 
             <i class="fas fa-user"></i>
@@ -742,7 +745,7 @@ function riderActive($page)
 
         <a
             href="rider-vehicle.php"
-            class="rider-nav-item <?= riderActive('rider-vehicle.php') ?>"
+            class="rider-sidebar-item <?= riderNavActive('rider-vehicle.php') ?>"
         >
 
             <i class="fas fa-motorcycle"></i>
@@ -755,11 +758,9 @@ function riderActive($page)
 
 
 
-        <!-- =================================================
-             SUPPORT
-        ================================================== -->
+        <!-- SUPPORT -->
 
-        <div class="rider-section-title">
+        <div class="rider-sidebar-section">
 
             SUPPORT
 
@@ -768,7 +769,7 @@ function riderActive($page)
 
         <a
             href="rider-support.php"
-            class="rider-nav-item <?= riderActive('rider-support.php') ?>"
+            class="rider-sidebar-item <?= riderNavActive('rider-support.php') ?>"
         >
 
             <i class="far fa-circle-question"></i>
@@ -785,81 +786,37 @@ function riderActive($page)
 
 
     <!-- =====================================================
-         BOTTOM PROFILE
+         RIDER PROFILE
     ====================================================== -->
 
-    <div class="rider-bottom">
+    <div class="rider-sidebar-bottom">
 
-        <div class="rider-profile-card">
+        <div class="rider-sidebar-profile">
 
 
-            <div class="rider-avatar">
+            <div class="rider-sidebar-avatar">
 
-                <?php
-
-                $initials = '';
-
-                $nameParts =
-                    preg_split(
-                        '/\s+/',
-                        trim($riderName)
-                    );
-
-                if (
-                    isset($nameParts[0]) &&
-                    $nameParts[0] !== ''
-                ) {
-
-                    $initials .=
-                        strtoupper(
-                            substr(
-                                $nameParts[0],
-                                0,
-                                1
-                            )
-                        );
-                }
-
-                if (
-                    isset($nameParts[1]) &&
-                    $nameParts[1] !== ''
-                ) {
-
-                    $initials .=
-                        strtoupper(
-                            substr(
-                                $nameParts[1],
-                                0,
-                                1
-                            )
-                        );
-                }
-
-                echo e(
-                    $initials ?: 'R'
-                );
-
-                ?>
+                <?= rider_e($initials) ?>
 
             </div>
 
 
-            <div class="rider-profile-info">
+            <div class="rider-sidebar-profile-info">
 
-                <div class="rider-profile-name">
+                <div class="rider-sidebar-profile-name">
 
-                    <?= e($riderName) ?>
+                    <?= rider_e($riderName) ?>
 
                 </div>
 
 
-                <div class="rider-profile-status">
+                <div class="rider-sidebar-profile-status">
 
                     <span
-                        class="status-dot <?= e($riderStatus) ?>"
+                        class="rider-status-dot <?= rider_e($riderStatus) ?>"
                     ></span>
 
-                    <?= e($riderStatus) ?>
+                    <?= rider_e($riderStatus) ?>
 
                 </div>
 
@@ -874,7 +831,6 @@ function riderActive($page)
 </aside>
 
 
-
 <script>
 
 const riderSidebar =
@@ -882,18 +838,18 @@ const riderSidebar =
         'riderSidebar'
     );
 
-const riderMenuButton =
+const riderSidebarMenu =
     document.getElementById(
-        'riderMenuButton'
+        'riderSidebarMenu'
     );
 
 
 if (
     riderSidebar &&
-    riderMenuButton
+    riderSidebarMenu
 ) {
 
-    riderMenuButton.addEventListener(
+    riderSidebarMenu.addEventListener(
         'click',
         function () {
 
