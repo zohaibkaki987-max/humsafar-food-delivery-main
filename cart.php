@@ -1,41 +1,66 @@
 <?php
-/**
- * ============================================================
- * HUMSAFAR FOOD DELIVERY
- * CUSTOMER CART PAGE
- * ============================================================
- *
- * Uses:
- *   - includes/config.php
- *   - includes/session.php
- *   - includes/customer-header.php
- *   - includes/footer.php
- *
- * Existing cart endpoints:
- *   - update_cart.php
- *   - remove_from_cart.php
- *
- * Existing checkout:
- *   - checkout.php
- */
+/*
+|--------------------------------------------------------------------------
+| HUMSAFAR FOOD DELIVERY
+| CUSTOMER CART PAGE
+|--------------------------------------------------------------------------
+| File:
+| /cart.php
+|
+| Uses:
+| - includes/config.php
+| - includes/session.php
+| - includes/customer-header.php
+|
+| Cart table:
+| - id
+| - user_id
+| - menu_item_id
+| - quantity
+|
+| Customer address table:
+| - customer_addresses
+| - id
+| - user_id
+| - address_title
+| - address_line
+| - city
+| - area
+| - phone
+| - is_default
+|--------------------------------------------------------------------------
+*/
 
-require_once 'includes/config.php';
-require_once 'includes/session.php';
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/session.php';
 
-/* ============================================================
-   LOGIN CHECK
-============================================================ */
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-if (!isset($_SESSION['user_id']) || (int)$_SESSION['user_id'] <= 0) {
-    header("Location: login.php");
+
+/*
+|--------------------------------------------------------------------------
+| LOGIN CHECK
+|--------------------------------------------------------------------------
+*/
+
+if (
+    !isset($_SESSION['user_id']) ||
+    (int)$_SESSION['user_id'] <= 0
+) {
+    header('Location: login.php');
     exit;
 }
 
-$user_id = (int)$_SESSION['user_id'];
+$userId = (int)$_SESSION['user_id'];
 
-/* ============================================================
-   HELPER
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| HELPER
+|--------------------------------------------------------------------------
+*/
 
 function cart_h($value)
 {
@@ -46,29 +71,98 @@ function cart_h($value)
     );
 }
 
-/* ============================================================
-   GET CART ITEMS
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| IMAGE PATH HELPERS
+|--------------------------------------------------------------------------
+*/
+
+function cartRestaurantImage($image)
+{
+    $image = trim((string)$image);
+
+    if ($image === '') {
+        return '';
+    }
+
+    if (
+        preg_match(
+            '/^(https?:\/\/|data:|\/)/i',
+            $image
+        )
+    ) {
+        return $image;
+    }
+
+    if (
+        strpos($image, 'assets/') === 0
+    ) {
+        return $image;
+    }
+
+    return
+        'assets/images/restaurants/' .
+        basename($image);
+}
+
+
+function cartMenuImage($image)
+{
+    $image = trim((string)$image);
+
+    if ($image === '') {
+        return '';
+    }
+
+    if (
+        preg_match(
+            '/^(https?:\/\/|data:|\/)/i',
+            $image
+        )
+    ) {
+        return $image;
+    }
+
+    if (
+        strpos($image, 'assets/') === 0
+    ) {
+        return $image;
+    }
+
+    return
+        'assets/images/menu-items/' .
+        basename($image);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| GET CART ITEMS
+|--------------------------------------------------------------------------
+*/
 
 $cartItems = [];
 
-$cartStmt = $conn->prepare("
+$cartSql = "
     SELECT
         c.id AS cart_id,
         c.menu_item_id,
         c.quantity,
 
-        m.name,
-        m.description,
-        m.price,
-        m.image,
+        m.name AS item_name,
+        m.description AS item_description,
+        m.price AS item_price,
+        m.image AS item_image,
         m.restaurant_id,
 
         r.name AS restaurant_name,
         r.image AS restaurant_image,
         r.address AS restaurant_address,
         r.delivery_time,
-        r.delivery_fee
+        r.delivery_fee,
+        r.latitude AS restaurant_latitude,
+        r.longitude AS restaurant_longitude
 
     FROM cart c
 
@@ -81,162 +175,280 @@ $cartStmt = $conn->prepare("
     WHERE c.user_id = ?
 
     ORDER BY c.id ASC
-");
+";
+
+
+$cartStmt = $conn->prepare($cartSql);
 
 if (!$cartStmt) {
-    die("Unable to load cart.");
+    die(
+        'Unable to load cart: ' .
+        $conn->error
+    );
 }
+
 
 $cartStmt->bind_param(
     "i",
-    $user_id
+    $userId
 );
 
 $cartStmt->execute();
 
-$cartResult = $cartStmt->get_result();
+$cartResult =
+    $cartStmt->get_result();
 
-while ($row = $cartResult->fetch_assoc()) {
 
-    $row['cart_id'] = (int)$row['cart_id'];
-    $row['menu_item_id'] = (int)$row['menu_item_id'];
-    $row['quantity'] = (int)$row['quantity'];
-    $row['price'] = (float)$row['price'];
+while (
+    $row =
+    $cartResult->fetch_assoc()
+) {
 
-    $row['subtotal'] =
-        $row['price'] * $row['quantity'];
+    $row['cart_id'] =
+        (int)$row['cart_id'];
 
-    $cartItems[] = $row;
+    $row['menu_item_id'] =
+        (int)$row['menu_item_id'];
+
+    $row['quantity'] =
+        max(
+            1,
+            (int)$row['quantity']
+        );
+
+    $row['item_price'] =
+        (float)$row['item_price'];
+
+    $row['item_subtotal'] =
+        $row['item_price'] *
+        $row['quantity'];
+
+    $cartItems[] =
+        $row;
 }
+
 
 $cartStmt->close();
 
-/* ============================================================
-   BASIC CART VALUES
-============================================================ */
 
-$isCartEmpty = empty($cartItems);
+/*
+|--------------------------------------------------------------------------
+| BASIC CART VALUES
+|--------------------------------------------------------------------------
+*/
+
+$isCartEmpty =
+    empty($cartItems);
 
 $totalItems = 0;
+
 $subtotal = 0;
 
-foreach ($cartItems as $item) {
+
+foreach (
+    $cartItems
+    as $item
+) {
 
     $totalItems +=
         (int)$item['quantity'];
 
     $subtotal +=
-        (float)$item['subtotal'];
+        (float)$item['item_subtotal'];
 }
 
-/* ============================================================
-   RESTAURANT CHECK
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| RESTAURANTS IN CART
+|--------------------------------------------------------------------------
+*/
 
 $restaurantIds = [];
 
-foreach ($cartItems as $item) {
+foreach (
+    $cartItems
+    as $item
+) {
 
     $restaurantIds[] =
         (int)$item['restaurant_id'];
 }
 
+
 $restaurantIds =
     array_values(
-        array_unique($restaurantIds)
+        array_unique(
+            $restaurantIds
+        )
     );
+
 
 $multipleRestaurants =
     count($restaurantIds) > 1;
 
-/* ============================================================
-   RESTAURANT INFORMATION
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| FIRST RESTAURANT
+|--------------------------------------------------------------------------
+*/
 
 $restaurantId = 0;
+
 $restaurantName = '';
+
 $restaurantImage = '';
+
 $restaurantAddress = '';
+
 $deliveryTime = '';
+
 $deliveryFee = 0;
+
 
 if (!$isCartEmpty) {
 
-    $firstRestaurant =
-        $cartItems[0];
-
     $restaurantId =
-        (int)$firstRestaurant['restaurant_id'];
+        (int)
+        $cartItems[0]['restaurant_id'];
 
     $restaurantName =
-        $firstRestaurant['restaurant_name'] ?? '';
+        $cartItems[0]['restaurant_name']
+        ?? '';
 
     $restaurantImage =
-        $firstRestaurant['restaurant_image'] ?? '';
+        $cartItems[0]['restaurant_image']
+        ?? '';
 
     $restaurantAddress =
-        $firstRestaurant['restaurant_address'] ?? '';
+        $cartItems[0]['restaurant_address']
+        ?? '';
 
     $deliveryTime =
-        $firstRestaurant['delivery_time'] ?? '';
+        trim(
+            (string)
+            (
+                $cartItems[0]['delivery_time']
+                ?? ''
+            )
+        );
 
     $deliveryFee =
-        (float)(
-            $firstRestaurant['delivery_fee']
+        (float)
+        (
+            $cartItems[0]['delivery_fee']
             ?? 0
         );
 }
 
-/* ============================================================
-   TOTAL
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| DELIVERY FEE
+|--------------------------------------------------------------------------
+|
+| Current database has restaurant.delivery_fee.
+|
+| Later, when customer_addresses and restaurants
+| both have valid latitude/longitude, this can be
+| replaced with the kilometer-based calculation.
+|
+*/
+
+if (
+    $multipleRestaurants
+) {
+
+    $deliveryFee = 0;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DISCOUNT
+|--------------------------------------------------------------------------
+*/
 
 $discount = 0;
+
+
+/*
+|--------------------------------------------------------------------------
+| GRAND TOTAL
+|--------------------------------------------------------------------------
+*/
 
 $grandTotal =
     $subtotal +
     $deliveryFee -
     $discount;
 
-/* ============================================================
-   GET CUSTOMER ADDRESSES
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER ADDRESSES
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| We use customer_addresses.
+|
+| NOT:
+| addresses
+|
+| Actual columns:
+| address_title
+| address_line
+| city
+| area
+| phone
+| is_default
+|--------------------------------------------------------------------------
+*/
 
 $addresses = [];
 
-$addressStmt = $conn->prepare("
+$addressSql = "
     SELECT
         id,
-        address_type,
-        label,
-        full_name,
-        phone,
-        address,
+        user_id,
+        address_title,
+        address_line,
         city,
         area,
-        landmark,
-        is_default
+        phone,
+        is_default,
+        created_at,
+        updated_at
 
-    FROM addresses
+    FROM customer_addresses
 
     WHERE user_id = ?
 
     ORDER BY
         is_default DESC,
         id DESC
-");
+";
+
+
+$addressStmt =
+    $conn->prepare(
+        $addressSql
+    );
+
 
 if ($addressStmt) {
 
     $addressStmt->bind_param(
         "i",
-        $user_id
+        $userId
     );
 
     $addressStmt->execute();
 
     $addressResult =
         $addressStmt->get_result();
+
 
     while (
         $addressRow =
@@ -247,27 +459,51 @@ if ($addressStmt) {
             $addressRow;
     }
 
+
     $addressStmt->close();
 }
 
-/* ============================================================
-   DEFAULT ADDRESS
-============================================================ */
+
+/*
+|--------------------------------------------------------------------------
+| SELECT DEFAULT ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 $selectedAddressId = 0;
 
-foreach ($addresses as $address) {
+$selectedAddress = null;
+
+
+foreach (
+    $addresses
+    as $address
+) {
 
     if (
-        (int)$address['is_default'] === 1
+        (int)
+        $address['is_default'] === 1
     ) {
 
         $selectedAddressId =
             (int)$address['id'];
 
+        $selectedAddress =
+            $address;
+
         break;
     }
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| IF NO DEFAULT
+|--------------------------------------------------------------------------
+|
+| Use latest saved address.
+|--------------------------------------------------------------------------
+*/
 
 if (
     $selectedAddressId <= 0 &&
@@ -275,1566 +511,1564 @@ if (
 ) {
 
     $selectedAddressId =
-        (int)$addresses[0]['id'];
+        (int)
+        $addresses[0]['id'];
+
+    $selectedAddress =
+        $addresses[0];
 }
 
-/* ============================================================
-   PAGE
-============================================================ */
 
-require_once 'includes/customer-header.php';
+/*
+|--------------------------------------------------------------------------
+| SELECTED ADDRESS TEXT
+|--------------------------------------------------------------------------
+*/
+
+$selectedAddressText = '';
+
+$selectedAddressLabel = '';
+
+
+if ($selectedAddress) {
+
+    $selectedAddressLabel =
+        $selectedAddress['address_title']
+        ?? 'Address';
+
+
+    $selectedParts = [];
+
+
+    if (
+        !empty(
+            $selectedAddress['address_line']
+        )
+    ) {
+
+        $selectedParts[] =
+            $selectedAddress[
+                'address_line'
+            ];
+    }
+
+
+    if (
+        !empty(
+            $selectedAddress['area']
+        )
+    ) {
+
+        $selectedParts[] =
+            $selectedAddress[
+                'area'
+            ];
+    }
+
+
+    if (
+        !empty(
+            $selectedAddress['city']
+        )
+    ) {
+
+        $selectedParts[] =
+            $selectedAddress[
+                'city'
+            ];
+    }
+
+
+    $selectedAddressText =
+        implode(
+            ', ',
+            $selectedParts
+        );
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER HEADER
+|--------------------------------------------------------------------------
+*/
+
+require_once __DIR__ .
+    '/includes/customer-header.php';
 
 ?>
 
-<style>
+<!DOCTYPE html>
 
-/* ============================================================
-   CART PAGE
-============================================================ */
+<html lang="en">
 
-.humsafar-cart-page {
+<head>
 
-    min-height: calc(100vh - 120px);
+    <meta charset="UTF-8">
 
-    background:
-        linear-gradient(
-            180deg,
-            #fff8fa 0%,
-            #ffffff 340px
-        );
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-    padding:
-        34px 4%
-        70px;
-}
+    <meta
+        name="description"
+        content="Humsafar Food Delivery Cart"
+    >
 
-.humsafar-cart-wrapper {
+    <title>
+        Your Cart - Humsafar
+    </title>
 
-    width: 100%;
-    max-width: 1450px;
 
-    margin: 0 auto;
-}
+    <style>
 
-/* ============================================================
-   PAGE TITLE
-============================================================ */
+        * {
+            box-sizing: border-box;
+        }
 
-.cart-page-heading {
 
-    display: flex;
+        html {
+            scroll-behavior: smooth;
+        }
 
-    align-items: flex-end;
 
-    justify-content: space-between;
+        body {
+            margin: 0;
+            background: #f8f8f9;
+            color: #222;
+            font-family:
+                "Segoe UI",
+                Arial,
+                Helvetica,
+                sans-serif;
+        }
 
-    gap: 20px;
 
-    margin-bottom: 25px;
-}
+        button,
+        input {
+            font-family: inherit;
+        }
 
-.cart-page-heading h1 {
 
-    margin: 0;
+        a {
+            text-decoration: none;
+        }
 
-    color: #222;
 
-    font-size: 32px;
+        /* =====================================================
+           PAGE
+        ===================================================== */
 
-    font-weight: 900;
+        .humsafar-cart-page {
+            min-height:
+                calc(100vh - 100px);
 
-    letter-spacing: -.7px;
-}
+            padding:
+                35px 4%
+                70px;
 
-.cart-page-heading p {
+            background:
+                linear-gradient(
+                    180deg,
+                    #fff7fa 0,
+                    #ffffff 330px
+                );
+        }
 
-    margin:
-        7px 0 0;
 
-    color: #777;
+        .cart-wrapper {
+            width: 100%;
+            max-width: 1450px;
+            margin: 0 auto;
+        }
 
-    font-size: 13px;
-}
 
-.continue-shopping {
+        /* =====================================================
+           HEADING
+        ===================================================== */
 
-    display: inline-flex;
+        .cart-heading {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
 
-    align-items: center;
 
-    gap: 8px;
+        .cart-heading h1 {
+            margin: 0;
+            color: #ed0038;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: -.6px;
+        }
 
-    color: #ed0038;
 
-    text-decoration: none;
+        .cart-heading p {
+            margin:
+                7px 0 0;
 
-    font-size: 13px;
+            color: #777;
+            font-size: 13px;
+        }
 
-    font-weight: 800;
 
-    transition: .2s ease;
-}
+        .continue-shopping {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
 
-.continue-shopping:hover {
+            color: #ed0038;
 
-    color: #c90030;
+            font-size: 13px;
+            font-weight: 800;
 
-    transform:
-        translateX(-2px);
-}
+            transition: .2s ease;
+        }
 
-/* ============================================================
-   CART LAYOUT
-============================================================ */
 
-.cart-layout {
+        .continue-shopping:hover {
+            color: #c90030;
+            transform:
+                translateX(-2px);
+        }
 
-    display: grid;
 
-    grid-template-columns:
-        minmax(0, 1fr)
-        390px;
+        /* =====================================================
+           MAIN GRID
+        ===================================================== */
 
-    gap: 26px;
+        .cart-layout {
+            display: grid;
 
-    align-items: start;
-}
+            grid-template-columns:
+                minmax(0, 1fr)
+                390px;
 
-/* ============================================================
-   MAIN CART CARD
-============================================================ */
+            gap: 25px;
 
-.cart-main-card {
+            align-items: start;
+        }
 
-    background: #ffffff;
 
-    border:
-        1px solid #eeeeee;
+        /* =====================================================
+           CARDS
+        ===================================================== */
 
-    border-radius: 18px;
+        .cart-card {
+            background: #fff;
 
-    box-shadow:
-        0 8px 30px
-        rgba(45, 20, 30, .06);
+            border:
+                1px solid #eeeeee;
 
-    overflow: hidden;
-}
+            border-radius: 18px;
 
-/* ============================================================
-   RESTAURANT HEADER
-============================================================ */
+            box-shadow:
+                0 8px 30px
+                rgba(40, 15, 25, .06);
 
-.restaurant-card {
+            overflow: hidden;
+        }
 
-    padding: 20px 22px;
 
-    display: flex;
+        /* =====================================================
+           RESTAURANT
+        ===================================================== */
 
-    align-items: center;
+        .restaurant-header {
+            padding: 20px 22px;
 
-    gap: 14px;
+            display: flex;
+            align-items: center;
 
-    border-bottom:
-        1px solid #eeeeee;
+            gap: 14px;
 
-    background:
-        linear-gradient(
-            90deg,
-            #fff7f9,
-            #ffffff
-        );
-}
+            border-bottom:
+                1px solid #eeeeee;
 
-.restaurant-image {
+            background:
+                linear-gradient(
+                    90deg,
+                    #fff5f8,
+                    #ffffff
+                );
+        }
 
-    width: 58px;
-    height: 58px;
 
-    flex: 0 0 58px;
+        .restaurant-image {
+            width: 60px;
+            height: 60px;
 
-    border-radius: 14px;
+            flex-shrink: 0;
 
-    overflow: hidden;
+            border-radius: 13px;
 
-    background: #fff1f5;
+            overflow: hidden;
 
-    display: flex;
+            background: #fff0f4;
 
-    align-items: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    justify-content: center;
+            color: #ed0038;
 
-    color: #ed0038;
+            font-size: 22px;
+        }
 
-    font-size: 21px;
-}
 
-.restaurant-image img {
+        .restaurant-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
-    width: 100%;
-    height: 100%;
 
-    object-fit: cover;
-}
+        .restaurant-info {
+            min-width: 0;
+        }
 
-.restaurant-info {
 
-    min-width: 0;
-}
+        .restaurant-info h2 {
+            margin: 0;
 
-.restaurant-info h2 {
+            color: #222;
 
-    margin: 0;
+            font-size: 18px;
+            font-weight: 900;
+        }
 
-    color: #222;
 
-    font-size: 18px;
+        .restaurant-address {
+            margin-top: 5px;
 
-    font-weight: 900;
-}
+            color: #888;
 
-.restaurant-meta {
+            font-size: 10px;
 
-    margin-top: 7px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
-    display: flex;
 
-    flex-wrap: wrap;
+        .restaurant-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
 
-    gap: 13px;
+            margin-top: 7px;
 
-    color: #777;
+            color: #777;
 
-    font-size: 11px;
+            font-size: 10px;
+            font-weight: 700;
+        }
 
-    font-weight: 700;
-}
 
-.restaurant-meta span {
+        .restaurant-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
 
-    display: inline-flex;
 
-    align-items: center;
+        .restaurant-meta i {
+            color: #ed0038;
+        }
 
-    gap: 5px;
-}
 
-.restaurant-meta i {
+        /* =====================================================
+           MULTIPLE RESTAURANT WARNING
+        ===================================================== */
 
-    color: #ed0038;
-}
+        .restaurant-warning {
+            margin: 18px 20px;
 
-/* ============================================================
-   MIXED RESTAURANT WARNING
-============================================================ */
+            padding: 14px;
 
-.restaurant-warning {
+            display: flex;
+            gap: 10px;
 
-    margin: 18px 20px;
+            background: #fff7e8;
 
-    padding: 14px 15px;
+            border:
+                1px solid #f0d29d;
 
-    display: flex;
+            border-radius: 11px;
 
-    align-items: flex-start;
+            color: #765000;
 
-    gap: 11px;
+            font-size: 11px;
+            line-height: 1.55;
+        }
 
-    background: #fff7e8;
 
-    border:
-        1px solid #f4d39c;
+        .restaurant-warning i {
+            color: #df9700;
+            margin-top: 2px;
+        }
 
-    border-radius: 12px;
 
-    color: #7a4c00;
+        .restaurant-warning strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 12px;
+        }
 
-    font-size: 12px;
 
-    line-height: 1.5;
-}
+        /* =====================================================
+           ITEMS HEADING
+        ===================================================== */
 
-.restaurant-warning i {
+        .items-heading {
+            padding:
+                18px 22px
+                12px;
 
-    color: #e79b00;
+            color: #333;
 
-    margin-top: 2px;
-}
+            font-size: 14px;
+            font-weight: 900;
+        }
 
-.restaurant-warning strong {
 
-    display: block;
+        /* =====================================================
+           ITEM
+        ===================================================== */
 
-    margin-bottom: 2px;
+        .cart-item {
+            margin:
+                0 18px
+                12px;
 
-    font-size: 13px;
-}
+            padding: 15px;
 
-/* ============================================================
-   ITEMS HEADER
-============================================================ */
+            display: grid;
 
-.items-heading {
+            grid-template-columns:
+                88px
+                minmax(0, 1fr)
+                115px
+                95px
+                35px;
 
-    padding:
-        18px 22px
-        12px;
+            align-items: center;
 
-    color: #333;
+            gap: 14px;
 
-    font-size: 14px;
+            border:
+                1px solid #eeeeee;
 
-    font-weight: 900;
-}
+            border-radius: 14px;
 
-/* ============================================================
-   CART ITEM
-============================================================ */
+            background: #fff;
 
-.cart-item {
+            transition: .2s ease;
+        }
 
-    margin:
-        0 18px
-        12px;
 
-    padding: 16px;
+        .cart-item:hover {
+            border-color: #f0b6c6;
 
-    display: grid;
+            box-shadow:
+                0 5px 18px
+                rgba(237,0,56,.06);
+        }
 
-    grid-template-columns:
-        88px
-        minmax(0, 1fr)
-        auto
-        auto
-        34px;
 
-    align-items: center;
+        .item-image {
+            width: 88px;
+            height: 78px;
 
-    gap: 15px;
+            border-radius: 11px;
 
-    background: #ffffff;
+            overflow: hidden;
 
-    border:
-        1px solid #eeeeee;
+            background:
+                linear-gradient(
+                    135deg,
+                    #fff0f4,
+                    #ffffff
+                );
 
-    border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    transition:
-        .2s ease;
-}
+            color: #ed0038;
 
-.cart-item:hover {
+            font-size: 22px;
+        }
 
-    border-color:
-        #f0b5c5;
 
-    box-shadow:
-        0 5px 18px
-        rgba(237,0,56,.06);
-}
+        .item-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
-/* ============================================================
-   ITEM IMAGE
-============================================================ */
 
-.item-image {
+        .item-details {
+            min-width: 0;
+        }
 
-    width: 88px;
-    height: 78px;
 
-    border-radius: 11px;
+        .item-details h3 {
+            margin:
+                0 0 5px;
 
-    overflow: hidden;
+            color: #222;
 
-    background: #fff1f5;
+            font-size: 15px;
+            font-weight: 900;
+        }
 
-    display: flex;
 
-    align-items: center;
+        .item-description {
+            margin: 0;
 
-    justify-content: center;
+            color: #888;
 
-    color: #ed0038;
+            font-size: 10px;
 
-    font-size: 22px;
-}
+            line-height: 1.45;
 
-.item-image img {
+            display: -webkit-box;
 
-    width: 100%;
-    height: 100%;
+            -webkit-line-clamp: 2;
 
-    object-fit: cover;
-}
+            -webkit-box-orient: vertical;
 
-/* ============================================================
-   ITEM DETAILS
-============================================================ */
+            overflow: hidden;
+        }
 
-.item-details {
 
-    min-width: 0;
-}
+        .item-price {
+            margin-top: 7px;
 
-.item-details h3 {
+            color: #ed0038;
 
-    margin: 0 0 5px;
+            font-size: 12px;
+            font-weight: 800;
+        }
 
-    color: #222;
 
-    font-size: 15px;
+        /* =====================================================
+           QUANTITY
+        ===================================================== */
 
-    font-weight: 900;
-}
+        .quantity-area {
+            text-align: center;
+        }
 
-.item-description {
 
-    margin: 0 0 7px;
+        .quantity-label {
+            margin-bottom: 6px;
 
-    color: #888;
+            color: #999;
 
-    font-size: 11px;
+            font-size: 9px;
+            font-weight: 700;
+        }
 
-    line-height: 1.45;
 
-    display: -webkit-box;
+        .quantity-box {
+            display: inline-flex;
 
-    -webkit-line-clamp: 2;
+            align-items: center;
 
-    -webkit-box-orient: vertical;
+            border:
+                1px solid #e3e3e3;
 
-    overflow: hidden;
-}
+            border-radius: 8px;
 
-.item-price {
+            overflow: hidden;
 
-    color: #ed0038;
+            background: #fff;
+        }
 
-    font-size: 13px;
 
-    font-weight: 900;
-}
+        .quantity-btn {
+            width: 30px;
+            height: 31px;
 
-/* ============================================================
-   QUANTITY
-============================================================ */
+            border: 0;
 
-.quantity-box {
+            background: #fff;
 
-    height: 38px;
+            color: #ed0038;
 
-    display: inline-flex;
+            cursor: pointer;
 
-    align-items: center;
+            font-size: 13px;
+            font-weight: 900;
+        }
 
-    border:
-        1px solid #e6e6e6;
 
-    border-radius: 10px;
+        .quantity-btn:hover {
+            background: #fff1f5;
+        }
 
-    overflow: hidden;
 
-    background: #ffffff;
-}
+        .quantity-number {
+            min-width: 30px;
 
-.quantity-btn {
+            text-align: center;
 
-    width: 35px;
-    height: 38px;
+            color: #333;
 
-    border: 0;
+            font-size: 11px;
+            font-weight: 800;
+        }
 
-    background: #fff5f7;
 
-    color: #ed0038;
+        .quantity-form {
+            margin: 0;
+        }
 
-    cursor: pointer;
 
-    font-size: 16px;
+        .item-total {
+            text-align: right;
+        }
 
-    font-weight: 900;
 
-    transition: .2s ease;
-}
+        .item-total-label {
+            margin-bottom: 4px;
 
-.quantity-btn:hover {
+            color: #999;
 
-    background: #ed0038;
+            font-size: 9px;
+        }
 
-    color: #ffffff;
-}
 
-.quantity-value {
+        .item-total-value {
+            color: #222;
 
-    min-width: 34px;
+            font-size: 14px;
+            font-weight: 900;
+        }
 
-    text-align: center;
 
-    color: #333;
+        /* =====================================================
+           REMOVE
+        ===================================================== */
 
-    font-size: 13px;
+        .remove-item {
+            width: 34px;
+            height: 34px;
 
-    font-weight: 900;
-}
+            border: 0;
 
-/* ============================================================
-   ITEM TOTAL
-============================================================ */
+            border-radius: 8px;
 
-.item-total {
+            background: #fff1f4;
 
-    min-width: 90px;
+            color: #d52949;
 
-    text-align: right;
+            cursor: pointer;
 
-    color: #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    font-size: 14px;
+            transition: .2s ease;
+        }
 
-    font-weight: 900;
-}
 
-/* ============================================================
-   REMOVE
-============================================================ */
+        .remove-item:hover {
+            background: #ed0038;
+            color: #fff;
+        }
 
-.remove-item {
 
-    width: 34px;
-    height: 34px;
+        /* =====================================================
+           SUMMARY
+        ===================================================== */
 
-    border: 0;
+        .summary-card {
+            position: sticky;
+            top: 95px;
 
-    border-radius: 9px;
+            padding: 22px;
+        }
 
-    background: #fff2f4;
 
-    color: #ed0038;
+        .summary-title {
+            margin:
+                0 0 20px;
 
-    cursor: pointer;
+            color: #222;
 
-    transition: .2s ease;
-}
+            font-size: 19px;
+            font-weight: 900;
+        }
 
-.remove-item:hover {
 
-    background: #ed0038;
+        .summary-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-    color: #ffffff;
-}
+            gap: 15px;
 
-/* ============================================================
-   ADD MORE
-============================================================ */
+            margin-bottom: 13px;
 
-.cart-footer-action {
+            color: #666;
 
-    padding: 8px 22px 22px;
-}
+            font-size: 12px;
+        }
 
-.add-more-btn {
 
-    display: inline-flex;
+        .summary-row strong {
+            color: #222;
+            font-weight: 900;
+        }
 
-    align-items: center;
 
-    gap: 8px;
+        .summary-divider {
+            height: 1px;
 
-    padding:
-        10px 14px;
+            margin:
+                17px 0;
 
-    border:
-        1px solid #ed0038;
+            background: #eeeeee;
+        }
 
-    border-radius: 9px;
 
-    color: #ed0038;
+        .summary-total {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-    background: #ffffff;
+            color: #222;
 
-    text-decoration: none;
+            font-size: 17px;
+            font-weight: 900;
+        }
 
-    font-size: 12px;
 
-    font-weight: 900;
+        .summary-total strong {
+            color: #ed0038;
+            font-size: 20px;
+        }
 
-    transition: .2s ease;
-}
 
-.add-more-btn:hover {
+        /* =====================================================
+           DELIVERY TIME
+        ===================================================== */
 
-    color: #ffffff;
+        .delivery-time-box {
+            margin-top: 18px;
 
-    background: #ed0038;
-}
+            padding: 13px;
 
-/* ============================================================
-   SUMMARY
-============================================================ */
+            display: flex;
+            align-items: center;
 
-.order-summary-card {
+            gap: 10px;
 
-    position: sticky;
+            background: #fff7fa;
 
-    top: 18px;
+            border:
+                1px solid #f2c4d0;
 
-    background: #ffffff;
+            border-radius: 11px;
+        }
 
-    border:
-        1px solid #eeeeee;
 
-    border-radius: 18px;
+        .delivery-time-icon {
+            width: 35px;
+            height: 35px;
 
-    padding: 22px;
+            flex-shrink: 0;
 
-    box-shadow:
-        0 8px 30px
-        rgba(45, 20, 30, .07);
-}
+            border-radius: 9px;
 
-.summary-title {
+            background: #ed0038;
 
-    margin: 0 0 20px;
+            color: #fff;
 
-    color: #222;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    font-size: 19px;
 
-    font-weight: 900;
-}
+        .delivery-time-text {
+            min-width: 0;
+        }
 
-.summary-row {
 
-    display: flex;
+        .delivery-time-text span {
+            display: block;
 
-    align-items: center;
+            color: #888;
 
-    justify-content: space-between;
+            font-size: 9px;
+            font-weight: 700;
+        }
 
-    gap: 15px;
 
-    margin-bottom: 13px;
+        .delivery-time-text strong {
+            display: block;
 
-    color: #666;
+            margin-top: 3px;
 
-    font-size: 13px;
-}
+            color: #222;
 
-.summary-row strong {
+            font-size: 12px;
+            font-weight: 900;
+        }
 
-    color: #222;
 
-    font-weight: 900;
-}
+        /* =====================================================
+           ADDRESS
+        ===================================================== */
 
-.summary-divider {
+        .summary-section {
+            margin-top: 22px;
+        }
 
-    height: 1px;
 
-    background: #eeeeee;
+        .section-title {
+            display: flex;
+            align-items: center;
 
-    margin:
-        17px 0;
-}
+            gap: 8px;
 
-.summary-total {
+            margin-bottom: 10px;
 
-    display: flex;
+            color: #333;
 
-    align-items: center;
+            font-size: 13px;
+            font-weight: 900;
+        }
 
-    justify-content: space-between;
 
-    color: #222;
+        .section-title i {
+            color: #ed0038;
+        }
 
-    font-size: 17px;
 
-    font-weight: 900;
-}
+        .address-box {
+            padding: 13px;
 
-.summary-total span:last-child {
+            background: #fff8fa;
 
-    color: #ed0038;
+            border:
+                1px solid #f1c5d1;
 
-    font-size: 20px;
-}
+            border-radius: 11px;
+        }
 
-/* ============================================================
-   DELIVERY ADDRESS
-============================================================ */
 
-.summary-section {
+        .address-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-    margin-top: 23px;
-}
+            gap: 10px;
 
-.section-title {
+            margin-bottom: 7px;
+        }
 
-    display: flex;
 
-    align-items: center;
+        .address-label {
+            color: #ed0038;
 
-    gap: 8px;
+            font-size: 11px;
+            font-weight: 900;
 
-    margin-bottom: 10px;
+            text-transform: capitalize;
+        }
 
-    color: #333;
 
-    font-size: 13px;
+        .address-default {
+            padding:
+                3px 7px;
 
-    font-weight: 900;
-}
+            border-radius: 20px;
 
-.section-title i {
+            background: #ed0038;
 
-    color: #ed0038;
-}
+            color: #fff;
 
-.address-box {
+            font-size: 8px;
+            font-weight: 900;
+        }
 
-    padding: 13px;
 
-    background: #fff8fa;
+        .address-text {
+            margin: 0;
 
-    border:
-        1px solid #f1c5d1;
+            color: #666;
 
-    border-radius: 11px;
-}
+            font-size: 10px;
 
-.address-top {
+            line-height: 1.55;
+        }
 
-    display: flex;
 
-    align-items: center;
+        .address-phone {
+            margin-top: 6px;
 
-    justify-content: space-between;
+            color: #777;
 
-    gap: 10px;
+            font-size: 10px;
+        }
 
-    margin-bottom: 7px;
-}
 
-.address-label {
+        .change-address {
+            margin-top: 10px;
 
-    color: #ed0038;
+            padding: 0;
 
-    font-size: 11px;
+            border: 0;
 
-    font-weight: 900;
-}
+            background: transparent;
 
-.address-selected {
+            color: #ed0038;
 
-    padding:
-        3px 7px;
+            cursor: pointer;
 
-    border-radius: 20px;
+            font-size: 10px;
+            font-weight: 900;
+        }
 
-    background: #ed0038;
 
-    color: #ffffff;
+        .no-address {
+            padding: 13px;
 
-    font-size: 8px;
+            border:
+                1px solid #f0d4dc;
 
-    font-weight: 900;
+            border-radius: 10px;
 
-    text-transform: uppercase;
-}
+            background: #fff8fa;
 
-.address-text {
+            color: #777;
 
-    margin: 0;
+            font-size: 10px;
 
-    color: #666;
+            line-height: 1.5;
+        }
 
-    font-size: 11px;
 
-    line-height: 1.5;
-}
+        .add-address-link {
+            display: inline-flex;
 
-.change-address {
+            margin-top: 8px;
 
-    margin-top: 10px;
+            color: #ed0038;
 
-    border: 0;
+            font-weight: 900;
+        }
 
-    background: transparent;
 
-    color: #ed0038;
+        /* =====================================================
+           PROMO
+        ===================================================== */
 
-    cursor: pointer;
+        .promo-box {
+            margin-top: 20px;
+        }
 
-    font-size: 11px;
 
-    font-weight: 900;
+        .promo-form {
+            display: flex;
+            gap: 7px;
+        }
 
-    padding: 0;
-}
 
-/* ============================================================
-   PAYMENT
-============================================================ */
+        .promo-input {
+            width: 100%;
 
-.payment-options {
+            min-height: 40px;
 
-    display: grid;
+            padding:
+                0 11px;
 
-    gap: 8px;
-}
+            border:
+                1px solid #ddd;
 
-.payment-option {
+            border-radius: 8px;
 
-    position: relative;
+            outline: none;
 
-    padding: 11px;
+            color: #333;
 
-    display: flex;
+            font-size: 11px;
+        }
 
-    align-items: center;
 
-    gap: 9px;
+        .promo-input:focus {
+            border-color: #ed0038;
+        }
 
-    border:
-        1px solid #e7e7e7;
 
-    border-radius: 10px;
+        .promo-button {
+            flex-shrink: 0;
 
-    cursor: pointer;
+            min-width: 65px;
 
-    transition: .2s ease;
-}
+            border: 0;
 
-.payment-option:hover {
+            border-radius: 8px;
 
-    border-color: #ef9fb3;
+            background: #222;
 
-    background: #fff9fb;
-}
+            color: #fff;
 
-.payment-option.selected {
+            cursor: pointer;
 
-    border-color: #ed0038;
+            font-size: 10px;
+            font-weight: 800;
+        }
 
-    background: #fff4f7;
-}
 
-.payment-option input {
+        /* =====================================================
+           CHECKOUT
+        ===================================================== */
 
-    accent-color: #ed0038;
-}
+        .checkout-btn {
+            width: 100%;
 
-.payment-option label {
+            min-height: 48px;
 
-    display: flex;
+            margin-top: 20px;
 
-    align-items: center;
+            border: 0;
 
-    gap: 8px;
+            border-radius: 10px;
 
-    color: #444;
+            background:
+                linear-gradient(
+                    90deg,
+                    #ed0038,
+                    #f64f7d
+                );
 
-    font-size: 11px;
+            color: #fff;
 
-    font-weight: 800;
+            cursor: pointer;
 
-    cursor: pointer;
-}
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-.payment-option label i {
+            gap: 8px;
 
-    color: #ed0038;
+            font-size: 13px;
+            font-weight: 900;
 
-    width: 18px;
+            box-shadow:
+                0 8px 20px
+                rgba(237,0,56,.18);
 
-    text-align: center;
-}
+            transition: .2s ease;
+        }
 
-/* ============================================================
-   PROMO
-============================================================ */
 
-.promo-box {
+        .checkout-btn:hover {
+            transform:
+                translateY(-1px);
 
-    display: flex;
+            box-shadow:
+                0 10px 25px
+                rgba(237,0,56,.25);
+        }
 
-    gap: 7px;
-}
 
-.promo-box input {
+        .checkout-btn.disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
 
-    width: 100%;
 
-    min-width: 0;
+        .security-note {
+            margin-top: 11px;
 
-    height: 40px;
+            text-align: center;
 
-    padding:
-        0 11px;
+            color: #999;
 
-    border:
-        1px solid #dddddd;
+            font-size: 9px;
+        }
 
-    border-radius: 9px;
 
-    outline: none;
+        .security-note i {
+            color: #40a563;
+            margin-right: 4px;
+        }
 
-    font-size: 11px;
-}
 
-.promo-box input:focus {
+        /* =====================================================
+           EMPTY CART
+        ===================================================== */
 
-    border-color: #ed0038;
+        .empty-cart {
+            padding:
+                75px 25px;
 
-    box-shadow:
-        0 0 0 3px
-        rgba(237,0,56,.07);
-}
+            text-align: center;
+        }
 
-.promo-btn {
 
-    flex: 0 0 auto;
+        .empty-cart-icon {
+            width: 88px;
+            height: 88px;
 
-    height: 40px;
+            margin:
+                0 auto 18px;
 
-    padding:
-        0 13px;
+            border-radius: 50%;
 
-    border: 0;
+            background: #fff1f5;
 
-    border-radius: 9px;
+            color: #ed0038;
 
-    background: #ed0038;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    color: #ffffff;
+            font-size: 34px;
+        }
 
-    cursor: pointer;
 
-    font-size: 11px;
+        .empty-cart h2 {
+            margin:
+                0 0 8px;
 
-    font-weight: 900;
-}
+            color: #222;
 
-.promo-btn:hover {
+            font-size: 24px;
+            font-weight: 900;
+        }
 
-    background: #d90035;
-}
 
-/* ============================================================
-   CHECKOUT BUTTON
-============================================================ */
+        .empty-cart p {
+            max-width: 420px;
 
-.checkout-btn {
+            margin:
+                0 auto 22px;
 
-    width: 100%;
+            color: #888;
 
-    min-height: 49px;
+            font-size: 13px;
 
-    margin-top: 22px;
+            line-height: 1.6;
+        }
 
-    border: 0;
 
-    border-radius: 11px;
+        .browse-btn {
+            display: inline-flex;
 
-    background:
-        linear-gradient(
-            135deg,
-            #ed0038,
-            #c90031
-        );
+            align-items: center;
+            justify-content: center;
 
-    color: #ffffff;
+            gap: 8px;
 
-    cursor: pointer;
+            padding:
+                12px 20px;
 
-    display: flex;
+            border-radius: 10px;
 
-    align-items: center;
+            background:
+                linear-gradient(
+                    90deg,
+                    #ed0038,
+                    #f64f7d
+                );
 
-    justify-content: center;
+            color: #fff;
 
-    gap: 9px;
+            font-size: 12px;
+            font-weight: 900;
+        }
 
-    font-size: 13px;
 
-    font-weight: 900;
+        /* =====================================================
+           ADDRESS MODAL
+        ===================================================== */
 
-    box-shadow:
-        0 8px 20px
-        rgba(237,0,56,.20);
+        .address-modal {
+            position: fixed;
 
-    transition: .2s ease;
-}
+            inset: 0;
 
-.checkout-btn:hover {
+            z-index: 5000;
 
-    transform:
-        translateY(-1px);
+            display: none;
 
-    box-shadow:
-        0 10px 25px
-        rgba(237,0,56,.27);
-}
+            align-items: center;
+            justify-content: center;
 
-.checkout-btn:disabled {
+            padding: 20px;
 
-    background: #cccccc;
+            background:
+                rgba(20,10,15,.55);
+        }
 
-    box-shadow: none;
 
-    cursor: not-allowed;
+        .address-modal.open {
+            display: flex;
+        }
 
-    transform: none;
-}
 
-/* ============================================================
-   SECURITY
-============================================================ */
+        .address-modal-box {
+            width: 100%;
+            max-width: 520px;
 
-.security-note {
+            max-height:
+                calc(100vh - 40px);
 
-    margin-top: 13px;
+            overflow-y: auto;
 
-    text-align: center;
+            border-radius: 18px;
 
-    color: #999;
+            background: #fff;
 
-    font-size: 9px;
-}
+            box-shadow:
+                0 20px 60px
+                rgba(0,0,0,.20);
+        }
 
-.security-note i {
 
-    color: #48a868;
+        .modal-header {
+            padding:
+                18px 20px;
 
-    margin-right: 4px;
-}
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-/* ============================================================
-   EMPTY CART
-============================================================ */
+            border-bottom:
+                1px solid #eee;
+        }
 
-.empty-cart-box {
 
-    padding:
-        75px 25px;
+        .modal-header h2 {
+            margin: 0;
 
-    text-align: center;
-}
+            color: #222;
 
-.empty-cart-icon {
+            font-size: 18px;
+            font-weight: 900;
+        }
 
-    width: 88px;
-    height: 88px;
 
-    margin:
-        0 auto 20px;
+        .modal-close {
+            width: 34px;
+            height: 34px;
 
-    border-radius: 50%;
+            border: 0;
 
-    background: #fff1f5;
+            border-radius: 50%;
 
-    color: #ed0038;
+            background: #f5f5f5;
 
-    display: flex;
+            color: #555;
 
-    align-items: center;
+            cursor: pointer;
 
-    justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    font-size: 34px;
-}
 
-.empty-cart-box h2 {
+        .modal-body {
+            padding: 15px;
+        }
 
-    margin: 0 0 8px;
 
-    color: #222;
+        .address-option {
+            position: relative;
 
-    font-size: 24px;
+            margin-bottom: 10px;
 
-    font-weight: 900;
-}
+            padding: 14px;
 
-.empty-cart-box p {
+            border:
+                1px solid #e5e5e5;
 
-    margin: 0 auto 22px;
+            border-radius: 12px;
 
-    max-width: 420px;
+            cursor: pointer;
 
-    color: #888;
+            transition: .2s ease;
+        }
 
-    font-size: 13px;
 
-    line-height: 1.6;
-}
+        .address-option:last-child {
+            margin-bottom: 0;
+        }
 
-.browse-btn {
 
-    display: inline-flex;
+        .address-option:hover {
+            border-color: #f0a8ba;
+        }
 
-    align-items: center;
 
-    gap: 8px;
+        .address-option.selected {
+            border-color: #ed0038;
 
-    padding:
-        12px 19px;
+            background: #fff7fa;
 
-    border-radius: 10px;
+            box-shadow:
+                0 4px 15px
+                rgba(237,0,56,.06);
+        }
 
-    background: #ed0038;
 
-    color: #ffffff;
+        .address-option-radio {
+            position: absolute;
 
-    text-decoration: none;
+            top: 15px;
+            right: 15px;
+        }
 
-    font-size: 12px;
 
-    font-weight: 900;
+        .address-option-radio input {
+            accent-color: #ed0038;
+        }
 
-    transition: .2s ease;
-}
 
-.browse-btn:hover {
+        .address-option-title {
+            padding-right: 30px;
 
-    background: #d90035;
-}
+            color: #222;
 
-/* ============================================================
-   MODAL
-============================================================ */
+            font-size: 13px;
+            font-weight: 900;
+        }
 
-.address-modal {
 
-    position: fixed;
+        .address-option-default {
+            display: inline-block;
 
-    inset: 0;
+            margin-left: 5px;
 
-    z-index: 5000;
+            padding:
+                3px 6px;
 
-    display: none;
+            border-radius: 20px;
 
-    align-items: center;
+            background: #ed0038;
 
-    justify-content: center;
+            color: #fff;
 
-    padding: 20px;
+            font-size: 7px;
+            font-weight: 900;
+        }
 
-    background:
-        rgba(20,10,15,.58);
 
-    backdrop-filter:
-        blur(4px);
-}
+        .address-option-text {
+            margin-top: 7px;
 
-.address-modal.open {
+            padding-right: 30px;
 
-    display: flex;
-}
+            color: #666;
 
-.address-modal-card {
+            font-size: 10px;
 
-    width: 100%;
+            line-height: 1.5;
+        }
 
-    max-width: 560px;
 
-    max-height: 88vh;
+        .address-option-phone {
+            margin-top: 5px;
 
-    overflow-y: auto;
+            color: #888;
 
-    background: #ffffff;
+            font-size: 9px;
+        }
 
-    border-radius: 18px;
 
-    box-shadow:
-        0 25px 70px
-        rgba(0,0,0,.25);
-}
+        .modal-footer {
+            padding:
+                15px;
 
-.address-modal-header {
+            display: flex;
+            gap: 8px;
 
-    padding: 18px 20px;
+            border-top:
+                1px solid #eee;
+        }
 
-    display: flex;
 
-    align-items: center;
+        .modal-footer a,
+        .modal-footer button {
+            min-height: 42px;
 
-    justify-content: space-between;
+            border-radius: 9px;
 
-    border-bottom:
-        1px solid #eeeeee;
-}
+            cursor: pointer;
 
-.address-modal-header h3 {
+            font-size: 11px;
+            font-weight: 800;
+        }
 
-    margin: 0;
 
-    color: #222;
+        .manage-address-btn {
+            flex: 1;
 
-    font-size: 17px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    font-weight: 900;
-}
+            border:
+                1px solid #ed0038;
 
-.close-address-modal {
+            background: #fff;
 
-    width: 34px;
-    height: 34px;
+            color: #ed0038;
+        }
 
-    border: 0;
 
-    border-radius: 50%;
+        .use-address-btn {
+            flex: 1;
 
-    background: #fff1f5;
+            border: 0;
 
-    color: #ed0038;
+            background: #ed0038;
 
-    cursor: pointer;
+            color: #fff;
+        }
 
-    font-size: 18px;
-}
 
-.address-list {
+        /* =====================================================
+           MOBILE
+        ===================================================== */
 
-    padding: 16px;
-}
+        @media (max-width: 1100px) {
 
-.address-option {
+            .cart-item {
+                grid-template-columns:
+                    80px
+                    minmax(0, 1fr)
+                    105px
+                    85px
+                    34px;
+            }
 
-    width: 100%;
+            .item-image {
+                width: 80px;
+                height: 72px;
+            }
 
-    margin-bottom: 10px;
+        }
 
-    padding: 14px;
 
-    display: flex;
+        @media (max-width: 900px) {
 
-    align-items: flex-start;
+            .cart-layout {
+                grid-template-columns: 1fr;
+            }
 
-    gap: 11px;
+            .summary-card {
+                position: static;
+            }
 
-    border:
-        1px solid #e7e7e7;
+        }
 
-    border-radius: 12px;
 
-    background: #ffffff;
+        @media (max-width: 650px) {
 
-    cursor: pointer;
+            .humsafar-cart-page {
+                padding:
+                    25px 12px
+                    50px;
+            }
 
-    transition: .2s ease;
-}
 
-.address-option:hover {
+            .cart-heading {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 10px;
+            }
 
-    border-color: #ef9fb3;
 
-    background: #fffafb;
-}
+            .cart-heading h1 {
+                font-size: 27px;
+            }
 
-.address-option.selected {
 
-    border-color: #ed0038;
+            .cart-item {
+                grid-template-columns:
+                    68px
+                    minmax(0,1fr)
+                    32px;
 
-    background: #fff5f7;
-}
+                padding: 12px;
+                gap: 10px;
+            }
 
-.address-option input {
 
-    margin-top: 3px;
+            .item-image {
+                width: 68px;
+                height: 64px;
+            }
 
-    accent-color: #ed0038;
-}
 
-.address-option-content {
+            .quantity-area {
+                grid-column: 2;
 
-    flex: 1;
-}
+                justify-self: start;
 
-.address-option-title {
+                margin-top: 8px;
+            }
 
-    margin: 0 0 5px;
 
-    color: #333;
+            .item-total {
+                grid-column: 2;
 
-    font-size: 13px;
+                text-align: left;
 
-    font-weight: 900;
-}
+                margin-top: 3px;
+            }
 
-.address-option-text {
 
-    margin: 0;
+            .remove-item {
+                grid-column: 3;
+                grid-row: 1;
+            }
 
-    color: #777;
 
-    font-size: 11px;
+            .restaurant-header {
+                padding: 16px;
+            }
 
-    line-height: 1.5;
-}
 
-.address-modal-actions {
+            .summary-card {
+                padding: 18px;
+            }
 
-    padding:
-        16px 20px;
+        }
 
-    display: flex;
+    </style>
 
-    justify-content: flex-end;
+</head>
 
-    gap: 9px;
 
-    border-top:
-        1px solid #eeeeee;
-}
+<body>
 
-.modal-cancel {
-
-    min-height: 40px;
-
-    padding:
-        0 15px;
-
-    border:
-        1px solid #dddddd;
-
-    border-radius: 9px;
-
-    background: #ffffff;
-
-    color: #666;
-
-    cursor: pointer;
-
-    font-size: 11px;
-
-    font-weight: 800;
-}
-
-.modal-use {
-
-    min-height: 40px;
-
-    padding:
-        0 17px;
-
-    border: 0;
-
-    border-radius: 9px;
-
-    background: #ed0038;
-
-    color: #ffffff;
-
-    cursor: pointer;
-
-    font-size: 11px;
-
-    font-weight: 900;
-}
-
-/* ============================================================
-   MESSAGE
-============================================================ */
-
-.cart-message {
-
-    position: fixed;
-
-    left: 50%;
-
-    bottom: 25px;
-
-    z-index: 6000;
-
-    transform:
-        translateX(-50%);
-
-    max-width:
-        min(90vw, 500px);
-
-    padding:
-        12px 18px;
-
-    border-radius: 10px;
-
-    color: #ffffff;
-
-    font-size: 12px;
-
-    font-weight: 800;
-
-    box-shadow:
-        0 10px 30px
-        rgba(0,0,0,.18);
-
-    display: none;
-}
-
-.cart-message.success {
-
-    background: #218c4b;
-}
-
-.cart-message.error {
-
-    background: #d93045;
-}
-
-/* ============================================================
-   RESPONSIVE
-============================================================ */
-
-@media (max-width: 1050px) {
-
-    .cart-layout {
-
-        grid-template-columns:
-            minmax(0, 1fr)
-            340px;
-
-        gap: 18px;
-    }
-
-    .cart-item {
-
-        grid-template-columns:
-            75px
-            minmax(0, 1fr)
-            auto;
-
-        gap: 12px;
-    }
-
-    .item-image {
-
-        width: 75px;
-        height: 70px;
-    }
-
-    .item-total {
-
-        grid-column: 2;
-
-        text-align: left;
-    }
-
-    .remove-item {
-
-        grid-column: 3;
-
-        grid-row: 1;
-    }
-}
-
-@media (max-width: 800px) {
-
-    .humsafar-cart-page {
-
-        padding:
-            25px 3.5%
-            50px;
-    }
-
-    .cart-layout {
-
-        grid-template-columns: 1fr;
-    }
-
-    .order-summary-card {
-
-        position: static;
-    }
-
-    .cart-page-heading {
-
-        align-items: flex-start;
-
-        flex-direction: column;
-
-        gap: 10px;
-    }
-}
-
-@media (max-width: 560px) {
-
-    .cart-page-heading h1 {
-
-        font-size: 26px;
-    }
-
-    .restaurant-card {
-
-        padding: 16px;
-    }
-
-    .cart-item {
-
-        grid-template-columns:
-            68px
-            minmax(0, 1fr)
-            30px;
-
-        padding: 12px;
-
-        margin:
-            0 10px
-            10px;
-    }
-
-    .item-image {
-
-        width: 68px;
-        height: 64px;
-    }
-
-    .quantity-box {
-
-        grid-column: 2;
-
-        justify-self: start;
-    }
-
-    .item-total {
-
-        grid-column: 2;
-
-        margin-top: -2px;
-    }
-
-    .remove-item {
-
-        grid-column: 3;
-
-        grid-row: 1;
-    }
-
-    .item-details h3 {
-
-        font-size: 13px;
-    }
-
-    .item-description {
-
-        font-size: 10px;
-    }
-
-    .order-summary-card {
-
-        padding: 18px;
-    }
-}
-
-</style>
 
 <main class="humsafar-cart-page">
 
-    <div class="humsafar-cart-wrapper">
 
-        <!-- ====================================================
+    <div class="cart-wrapper">
+
+
+        <!-- =================================================
              PAGE HEADING
-        ===================================================== -->
+        ================================================== -->
 
-        <div class="cart-page-heading">
+        <div class="cart-heading">
 
             <div>
 
@@ -1842,15 +2076,18 @@ require_once 'includes/customer-header.php';
                     Your Cart
                 </h1>
 
+
                 <p>
 
                     <?php if (!$isCartEmpty): ?>
 
-                        <?php echo $totalItems; ?>
+                        <?php
+                        echo $totalItems;
+                        ?>
 
                         <?php
                         echo
-                            $totalItems == 1
+                            $totalItems === 1
                             ? ' item'
                             : ' items';
                         ?>
@@ -1867,12 +2104,15 @@ require_once 'includes/customer-header.php';
 
             </div>
 
+
             <a
                 href="restaurants.php"
                 class="continue-shopping"
             >
 
-                <i class="fas fa-arrow-left"></i>
+                <i
+                    class="fas fa-arrow-left"
+                ></i>
 
                 Continue Shopping
 
@@ -1883,48 +2123,66 @@ require_once 'includes/customer-header.php';
 
         <?php if ($isCartEmpty): ?>
 
+
             <!-- =================================================
                  EMPTY CART
             ================================================== -->
 
-            <div class="cart-main-card">
+            <section class="cart-card">
 
-                <div class="empty-cart-box">
+
+                <div class="empty-cart">
+
 
                     <div class="empty-cart-icon">
 
-                        <i class="fas fa-basket-shopping"></i>
+                        <i
+                            class="
+                                fas
+                                fa-basket-shopping
+                            "
+                        ></i>
 
                     </div>
+
 
                     <h2>
                         Your Cart is Empty
                     </h2>
 
+
                     <p>
-                        Looks like you haven't added
-                        anything to your cart yet.
-                        Explore restaurants and order
-                        your favourite food.
+
+                        Looks like you haven't
+                        added anything to your cart
+                        yet. Explore restaurants and
+                        order your favourite food.
+
                     </p>
+
 
                     <a
                         href="restaurants.php"
                         class="browse-btn"
                     >
 
-                        <i class="fas fa-store"></i>
+                        <i
+                            class="fas fa-store"
+                        ></i>
 
                         Browse Restaurants
 
                     </a>
 
+
                 </div>
 
-            </div>
+
+            </section>
 
 
         <?php else: ?>
+
 
             <!-- =================================================
                  CART LAYOUT
@@ -1932,52 +2190,120 @@ require_once 'includes/customer-header.php';
 
             <div class="cart-layout">
 
-                <!-- =================================================
-                     LEFT
-                ================================================== -->
 
-                <section class="cart-main-card">
+                <!-- =============================================
+                     LEFT CART
+                ============================================== -->
+
+                <section class="cart-card">
+
 
                     <!-- RESTAURANT -->
 
-                    <div class="restaurant-card">
+                    <div class="restaurant-header">
+
 
                         <div class="restaurant-image">
 
-                            <?php if (!empty($restaurantImage)): ?>
+
+                            <?php
+                            $restaurantImg =
+                                cartRestaurantImage(
+                                    $restaurantImage
+                                );
+                            ?>
+
+
+                            <?php if (
+                                $restaurantImg !== ''
+                            ): ?>
 
                                 <img
-                                    src="assets/images/restaurants/<?php echo cart_h($restaurantImage); ?>"
-                                    alt="<?php echo cart_h($restaurantName); ?>"
-                                    loading="lazy"
+                                    src="<?php
+                                    echo cart_h(
+                                        $restaurantImg
+                                    );
+                                    ?>"
+                                    alt="<?php
+                                    echo cart_h(
+                                        $restaurantName
+                                    );
+                                    ?>"
                                 >
 
                             <?php else: ?>
 
-                                <i class="fas fa-store"></i>
+                                <i
+                                    class="fas fa-store"
+                                ></i>
 
                             <?php endif; ?>
+
 
                         </div>
 
 
                         <div class="restaurant-info">
 
+
                             <h2>
+
                                 <?php
                                 echo cart_h(
                                     $restaurantName
                                 );
                                 ?>
+
                             </h2>
 
-                            <div class="restaurant-meta">
 
-                                <?php if (!empty($deliveryTime)): ?>
+                            <?php if (
+                                $restaurantAddress !== ''
+                            ): ?>
+
+                                <div
+                                    class="
+                                        restaurant-address
+                                    "
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-location-dot
+                                        "
+                                    ></i>
+
+                                    <?php
+                                    echo cart_h(
+                                        $restaurantAddress
+                                    );
+                                    ?>
+
+                                </div>
+
+                            <?php endif; ?>
+
+
+                            <div
+                                class="
+                                    restaurant-meta
+                                "
+                            >
+
+
+                                <?php if (
+                                    $deliveryTime !== ''
+                                ): ?>
 
                                     <span>
 
-                                        <i class="fas fa-clock"></i>
+                                        <i
+                                            class="
+                                                fas
+                                                fa-clock
+                                            "
+                                        ></i>
 
                                         <?php
                                         echo cart_h(
@@ -1992,50 +2318,62 @@ require_once 'includes/customer-header.php';
 
                                 <span>
 
-                                    <i class="fas fa-motorcycle"></i>
+                                    <i
+                                        class="
+                                            fas
+                                            fa-truck
+                                        "
+                                    ></i>
 
-                                    Delivery Fee:
-                                    Rs.
-                                    <?php
-                                    echo number_format(
-                                        $deliveryFee,
-                                        0
-                                    );
-                                    ?>
+                                    Delivery
 
                                 </span>
 
+
                             </div>
 
+
                         </div>
+
 
                     </div>
 
 
-                    <?php if ($multipleRestaurants): ?>
+                    <?php if (
+                        $multipleRestaurants
+                    ): ?>
 
-                        <!-- =========================================
-                             MULTIPLE RESTAURANT WARNING
-                        ========================================== -->
 
-                        <div class="restaurant-warning">
+                        <div
+                            class="
+                                restaurant-warning
+                            "
+                        >
 
-                            <i class="fas fa-triangle-exclamation"></i>
+                            <i
+                                class="
+                                    fas
+                                    fa-triangle-exclamation
+                                "
+                            ></i>
+
 
                             <div>
 
                                 <strong>
-                                    Multiple restaurants in cart
+                                    Multiple restaurants
                                 </strong>
 
-                                Your current checkout system
-                                supports one restaurant per order.
-                                Please remove items from other
-                                restaurants before continuing.
+                                Your cart contains items
+                                from more than one
+                                restaurant. Please keep
+                                one restaurant's items in
+                                the cart before checkout.
 
                             </div>
 
                         </div>
+
 
                     <?php endif; ?>
 
@@ -2044,62 +2382,113 @@ require_once 'includes/customer-header.php';
 
                     <div class="items-heading">
 
-                        Your Items
+                        Cart Items
 
                     </div>
 
 
-                    <!-- =================================================
-                         ITEMS
-                    ================================================== -->
+                    <!-- ITEMS -->
 
-                    <?php foreach ($cartItems as $item): ?>
+                    <?php foreach (
+                        $cartItems
+                        as $item
+                    ): ?>
 
-                        <article class="cart-item">
 
-                            <!-- ITEM IMAGE -->
+                        <article
+                            class="cart-item"
+                        >
+
+
+                            <!-- IMAGE -->
 
                             <div class="item-image">
 
-                                <?php if (!empty($item['image'])): ?>
+
+                                <?php
+                                $itemImg =
+                                    cartMenuImage(
+                                        $item[
+                                            'item_image'
+                                        ]
+                                    );
+                                ?>
+
+
+                                <?php if (
+                                    $itemImg !== ''
+                                ): ?>
 
                                     <img
-                                        src="assets/images/menu/<?php echo cart_h($item['image']); ?>"
-                                        alt="<?php echo cart_h($item['name']); ?>"
+                                        src="<?php
+                                        echo cart_h(
+                                            $itemImg
+                                        );
+                                        ?>"
+                                        alt="<?php
+                                        echo cart_h(
+                                            $item[
+                                                'item_name'
+                                            ]
+                                        );
+                                        ?>"
                                         loading="lazy"
                                     >
 
                                 <?php else: ?>
 
-                                    <i class="fas fa-utensils"></i>
+                                    <i
+                                        class="
+                                            fas
+                                            fa-utensils
+                                        "
+                                    ></i>
 
                                 <?php endif; ?>
+
 
                             </div>
 
 
-                            <!-- ITEM DETAILS -->
+                            <!-- DETAILS -->
 
-                            <div class="item-details">
+                            <div
+                                class="item-details"
+                            >
+
 
                                 <h3>
 
                                     <?php
                                     echo cart_h(
-                                        $item['name']
+                                        $item[
+                                            'item_name'
+                                        ]
                                     );
                                     ?>
 
                                 </h3>
 
 
-                                <?php if (!empty($item['description'])): ?>
+                                <?php if (
+                                    !empty(
+                                        $item[
+                                            'item_description'
+                                        ]
+                                    )
+                                ): ?>
 
-                                    <p class="item-description">
+                                    <p
+                                        class="
+                                            item-description
+                                        "
+                                    >
 
                                         <?php
                                         echo cart_h(
-                                            $item['description']
+                                            $item[
+                                                'item_description'
+                                            ]
                                         );
                                         ?>
 
@@ -2108,152 +2497,258 @@ require_once 'includes/customer-header.php';
                                 <?php endif; ?>
 
 
-                                <div class="item-price">
+                                <div
+                                    class="item-price"
+                                >
 
                                     Rs.
                                     <?php
                                     echo number_format(
-                                        $item['price'],
+                                        $item[
+                                            'item_price'
+                                        ],
                                         2
                                     );
                                     ?>
 
-                                    <span
-                                        style="
-                                            color:#999;
-                                            font-size:10px;
-                                            font-weight:600;
-                                        "
-                                    >
-                                        each
-                                    </span>
-
                                 </div>
+
 
                             </div>
 
 
                             <!-- QUANTITY -->
 
-                            <div class="quantity-box">
+                            <div
+                                class="quantity-area"
+                            >
 
-                                <button
-                                    type="button"
-                                    class="quantity-btn"
-                                    onclick="updateQuantity(
-                                        <?php echo (int)$item['cart_id']; ?>,
-                                        <?php echo max(
-                                            1,
-                                            (int)$item['quantity'] - 1
-                                        ); ?>
-                                    )"
-                                    aria-label="Decrease quantity"
-                                    <?php
-                                    if (
-                                        (int)$item['quantity'] <= 1
-                                    ) {
-                                        echo 'disabled style="opacity:.45;cursor:not-allowed;"';
-                                    }
-                                    ?>
+
+                                <div
+                                    class="
+                                        quantity-label
+                                    "
                                 >
-                                    −
-                                </button>
+                                    Quantity
+                                </div>
 
 
-                                <span class="quantity-value">
-
-                                    <?php
-                                    echo (int)$item['quantity'];
-                                    ?>
-
-                                </span>
-
-
-                                <button
-                                    type="button"
-                                    class="quantity-btn"
-                                    onclick="updateQuantity(
-                                        <?php echo (int)$item['cart_id']; ?>,
-                                        <?php echo (int)$item['quantity'] + 1; ?>
-                                    )"
-                                    aria-label="Increase quantity"
+                                <form
+                                    method="POST"
+                                    action="update_cart.php"
+                                    class="quantity-form"
                                 >
-                                    +
-                                </button>
+
+
+                                    <input
+                                        type="hidden"
+                                        name="cart_id"
+                                        value="<?php
+                                        echo (int)
+                                            $item[
+                                                'cart_id'
+                                            ];
+                                        ?>"
+                                    >
+
+
+                                    <div
+                                        class="
+                                            quantity-box
+                                        "
+                                    >
+
+
+                                        <button
+                                            type="submit"
+                                            name="quantity"
+                                            value="<?php
+                                            echo max(
+                                                1,
+                                                $item[
+                                                    'quantity'
+                                                ] - 1
+                                            );
+                                            ?>"
+                                            class="
+                                                quantity-btn
+                                            "
+                                            <?php
+                                            echo
+                                                $item[
+                                                    'quantity'
+                                                ] <= 1
+                                                ? 'disabled'
+                                                : '';
+                                            ?>
+                                        >
+
+                                            −
+
+                                        </button>
+
+
+                                        <span
+                                            class="
+                                                quantity-number
+                                            "
+                                        >
+
+                                            <?php
+                                            echo (int)
+                                                $item[
+                                                    'quantity'
+                                                ];
+                                            ?>
+
+                                        </span>
+
+
+                                        <button
+                                            type="submit"
+                                            name="quantity"
+                                            value="<?php
+                                            echo
+                                                (int)
+                                                $item[
+                                                    'quantity'
+                                                ] + 1;
+                                            ?>"
+                                            class="
+                                                quantity-btn
+                                            "
+                                        >
+
+                                            +
+
+                                        </button>
+
+
+                                    </div>
+
+
+                                </form>
+
 
                             </div>
 
 
-                            <!-- ITEM TOTAL -->
+                            <!-- TOTAL -->
 
-                            <div class="item-total">
+                            <div
+                                class="item-total"
+                            >
 
-                                Rs.
-                                <?php
-                                echo number_format(
-                                    $item['subtotal'],
-                                    2
-                                );
-                                ?>
+
+                                <div
+                                    class="
+                                        item-total-label
+                                    "
+                                >
+                                    Total
+                                </div>
+
+
+                                <div
+                                    class="
+                                        item-total-value
+                                    "
+                                >
+
+                                    Rs.
+                                    <?php
+                                    echo number_format(
+                                        $item[
+                                            'item_subtotal'
+                                        ],
+                                        2
+                                    );
+                                    ?>
+
+                                </div>
+
 
                             </div>
 
 
                             <!-- REMOVE -->
 
-                            <button
-                                type="button"
+                            <a
+                                href="
+                                    remove_from_cart.php?id=<?php
+                                    echo (int)
+                                        $item[
+                                            'cart_id'
+                                        ];
+                                    ?>"
                                 class="remove-item"
-                                onclick="removeCartItem(
-                                    <?php echo (int)$item['cart_id']; ?>
-                                )"
                                 title="Remove item"
-                                aria-label="Remove item"
+                                onclick="
+                                    return confirm(
+                                        'Remove this item from cart?'
+                                    );
+                                "
                             >
 
-                                <i class="fas fa-trash"></i>
+                                <i
+                                    class="fas fa-trash"
+                                ></i>
 
-                            </button>
+                            </a>
+
 
                         </article>
+
 
                     <?php endforeach; ?>
 
 
-                    <!-- ADD MORE -->
-
-                    <div class="cart-footer-action">
-
-                        <a
-                            href="restaurants.php"
-                            class="add-more-btn"
-                        >
-
-                            <i class="fas fa-plus"></i>
-
-                            Add More Items
-
-                        </a>
-
-                    </div>
-
                 </section>
 
 
-                <!-- =================================================
+                <!-- =============================================
                      RIGHT SUMMARY
-                ================================================== -->
+                ============================================== -->
 
-                <aside class="order-summary-card">
+                <aside
+                    class="
+                        cart-card
+                        summary-card
+                    "
+                >
 
-                    <h2 class="summary-title">
+
+                    <h2
+                        class="summary-title"
+                    >
+
                         Order Summary
+
                     </h2>
 
 
                     <!-- SUBTOTAL -->
 
-                    <div class="summary-row">
+                    <div
+                        class="summary-row"
+                    >
+
+                        <span>
+                            Items
+                        </span>
+
+                        <strong>
+                            <?php
+                            echo $totalItems;
+                            ?>
+                        </strong>
+
+                    </div>
+
+
+                    <div
+                        class="summary-row"
+                    >
 
                         <span>
                             Subtotal
@@ -2276,17 +2771,24 @@ require_once 'includes/customer-header.php';
 
                     <!-- DELIVERY -->
 
-                    <div class="summary-row">
+                    <div
+                        class="summary-row"
+                    >
 
                         <span>
-
                             Delivery Fee
-
                         </span>
+
 
                         <strong>
 
-                            <?php if ($deliveryFee > 0): ?>
+                            <?php if (
+                                $multipleRestaurants
+                            ): ?>
+
+                                —
+
+                            <?php else: ?>
 
                                 Rs.
                                 <?php
@@ -2296,10 +2798,6 @@ require_once 'includes/customer-header.php';
                                 );
                                 ?>
 
-                            <?php else: ?>
-
-                                FREE
-
                             <?php endif; ?>
 
                         </strong>
@@ -2307,18 +2805,23 @@ require_once 'includes/customer-header.php';
                     </div>
 
 
-                    <!-- DISCOUNT -->
+                    <?php if (
+                        $discount > 0
+                    ): ?>
 
-                    <?php if ($discount > 0): ?>
 
-                        <div class="summary-row">
+                        <div
+                            class="summary-row"
+                        >
 
                             <span>
                                 Discount
                             </span>
 
                             <strong
-                                style="color:#218c4b;"
+                                style="
+                                    color:#218c4b;
+                                "
                             >
 
                                 − Rs.
@@ -2333,21 +2836,28 @@ require_once 'includes/customer-header.php';
 
                         </div>
 
+
                     <?php endif; ?>
 
 
-                    <div class="summary-divider"></div>
+                    <div
+                        class="summary-divider"
+                    ></div>
 
 
                     <!-- TOTAL -->
 
-                    <div class="summary-total">
+                    <div
+                        class="summary-total"
+                    >
 
                         <span>
                             Total
                         </span>
 
-                        <span>
+                        <strong
+                            id="grandTotal"
+                        >
 
                             Rs.
                             <?php
@@ -2357,362 +2867,416 @@ require_once 'includes/customer-header.php';
                             );
                             ?>
 
-                        </span>
+                        </strong>
 
                     </div>
 
 
-                    <!-- =================================================
-                         DELIVERY ADDRESS
-                    ================================================== -->
+                    <!-- DELIVERY TIME -->
 
-                    <div class="summary-section">
+                    <?php if (
+                        $deliveryTime !== ''
+                    ): ?>
 
-                        <div class="section-title">
 
-                            <i class="fas fa-location-dot"></i>
+                        <div
+                            class="
+                                delivery-time-box
+                            "
+                        >
+
+
+                            <div
+                                class="
+                                    delivery-time-icon
+                                "
+                            >
+
+                                <i
+                                    class="
+                                        fas
+                                        fa-clock
+                                    "
+                                ></i>
+
+                            </div>
+
+
+                            <div
+                                class="
+                                    delivery-time-text
+                                "
+                            >
+
+                                <span>
+                                    Estimated Delivery Time
+                                </span>
+
+                                <strong>
+
+                                    <?php
+                                    echo cart_h(
+                                        $deliveryTime
+                                    );
+                                    ?>
+
+                                </strong>
+
+                            </div>
+
+
+                        </div>
+
+
+                    <?php endif; ?>
+
+
+                    <!-- ADDRESS -->
+
+                    <div
+                        class="
+                            summary-section
+                        "
+                    >
+
+
+                        <div
+                            class="
+                                section-title
+                            "
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-location-dot
+                                "
+                            ></i>
 
                             Delivery Address
 
                         </div>
 
 
-                        <div class="address-box">
-
-                            <?php
-
-                            $selectedAddress = null;
-
-                            foreach (
-                                $addresses
-                                as $address
-                            ) {
-
-                                if (
-                                    (int)$address['id']
-                                    ===
-                                    $selectedAddressId
-                                ) {
-
-                                    $selectedAddress =
-                                        $address;
-
-                                    break;
-                                }
-                            }
-
-                            ?>
-
-                            <div class="address-top">
-
-                                <span
-                                    class="address-label"
-                                    id="selectedAddressLabel"
-                                >
-
-                                    <?php
-                                    if (
-                                        $selectedAddress
-                                    ) {
-
-                                        echo cart_h(
-                                            !empty(
-                                                $selectedAddress['label']
-                                            )
-                                            ? $selectedAddress['label']
-                                            : ucfirst(
-                                                $selectedAddress[
-                                                    'address_type'
-                                                ]
-                                            )
-                                        );
-
-                                    } else {
-
-                                        echo 'No Address';
-
-                                    }
-                                    ?>
-
-                                </span>
+                        <?php if (
+                            $selectedAddress
+                        ): ?>
 
 
-                                <?php if ($selectedAddress): ?>
-
-                                    <span
-                                        class="address-selected"
-                                    >
-                                        Selected
-                                    </span>
-
-                                <?php endif; ?>
-
-                            </div>
-
-
-                            <p
-                                class="address-text"
-                                id="selectedAddressText"
+                            <div
+                                class="
+                                    address-box
+                                "
+                                id="
+                                    selectedAddressBox
+                                "
                             >
 
-                                <?php if ($selectedAddress): ?>
+
+                                <div
+                                    class="
+                                        address-top
+                                    "
+                                >
+
+
+                                    <span
+                                        class="
+                                            address-label
+                                        "
+                                        id="
+                                            selectedAddressLabel
+                                        "
+                                    >
+
+                                        <?php
+                                        echo cart_h(
+                                            $selectedAddressLabel
+                                        );
+                                        ?>
+
+                                    </span>
+
+
+                                    <?php if (
+                                        (int)
+                                        $selectedAddress[
+                                            'is_default'
+                                        ] === 1
+                                    ): ?>
+
+                                        <span
+                                            class="
+                                                address-default
+                                            "
+                                        >
+                                            Default
+                                        </span>
+
+                                    <?php endif; ?>
+
+
+                                </div>
+
+
+                                <p
+                                    class="
+                                        address-text
+                                    "
+                                    id="
+                                        selectedAddressText
+                                    "
+                                >
 
                                     <?php
                                     echo cart_h(
-                                        $selectedAddress['address']
+                                        $selectedAddressText
                                     );
                                     ?>
 
-                                    <?php if (
-                                        !empty(
-                                            $selectedAddress['area']
-                                        )
-                                    ): ?>
+                                </p>
 
-                                        ,
+
+                                <?php if (
+                                    !empty(
+                                        $selectedAddress[
+                                            'phone'
+                                        ]
+                                    )
+                                ): ?>
+
+
+                                    <div
+                                        class="
+                                            address-phone
+                                        "
+                                        id="
+                                            selectedAddressPhone
+                                        "
+                                    >
+
+                                        <i
+                                            class="
+                                                fas
+                                                fa-phone
+                                            "
+                                        ></i>
+
                                         <?php
                                         echo cart_h(
-                                            $selectedAddress['area']
+                                            $selectedAddress[
+                                                'phone'
+                                            ]
                                         );
                                         ?>
 
-                                    <?php endif; ?>
+                                    </div>
 
-                                    <?php if (
-                                        !empty(
-                                            $selectedAddress['city']
-                                        )
-                                    ): ?>
-
-                                        ,
-                                        <?php
-                                        echo cart_h(
-                                            $selectedAddress['city']
-                                        );
-                                        ?>
-
-                                    <?php endif; ?>
-
-                                <?php else: ?>
-
-                                    Please select a delivery address.
 
                                 <?php endif; ?>
 
-                            </p>
+
+                                <button
+                                    type="button"
+                                    class="
+                                        change-address
+                                    "
+                                    onclick="
+                                        openAddressModal();
+                                    "
+                                >
+
+                                    <i
+                                        class="fas fa-pen"
+                                    ></i>
+
+                                    Change Address
+
+                                </button>
 
 
-                            <button
-                                type="button"
-                                class="change-address"
-                                onclick="openAddressModal()"
+                            </div>
+
+
+                        <?php else: ?>
+
+
+                            <div
+                                class="no-address"
                             >
 
-                                <i class="fas fa-pen"></i>
+                                <i
+                                    class="
+                                        fas
+                                        fa-location-dot
+                                    "
+                                ></i>
 
-                                Change Address
+                                No delivery address
+                                has been saved yet.
 
-                            </button>
+                                <br>
 
-                        </div>
+
+                                <a
+                                    href="
+                                        customer/manage-addresses.php
+                                    "
+                                    class="
+                                        add-address-link
+                                    "
+                                >
+
+                                    Add Delivery Address
+
+                                </a>
+
+                            </div>
+
+
+                        <?php endif; ?>
+
 
                     </div>
 
 
-                    <!-- =================================================
-                         PAYMENT
-                    ================================================== -->
+                    <!-- PROMO -->
 
-                    <div class="summary-section">
-
-                        <div class="section-title">
-
-                            <i class="fas fa-credit-card"></i>
-
-                            Payment Method
-
-                        </div>
+                    <div
+                        class="promo-box"
+                    >
 
 
-                        <div class="payment-options">
+                        <div
+                            class="section-title"
+                        >
 
-                            <!-- COD -->
-
-                            <div
-                                class="payment-option selected"
-                                onclick="selectPayment(this)"
-                            >
-
-                                <input
-                                    type="radio"
-                                    name="payment_method"
-                                    value="cash_on_delivery"
-                                    id="payment_cod"
-                                    checked
-                                >
-
-                                <label
-                                    for="payment_cod"
-                                >
-
-                                    <i
-                                        class="fas fa-money-bill-wave"
-                                    ></i>
-
-                                    Cash on Delivery
-
-                                </label>
-
-                            </div>
-
-
-                            <!-- CARD -->
-
-                            <div
-                                class="payment-option"
-                                onclick="selectPayment(this)"
-                            >
-
-                                <input
-                                    type="radio"
-                                    name="payment_method"
-                                    value="card"
-                                    id="payment_card"
-                                >
-
-                                <label
-                                    for="payment_card"
-                                >
-
-                                    <i
-                                        class="fas fa-credit-card"
-                                    ></i>
-
-                                    Debit / Credit Card
-
-                                </label>
-
-                            </div>
-
-
-                            <!-- ONLINE -->
-
-                            <div
-                                class="payment-option"
-                                onclick="selectPayment(this)"
-                            >
-
-                                <input
-                                    type="radio"
-                                    name="payment_method"
-                                    value="online"
-                                    id="payment_online"
-                                >
-
-                                <label
-                                    for="payment_online"
-                                >
-
-                                    <i
-                                        class="fas fa-wallet"
-                                    ></i>
-
-                                    Digital Wallet
-
-                                </label>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-                    <!-- =================================================
-                         PROMO
-                    ================================================== -->
-
-                    <div class="summary-section">
-
-                        <div class="section-title">
-
-                            <i class="fas fa-ticket"></i>
+                            <i
+                                class="
+                                    fas
+                                    fa-ticket
+                                "
+                            ></i>
 
                             Promo Code
 
                         </div>
 
 
-                        <div class="promo-box">
+                        <div
+                            class="promo-form"
+                        >
 
                             <input
                                 type="text"
-                                id="promo_code"
-                                placeholder="Enter promo code"
+                                id="promoCode"
+                                class="promo-input"
+                                placeholder="
+                                    Enter promo code
+                                "
                                 autocomplete="off"
                             >
 
+
                             <button
                                 type="button"
-                                class="promo-btn"
-                                onclick="applyPromoCode()"
+                                class="promo-button"
+                                onclick="
+                                    applyPromo();
+                                "
                             >
+
                                 Apply
+
                             </button>
 
                         </div>
 
+
                     </div>
 
 
-                    <!-- =================================================
-                         CHECKOUT
-                    ================================================== -->
+                    <!-- CHECKOUT -->
+
+                    <?php
+                    $checkoutDisabled =
+                        $multipleRestaurants ||
+                        empty($addresses);
+                    ?>
+
 
                     <button
                         type="button"
-                        class="checkout-btn"
-                        onclick="proceedToCheckout()"
+                        id="checkoutButton"
+                        class="
+                            checkout-btn
+                            <?php
+                            echo
+                                $checkoutDisabled
+                                ? 'disabled'
+                                : '';
+                            ?>
+                        "
                         <?php
-                        if ($multipleRestaurants) {
-                            echo 'disabled';
-                        }
+                        echo
+                            $checkoutDisabled
+                            ? 'disabled'
+                            : '';
                         ?>
+                        onclick="
+                            proceedToCheckout();
+                        "
                     >
 
-                        <i class="fas fa-lock"></i>
+                        <i
+                            class="
+                                fas
+                                fa-lock
+                            "
+                        ></i>
 
-                        <?php
-                        echo $multipleRestaurants
-                            ? 'Fix Cart First'
-                            : 'Proceed to Checkout';
-                        ?>
+                        Proceed to Checkout
 
                     </button>
 
 
-                    <div class="security-note">
+                    <div
+                        class="
+                            security-note
+                        "
+                    >
 
-                        <i class="fas fa-shield-halved"></i>
+                        <i
+                            class="
+                                fas
+                                fa-shield-halved
+                            "
+                        ></i>
 
-                        Secure checkout with Humsafar
+                        Your order information is
+                        securely handled.
 
                     </div>
 
+
                 </aside>
+
 
             </div>
 
+
         <?php endif; ?>
 
+
     </div>
+
 
 </main>
 
 
-<!-- ============================================================
+<!-- =========================================================
      ADDRESS MODAL
-============================================================ -->
+========================================================== -->
 
 <div
     class="address-modal"
@@ -2720,48 +3284,104 @@ require_once 'includes/customer-header.php';
     aria-hidden="true"
 >
 
-    <div class="address-modal-card">
 
-        <div class="address-modal-header">
+    <div
+        class="
+            address-modal-box
+        "
+    >
 
-            <h3>
+
+        <div
+            class="modal-header"
+        >
+
+            <h2>
                 Select Delivery Address
-            </h3>
+            </h2>
+
 
             <button
                 type="button"
-                class="close-address-modal"
-                onclick="closeAddressModal()"
-                aria-label="Close"
+                class="modal-close"
+                onclick="
+                    closeAddressModal();
+                "
             >
-                ×
+
+                <i
+                    class="fas fa-xmark"
+                ></i>
+
             </button>
 
         </div>
 
 
-        <div class="address-list">
+        <div
+            class="modal-body"
+        >
 
-            <?php if (!empty($addresses)): ?>
+
+            <?php if (
+                empty($addresses)
+            ): ?>
+
+
+                <div
+                    class="no-address"
+                >
+
+                    You don't have any saved
+                    delivery addresses.
+
+                    <br>
+
+
+                    <a
+                        href="
+                            customer/manage-addresses.php
+                        "
+                        class="
+                            add-address-link
+                        "
+                    >
+
+                        Add New Address
+
+                    </a>
+
+                </div>
+
+
+            <?php else: ?>
+
 
                 <?php foreach (
                     $addresses
                     as $address
                 ): ?>
 
+
                     <?php
 
-                    $addressLabel =
-                        !empty(
-                            $address['label']
-                        )
-                        ? $address['label']
-                        : ucfirst(
-                            $address['address_type']
-                        );
+                    $optionParts = [];
 
-                    $fullAddress =
-                        $address['address'];
+
+                    if (
+                        !empty(
+                            $address[
+                                'address_line'
+                            ]
+                        )
+                    ) {
+
+                        $optionParts[] =
+                            $address[
+                                'address_line'
+                            ];
+                    }
+
 
                     if (
                         !empty(
@@ -2769,10 +3389,10 @@ require_once 'includes/customer-header.php';
                         )
                     ) {
 
-                        $fullAddress .=
-                            ', ' .
+                        $optionParts[] =
                             $address['area'];
                     }
+
 
                     if (
                         !empty(
@@ -2780,349 +3400,257 @@ require_once 'includes/customer-header.php';
                         )
                     ) {
 
-                        $fullAddress .=
-                            ', ' .
+                        $optionParts[] =
                             $address['city'];
                     }
 
-                    ?>
 
-                    <div
-                        class="address-option <?php
-                        echo (
-                            (int)$address['id']
+                    $optionText =
+                        implode(
+                            ', ',
+                            $optionParts
+                        );
+
+
+                    $isSelected =
+                        (
+                            (int)
+                            $address['id']
                             ===
                             $selectedAddressId
-                        )
-                            ? 'selected'
-                            : '';
-                        ?>"
+                        );
+
+                    ?>
+
+
+                    <div
+                        class="
+                            address-option
+                            <?php
+                            echo
+                                $isSelected
+                                ? 'selected'
+                                : '';
+                            ?>
+                        "
                         data-address-id="<?php
-                        echo (int)$address['id'];
+                            echo (int)
+                                $address['id'];
                         ?>"
                         data-address-label="<?php
-                        echo cart_h($addressLabel);
+                            echo cart_h(
+                                $address[
+                                    'address_title'
+                                ]
+                            );
                         ?>"
                         data-address-text="<?php
-                        echo cart_h($fullAddress);
+                            echo cart_h(
+                                $optionText
+                            );
                         ?>"
-                        onclick="selectAddress(this)"
+                        data-address-phone="<?php
+                            echo cart_h(
+                                $address['phone']
+                                ?? ''
+                            );
+                        ?>"
+                        onclick="
+                            selectAddress(this);
+                        "
                     >
 
-                        <input
-                            type="radio"
-                            name="delivery_address"
-                            value="<?php
-                            echo (int)$address['id'];
-                            ?>"
-                            <?php
-                            if (
-                                (int)$address['id']
-                                ===
-                                $selectedAddressId
-                            ) {
-                                echo 'checked';
-                            }
-                            ?>
+
+                        <div
+                            class="
+                                address-option-radio
+                            "
                         >
 
+                            <input
+                                type="radio"
+                                name="selected_address"
+                                value="<?php
+                                echo (int)
+                                    $address['id'];
+                                ?>"
+                                <?php
+                                echo
+                                    $isSelected
+                                    ? 'checked'
+                                    : '';
+                                ?>
+                            >
 
-                        <div class="address-option-content">
+                        </div>
 
-                            <h4
-                                class="address-option-title"
+
+                        <div
+                            class="
+                                address-option-title
+                            "
+                        >
+
+                            <?php
+                            echo cart_h(
+                                $address[
+                                    'address_title'
+                                ]
+                            );
+                            ?>
+
+
+                            <?php if (
+                                (int)
+                                $address[
+                                    'is_default'
+                                ] === 1
+                            ): ?>
+
+
+                                <span
+                                    class="
+                                        address-option-default
+                                    "
+                                >
+                                    Default
+                                </span>
+
+
+                            <?php endif; ?>
+
+
+                        </div>
+
+
+                        <div
+                            class="
+                                address-option-text
+                            "
+                        >
+
+                            <?php
+                            echo cart_h(
+                                $optionText
+                            );
+                            ?>
+
+                        </div>
+
+
+                        <?php if (
+                            !empty(
+                                $address['phone']
+                            )
+                        ): ?>
+
+                            <div
+                                class="
+                                    address-option-phone
+                                "
                             >
 
                                 <i
-                                    class="fas
-                                    <?php
-                                    if (
-                                        $address['address_type']
-                                        === 'home'
-                                    ) {
-                                        echo 'fa-house';
-                                    } elseif (
-                                        $address['address_type']
-                                        === 'work'
-                                    ) {
-                                        echo 'fa-briefcase';
-                                    } else {
-                                        echo 'fa-location-dot';
-                                    }
-                                    ?>"
+                                    class="
+                                        fas
+                                        fa-phone
+                                    "
                                 ></i>
 
                                 <?php
                                 echo cart_h(
-                                    $addressLabel
+                                    $address[
+                                        'phone'
+                                    ]
                                 );
                                 ?>
 
-                            </h4>
+                            </div>
 
+                        <?php endif; ?>
 
-                            <p
-                                class="address-option-text"
-                            >
-
-                                <?php
-                                echo cart_h(
-                                    $fullAddress
-                                );
-                                ?>
-
-                                <?php if (
-                                    !empty(
-                                        $address['landmark']
-                                    )
-                                ): ?>
-
-                                    <br>
-
-                                    Landmark:
-                                    <?php
-                                    echo cart_h(
-                                        $address['landmark']
-                                    );
-                                    ?>
-
-                                <?php endif; ?>
-
-                            </p>
-
-                        </div>
 
                     </div>
+
 
                 <?php endforeach; ?>
 
 
-            <?php else: ?>
-
-                <div
-                    style="
-                        text-align:center;
-                        padding:35px 15px;
-                        color:#777;
-                        font-size:12px;
-                    "
-                >
-
-                    <i
-                        class="fas fa-location-dot"
-                        style="
-                            color:#ed0038;
-                            font-size:28px;
-                            margin-bottom:12px;
-                        "
-                    ></i>
-
-                    <div
-                        style="
-                            font-weight:800;
-                            color:#333;
-                            margin-bottom:5px;
-                        "
-                    >
-                        No saved address
-                    </div>
-
-                    <div>
-                        Please add a delivery address
-                        before checkout.
-                    </div>
-
-                    <br>
-
-                    <a
-                        href="my-account.php#addresses"
-                        style="
-                            color:#ed0038;
-                            font-weight:800;
-                            text-decoration:none;
-                        "
-                    >
-                        Manage Addresses
-                    </a>
-
-                </div>
-
             <?php endif; ?>
+
 
         </div>
 
 
-        <div class="address-modal-actions">
+        <div
+            class="modal-footer"
+        >
+
+
+            <a
+                href="
+                    customer/manage-addresses.php
+                "
+                class="
+                    manage-address-btn
+                "
+            >
+
+                <i
+                    class="
+                        fas
+                        fa-location-dot
+                    "
+                ></i>
+
+                &nbsp;
+
+                Manage Addresses
+
+            </a>
+
 
             <button
                 type="button"
-                class="modal-cancel"
-                onclick="closeAddressModal()"
+                class="use-address-btn"
+                onclick="
+                    useSelectedAddress();
+                "
             >
-                Cancel
-            </button>
-
-
-            <button
-                type="button"
-                class="modal-use"
-                onclick="useSelectedAddress()"
-            >
-
-                <i class="fas fa-check"></i>
 
                 Use This Address
 
             </button>
 
+
         </div>
 
+
     </div>
+
 
 </div>
 
 
-<!-- ============================================================
-     MESSAGES
-============================================================ -->
-
-<div
-    id="cartSuccess"
-    class="cart-message success"
-></div>
-
-<div
-    id="cartError"
-    class="cart-message error"
-></div>
-
-
 <script>
 
-/* ============================================================
-   UPDATE QUANTITY
-============================================================ */
-
-function updateQuantity(cartId, quantity)
-{
-    quantity = parseInt(quantity);
-
-    if (
-        isNaN(quantity) ||
-        quantity < 1
-    ) {
-        return;
-    }
-
-    fetch(
-        'update_cart.php',
-        {
-            method: 'POST',
-
-            headers: {
-                'Content-Type':
-                    'application/x-www-form-urlencoded'
-            },
-
-            body:
-                'cart_id=' +
-                encodeURIComponent(cartId) +
-                '&quantity=' +
-                encodeURIComponent(quantity)
-        }
-    )
-    .then(function(response) {
-
-        if (!response.ok) {
-            throw new Error(
-                'Unable to update cart.'
-            );
-        }
-
-        return response.text();
-
-    })
-    .then(function() {
-
-        window.location.href =
-            'cart.php?updated=' +
-            Date.now();
-
-    })
-    .catch(function(error) {
-
-        console.error(error);
-
-        showCartError(
-            'Unable to update quantity. Please try again.'
-        );
-
-    });
-}
-
-
-/* ============================================================
-   REMOVE ITEM
-============================================================ */
-
-function removeCartItem(cartId)
-{
-    if (
-        !confirm(
-            'Are you sure you want to remove this item?'
-        )
-    ) {
-        return;
-    }
-
-    window.location.href =
-        'remove_from_cart.php?id=' +
-        encodeURIComponent(cartId);
-}
-
-
-/* ============================================================
-   PAYMENT
-============================================================ */
-
-function selectPayment(element)
-{
-    var radio =
-        element.querySelector(
-            'input[type="radio"]'
-        );
-
-    if (radio) {
-        radio.checked = true;
-    }
-
-    document
-        .querySelectorAll(
-            '.payment-option'
-        )
-        .forEach(function(option) {
-
-            option.classList.remove(
-                'selected'
-            );
-
-        });
-
-    element.classList.add(
-        'selected'
-    );
-}
-
-
-/* ============================================================
-   ADDRESS MODAL
-============================================================ */
+/*
+|--------------------------------------------------------------------------
+| SELECTED ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 var selectedAddressId =
     <?php
     echo (int)$selectedAddressId;
     ?>;
 
+
+/*
+|--------------------------------------------------------------------------
+| OPEN ADDRESS MODAL
+|--------------------------------------------------------------------------
+*/
 
 function openAddressModal()
 {
@@ -3135,7 +3663,9 @@ function openAddressModal()
         return;
     }
 
-    modal.classList.add('open');
+    modal.classList.add(
+        'open'
+    );
 
     modal.setAttribute(
         'aria-hidden',
@@ -3143,6 +3673,12 @@ function openAddressModal()
     );
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| CLOSE ADDRESS MODAL
+|--------------------------------------------------------------------------
+*/
 
 function closeAddressModal()
 {
@@ -3166,32 +3702,68 @@ function closeAddressModal()
 }
 
 
-/* ============================================================
-   SELECT ADDRESS
-============================================================ */
+/*
+|--------------------------------------------------------------------------
+| CLICK OUTSIDE MODAL
+|--------------------------------------------------------------------------
+*/
+
+document
+    .getElementById(
+        'addressModal'
+    )
+    ?.addEventListener(
+        'click',
+        function(event) {
+
+            if (
+                event.target ===
+                this
+            ) {
+
+                closeAddressModal();
+
+            }
+
+        }
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| SELECT ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 function selectAddress(element)
 {
+
     document
         .querySelectorAll(
             '.address-option'
         )
-        .forEach(function(option) {
+        .forEach(
+            function(option) {
 
-            option.classList.remove(
-                'selected'
-            );
-
-            var radio =
-                option.querySelector(
-                    'input[type="radio"]'
+                option.classList.remove(
+                    'selected'
                 );
 
-            if (radio) {
-                radio.checked = false;
-            }
 
-        });
+                var radio =
+                    option.querySelector(
+                        'input[type="radio"]'
+                    );
+
+
+                if (radio) {
+
+                    radio.checked =
+                        false;
+                }
+
+            }
+        );
 
 
     element.classList.add(
@@ -3204,8 +3776,11 @@ function selectAddress(element)
             'input[type="radio"]'
         );
 
+
     if (radio) {
-        radio.checked = true;
+
+        radio.checked =
+            true;
     }
 
 
@@ -3215,23 +3790,28 @@ function selectAddress(element)
                 'data-address-id'
             )
         );
+
 }
 
 
-/* ============================================================
-   USE ADDRESS
-============================================================ */
+/*
+|--------------------------------------------------------------------------
+| USE SELECTED ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 function useSelectedAddress()
 {
+
     var selected =
         document.querySelector(
             '.address-option.selected'
         );
 
+
     if (!selected) {
 
-        showCartError(
+        alert(
             'Please select a delivery address.'
         );
 
@@ -3253,9 +3833,15 @@ function useSelectedAddress()
         );
 
 
-    var addressText =
+    var text =
         selected.getAttribute(
             'data-address-text'
+        );
+
+
+    var phone =
+        selected.getAttribute(
+            'data-address-phone'
         );
 
 
@@ -3264,40 +3850,84 @@ function useSelectedAddress()
             'selectedAddressLabel'
         );
 
+
     var textElement =
         document.getElementById(
             'selectedAddressText'
         );
 
 
+    var phoneElement =
+        document.getElementById(
+            'selectedAddressPhone'
+        );
+
+
     if (labelElement) {
 
         labelElement.textContent =
-            label || 'Address';
+            label ||
+            'Address';
     }
 
 
     if (textElement) {
 
         textElement.textContent =
-            addressText || '';
+            text || '';
+    }
+
+
+    if (phoneElement) {
+
+        phoneElement.innerHTML =
+            '<i class="fas fa-phone"></i> ' +
+            escapeHtml(
+                phone || ''
+            );
     }
 
 
     closeAddressModal();
+
 }
 
 
-/* ============================================================
-   PROMO
-============================================================ */
+/*
+|--------------------------------------------------------------------------
+| ESCAPE HTML FOR JS
+|--------------------------------------------------------------------------
+*/
 
-function applyPromoCode()
+function escapeHtml(value)
 {
+
+    var div =
+        document.createElement(
+            'div'
+        );
+
+    div.textContent =
+        value;
+
+    return div.innerHTML;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| PROMO
+|--------------------------------------------------------------------------
+*/
+
+function applyPromo()
+{
+
     var input =
         document.getElementById(
-            'promo_code'
+            'promoCode'
         );
+
 
     if (!input) {
         return;
@@ -3312,7 +3942,7 @@ function applyPromoCode()
 
     if (code === '') {
 
-        showCartError(
+        alert(
             'Please enter a promo code.'
         );
 
@@ -3321,39 +3951,46 @@ function applyPromoCode()
 
 
     /*
-     * Existing project currently
-     * uses WELCOME10 as demo promo.
-     *
-     * Real promo calculation should
-     * later be connected to database.
-     */
+    |--------------------------------------------------------------------------
+    | Demo promo currently
+    |--------------------------------------------------------------------------
+    */
 
-    if (code === 'WELCOME10') {
+    if (
+        code === 'WELCOME10'
+    ) {
 
-        showCartSuccess(
-            'Promo code accepted.'
+        alert(
+            'Promo code accepted.\
+            Real discount calculation will be connected to the coupons system.'
         );
 
     } else {
 
-        showCartError(
+        alert(
             'Invalid promo code.'
         );
 
     }
+
 }
 
 
-/* ============================================================
-   PROCEED TO CHECKOUT
-============================================================ */
+/*
+|--------------------------------------------------------------------------
+| PROCEED TO CHECKOUT
+|--------------------------------------------------------------------------
+*/
 
 function proceedToCheckout()
 {
-    <?php if ($multipleRestaurants): ?>
 
-        showCartError(
-            'Please keep items from one restaurant in the cart.'
+    <?php if (
+        $multipleRestaurants
+    ): ?>
+
+        alert(
+            'Please keep items from one restaurant in the cart before checkout.'
         );
 
         return;
@@ -3361,32 +3998,29 @@ function proceedToCheckout()
     <?php endif; ?>
 
 
-    var selectedPayment =
-        document.querySelector(
-            'input[name="payment_method"]:checked'
+    <?php if (
+        empty($addresses)
+    ): ?>
+
+        alert(
+            'Please add a delivery address first.'
         );
 
-
-    if (!selectedPayment) {
-
-        showCartError(
-            'Please select a payment method.'
-        );
+        window.location.href =
+            'customer/manage-addresses.php';
 
         return;
-    }
+
+    <?php endif; ?>
 
 
-    var selectedAddress =
-        document.querySelector(
-            '.address-option.selected'
-        );
+    if (
+        !selectedAddressId ||
+        selectedAddressId <= 0
+    ) {
 
-
-    if (!selectedAddress) {
-
-        showCartError(
-            'Please select a delivery address.'
+        alert(
+            'Please select a valid delivery address.'
         );
 
         openAddressModal();
@@ -3395,146 +4029,26 @@ function proceedToCheckout()
     }
 
 
-    var addressId =
-        parseInt(
-            selectedAddress.getAttribute(
-                'data-address-id'
-            )
-        );
-
-
-    if (
-        isNaN(addressId) ||
-        addressId <= 0
-    ) {
-
-        showCartError(
-            'Please select a valid delivery address.'
-        );
-
-        return;
-    }
-
-
-    var payment =
-        encodeURIComponent(
-            selectedPayment.value
-        );
-
-
     /*
-     * Important:
-     *
-     * checkout.php expects:
-     *
-     * cash_on_delivery
-     * card
-     * online
-     *
-     * So we send the correct value.
-     */
+    |--------------------------------------------------------------------------
+    | Send selected address ID to checkout
+    |--------------------------------------------------------------------------
+    */
 
     window.location.href =
-        'checkout.php?payment=' +
-        payment +
-        '&address_id=' +
+        'checkout.php?address_id=' +
         encodeURIComponent(
-            addressId
+            selectedAddressId
         );
+
 }
 
 
-/* ============================================================
-   SUCCESS MESSAGE
-============================================================ */
-
-function showCartSuccess(message)
-{
-    var box =
-        document.getElementById(
-            'cartSuccess'
-        );
-
-    if (!box) {
-        return;
-    }
-
-    box.textContent =
-        message;
-
-    box.style.display =
-        'block';
-
-
-    setTimeout(function() {
-
-        box.style.display =
-            'none';
-
-    }, 3000);
-}
-
-
-/* ============================================================
-   ERROR MESSAGE
-============================================================ */
-
-function showCartError(message)
-{
-    var box =
-        document.getElementById(
-            'cartError'
-        );
-
-    if (!box) {
-        return;
-    }
-
-    box.textContent =
-        message;
-
-    box.style.display =
-        'block';
-
-
-    setTimeout(function() {
-
-        box.style.display =
-            'none';
-
-    }, 3500);
-}
-
-
-/* ============================================================
-   OUTSIDE MODAL CLICK
-============================================================ */
-
-document.addEventListener(
-    'click',
-    function(event) {
-
-        var modal =
-            document.getElementById(
-                'addressModal'
-            );
-
-        if (
-            modal &&
-            event.target === modal
-        ) {
-
-            closeAddressModal();
-
-        }
-
-    }
-);
-
-
-/* ============================================================
-   ESC
-============================================================ */
+/*
+|--------------------------------------------------------------------------
+| ESC KEY
+|--------------------------------------------------------------------------
+*/
 
 document.addEventListener(
     'keydown',
@@ -3554,8 +4068,6 @@ document.addEventListener(
 </script>
 
 
-<?php
+</body>
 
-require_once 'includes/footer.php';
-
-?>
+</html>
