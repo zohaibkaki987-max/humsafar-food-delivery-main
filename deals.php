@@ -1,21 +1,16 @@
 <?php
 
-/* =========================================================
-   HUMSAFAR - DEALS PAGE
-   Uses existing project database connection.
-   IMPORTANT:
-   Existing project uses includes/config.php
-   ========================================================= */
-
 require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/session.php';
 
 
-/* =========================================================
-   HELPER
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Helper
+|--------------------------------------------------------------------------
+*/
 
 if (!function_exists('h')) {
-
     function h($value)
     {
         return htmlspecialchars(
@@ -24,45 +19,38 @@ if (!function_exists('h')) {
             'UTF-8'
         );
     }
-
 }
 
 
-/* =========================================================
-   LOAD DEALS
-   No separate deals table is required.
-   Deals are created from existing menu_items.
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Get Approved / Active Deals
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| The query tries to keep the deal customer-side only when:
+| - deal is approved
+| - deal is active
+|
+*/
 
 $deals = [];
 
 $sql = "
     SELECT
-        menu_items.id AS menu_id,
-        menu_items.restaurant_id,
-        menu_items.name AS item_name,
-        menu_items.description AS item_description,
-        menu_items.price,
-        menu_items.image AS item_image,
-        restaurants.name AS restaurant_name,
-        restaurants.image AS restaurant_image,
-        restaurants.rating,
-        restaurants.delivery_time,
-        restaurants.delivery_fee
-    FROM menu_items
-    INNER JOIN restaurants
-        ON restaurants.id = menu_items.restaurant_id
+        d.*,
+        r.name AS restaurant_name,
+        r.image AS restaurant_image
+    FROM deals d
+    INNER JOIN restaurants r
+        ON r.id = d.restaurant_id
     WHERE
-        menu_items.status = 1
-        AND restaurants.status = 1
-    ORDER BY
-        restaurants.rating DESC,
-        menu_items.price ASC
+        r.status = 1
+        AND d.status = 1
+    ORDER BY d.id DESC
 ";
 
-
 $result = $conn->query($sql);
-
 
 if ($result) {
 
@@ -75,56 +63,37 @@ if ($result) {
 }
 
 
-/* =========================================================
-   CREATE DEAL INFORMATION
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Image Helper
+|--------------------------------------------------------------------------
+*/
 
-foreach ($deals as &$deal) {
+function dealImage($image)
+{
+    $image = trim((string)$image);
 
-    /*
-     * Existing database does not have discount columns.
-     * We display attractive promotional deals without
-     * changing the database structure.
-     */
-
-    $price = (float)$deal['price'];
-
-    if ($price >= 1000) {
-
-        $discountPercent = 20;
-
-    } elseif ($price >= 600) {
-
-        $discountPercent = 15;
-
-    } elseif ($price >= 300) {
-
-        $discountPercent = 10;
-
-    } else {
-
-        $discountPercent = 5;
-
+    if ($image === '') {
+        return '';
     }
 
+    if (
+        strpos($image, 'http://') === 0 ||
+        strpos($image, 'https://') === 0
+    ) {
+        return $image;
+    }
 
-    $deal['discount_percent'] = $discountPercent;
-
-    $deal['old_price'] = $price;
-
-    $deal['deal_price'] =
-        $price - (
-            $price * $discountPercent / 100
-        );
-
+    /*
+     * Deal image
+     */
+    return 'assets/images/deals/' .
+        ltrim($image, '/');
 }
-
-unset($deal);
 
 ?>
 
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
@@ -136,12 +105,10 @@ unset($deal);
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>
-        Deals - Humsafar
-    </title>
+    <title>Deals - Humsafar</title>
 
 
-    <!-- Existing Website CSS -->
+    <!-- Existing Project CSS -->
 
     <link
         rel="stylesheet"
@@ -162,982 +129,776 @@ unset($deal);
     >
 
 
-<style>
+    <style>
 
-/* =========================================================
-   GLOBAL
-========================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | PAGE
+        |--------------------------------------------------------------------------
+        */
 
-* {
-    box-sizing: border-box;
-}
+        .deals-page {
 
+            width: 100%;
 
-body {
+            max-width: 1250px;
 
-    margin: 0;
+            margin: 0 auto;
 
-    background: #faf7fb;
+            padding:
+                35px 20px 60px;
+        }
 
-    color: #333;
 
-    font-family:
-        'Segoe UI',
-        Tahoma,
-        Geneva,
-        Verdana,
-        sans-serif;
+        /*
+        |--------------------------------------------------------------------------
+        | HERO
+        |--------------------------------------------------------------------------
+        */
 
-}
+        .deals-hero {
 
+            position: relative;
 
-/* =========================================================
-   PAGE WRAPPER
-========================================================= */
+            overflow: hidden;
 
-.deals-page {
+            padding:
+                35px 38px;
 
-    max-width: 1250px;
+            margin-bottom: 25px;
 
-    margin: 0 auto;
+            border-radius: 18px;
 
-    padding:
-        45px 20px 70px;
+            background:
+                linear-gradient(
+                    135deg,
+                    #ed1748,
+                    #f53b73
+                );
 
-}
+            box-shadow:
+                0 10px 28px
+                rgba(237,23,72,.15);
+        }
 
 
-/* =========================================================
-   PAGE HERO
-========================================================= */
+        .deals-hero::after {
 
-.deals-hero {
+            content: "";
 
-    position: relative;
+            position: absolute;
 
-    overflow: hidden;
+            width: 190px;
+            height: 190px;
 
-    border-radius: 24px;
+            right: -60px;
+            top: -80px;
 
-    padding:
-        45px 45px;
+            border-radius: 50%;
 
-    margin-bottom: 30px;
+            background:
+                rgba(255,255,255,.08);
+        }
 
-    background:
-        linear-gradient(
-            135deg,
-            #ff416c 0%,
-            #ff4b8b 45%,
-            #c850c0 100%
-        );
 
-    color: #fff;
+        .deals-hero h1 {
 
-    box-shadow:
-        0 15px 40px
-        rgba(210, 70, 150, .18);
+            position: relative;
 
-}
+            z-index: 2;
 
+            margin: 0 0 8px;
 
-.deals-hero::before {
+            color: #fff;
 
-    content: "";
+            font-size: 31px;
 
-    position: absolute;
+            font-weight: 800;
+        }
 
-    width: 230px;
 
-    height: 230px;
+        .deals-hero h1 i {
 
-    border-radius: 50%;
+            margin-right: 8px;
+        }
 
-    background:
-        rgba(255,255,255,.10);
 
-    right: -60px;
+        .deals-hero p {
 
-    top: -70px;
+            position: relative;
 
-}
+            z-index: 2;
 
+            margin: 0;
 
-.deals-hero::after {
+            color:
+                rgba(255,255,255,.92);
 
-    content: "";
+            font-size: 14px;
+        }
 
-    position: absolute;
 
-    width: 160px;
+        /*
+        |--------------------------------------------------------------------------
+        | DEAL FILTER
+        |--------------------------------------------------------------------------
+        */
 
-    height: 160px;
+        .deals-toolbar {
 
-    border-radius: 50%;
+            display: grid;
 
-    background:
-        rgba(255,255,255,.08);
+            grid-template-columns:
+                1fr
+                1fr;
 
-    right: 170px;
+            gap: 13px;
 
-    bottom: -100px;
+            margin-bottom: 25px;
 
-}
+            padding: 16px;
 
+            background: #fff;
 
-.deals-hero-content {
+            border:
+                1px solid #eee;
 
-    position: relative;
+            border-radius: 15px;
 
-    z-index: 2;
+            box-shadow:
+                0 6px 20px
+                rgba(0,0,0,.045);
+        }
 
-}
 
+        .deal-filter label {
 
-.deals-hero h1 {
+            display: block;
 
-    margin: 0;
+            margin-bottom: 6px;
 
-    font-size: 38px;
+            color: #444;
 
-    font-weight: 800;
+            font-size: 12px;
 
-}
+            font-weight: 700;
+        }
 
 
-.deals-hero h1 i {
+        .deal-filter input,
+        .deal-filter select {
 
-    margin-right: 10px;
+            width: 100%;
 
-}
+            height: 42px;
 
+            padding:
+                0 12px;
 
-.deals-hero p {
+            border:
+                1px solid #ddd;
 
-    margin:
-        10px 0 0;
+            border-radius: 9px;
 
-    max-width: 650px;
+            background: #fff;
 
-    font-size: 16px;
+            color: #333;
 
-    line-height: 1.6;
+            font-family: inherit;
 
-    color:
-        rgba(255,255,255,.92);
+            font-size: 13px;
 
-}
+            outline: none;
+        }
 
 
-/* =========================================================
-   SECTION TITLE
-========================================================= */
+        .deal-filter input:focus,
+        .deal-filter select:focus {
 
-.deals-section-title {
+            border-color: #ed1748;
 
-    margin-bottom: 20px;
+            box-shadow:
+                0 0 0 3px
+                rgba(237,23,72,.08);
+        }
 
-}
 
+        /*
+        |--------------------------------------------------------------------------
+        | GRID
+        |--------------------------------------------------------------------------
+        */
 
-.deals-section-title h2 {
+        .deals-grid {
 
-    margin: 0;
+            display: grid;
 
-    color: #262626;
+            grid-template-columns:
+                repeat(
+                    3,
+                    minmax(0,1fr)
+                );
 
-    font-size: 27px;
+            gap: 22px;
+        }
 
-    font-weight: 800;
 
-}
+        /*
+        |--------------------------------------------------------------------------
+        | CARD
+        |--------------------------------------------------------------------------
+        */
 
+        .deal-card {
 
-.deals-section-title p {
+            overflow: hidden;
 
-    margin:
-        6px 0 0;
+            display: flex;
 
-    color: #777;
+            flex-direction: column;
 
-    font-size: 14px;
+            min-width: 0;
 
-}
+            background: #fff;
 
+            border:
+                1px solid #eee;
 
-/* =========================================================
-   DEAL GRID
-========================================================= */
+            border-radius: 17px;
 
-.deals-grid {
+            box-shadow:
+                0 7px 23px
+                rgba(0,0,0,.055);
 
-    display: grid;
+            transition:
+                transform .25s ease,
+                box-shadow .25s ease;
+        }
 
-    grid-template-columns:
-        repeat(3, 1fr);
 
-    gap: 24px;
+        .deal-card:hover {
 
-}
+            transform:
+                translateY(-5px);
 
+            box-shadow:
+                0 15px 32px
+                rgba(0,0,0,.10);
+        }
 
-/* =========================================================
-   DEAL CARD
-========================================================= */
 
-.deal-card {
+        /*
+        |--------------------------------------------------------------------------
+        | IMAGE
+        |--------------------------------------------------------------------------
+        */
 
-    position: relative;
+        .deal-image {
 
-    overflow: hidden;
+            position: relative;
 
-    background: #fff;
+            width: 100%;
 
-    border-radius: 20px;
+            height: 205px;
 
-    border:
-        1px solid #f0e5ed;
+            overflow: hidden;
 
-    box-shadow:
-        0 8px 28px
-        rgba(60, 30, 60, .07);
+            background:
+                linear-gradient(
+                    135deg,
+                    #fff0f4,
+                    #ffe1ea
+                );
+        }
 
-    transition:
-        transform .25s ease,
-        box-shadow .25s ease;
 
-}
+        .deal-image img {
 
+            width: 100%;
 
-.deal-card:hover {
+            height: 100%;
 
-    transform:
-        translateY(-6px);
+            display: block;
 
-    box-shadow:
-        0 18px 40px
-        rgba(100, 40, 100, .13);
+            object-fit: cover;
 
-}
+            transition:
+                transform .35s ease;
+        }
 
 
-/* =========================================================
-   DEAL IMAGE
-========================================================= */
+        .deal-card:hover
+        .deal-image img {
 
-.deal-image {
+            transform:
+                scale(1.05);
+        }
 
-    position: relative;
 
-    height: 205px;
+        .deal-placeholder {
 
-    overflow: hidden;
+            width: 100%;
 
-    background:
-        linear-gradient(
-            135deg,
-            #fff0f6,
-            #f9e9f8
-        );
+            height: 100%;
 
-}
+            display: flex;
 
+            align-items: center;
 
-.deal-image img {
+            justify-content: center;
 
-    width: 100%;
+            color: #ed1748;
 
-    height: 100%;
+            font-size: 55px;
+        }
 
-    object-fit: cover;
 
-    display: block;
+        /*
+        |--------------------------------------------------------------------------
+        | DEAL BADGE
+        |--------------------------------------------------------------------------
+        */
 
-    transition:
-        transform .35s ease;
+        .deal-badge {
 
-}
+            position: absolute;
 
+            left: 12px;
 
-.deal-card:hover
-.deal-image img {
+            top: 12px;
 
-    transform:
-        scale(1.06);
+            padding:
+                7px 11px;
 
-}
+            border-radius: 20px;
 
+            background:
+                #ed1748;
 
-.deal-placeholder {
+            color: #fff;
 
-    width: 100%;
+            font-size: 10px;
 
-    height: 100%;
+            font-weight: 800;
 
-    display: flex;
+            box-shadow:
+                0 4px 12px
+                rgba(0,0,0,.15);
+        }
 
-    align-items: center;
 
-    justify-content: center;
+        .deal-badge i {
 
-    color: #d44c9b;
+            margin-right: 4px;
+        }
 
-    font-size: 55px;
 
-}
+        /*
+        |--------------------------------------------------------------------------
+        | CONTENT
+        |--------------------------------------------------------------------------
+        */
 
+        .deal-content {
 
-/* =========================================================
-   DISCOUNT BADGE
-========================================================= */
+            flex: 1;
 
-.discount-badge {
+            display: flex;
 
-    position: absolute;
+            flex-direction: column;
 
-    top: 14px;
+            padding: 17px;
+        }
 
-    left: 14px;
 
-    padding:
-        8px 12px;
+        .deal-title {
 
-    border-radius: 10px;
+            margin: 0;
 
-    background:
-        linear-gradient(
-            135deg,
-            #ff416c,
-            #c850c0
-        );
+            color: #222;
 
-    color: #fff;
+            font-size: 19px;
 
-    font-size: 13px;
+            line-height: 1.3;
 
-    font-weight: 800;
+            font-weight: 800;
+        }
 
-    box-shadow:
-        0 5px 15px
-        rgba(190, 50, 130, .25);
 
-}
+        .deal-restaurant {
 
+            display: flex;
 
-/* =========================================================
-   RATING
-========================================================= */
+            align-items: center;
 
-.deal-rating {
+            gap: 6px;
 
-    position: absolute;
+            margin-top: 7px;
 
-    right: 12px;
+            color: #ed1748;
 
-    bottom: 12px;
+            font-size: 12px;
 
-    display: inline-flex;
+            font-weight: 700;
+        }
 
-    align-items: center;
 
-    gap: 5px;
+        .deal-description {
 
-    padding:
-        7px 10px;
+            margin:
+                9px 0 15px;
 
-    border-radius: 20px;
+            color: #777;
 
-    background: rgba(255,255,255,.96);
+            font-size: 12.5px;
 
-    color: #333;
+            line-height: 1.5;
 
-    font-size: 12px;
+            min-height: 38px;
 
-    font-weight: 800;
+            display:
+                -webkit-box;
 
-    box-shadow:
-        0 4px 12px
-        rgba(0,0,0,.12);
+            -webkit-line-clamp: 2;
 
-}
+            -webkit-box-orient: vertical;
 
+            overflow: hidden;
+        }
 
-.deal-rating i {
 
-    color: #f5a623;
+        /*
+        |--------------------------------------------------------------------------
+        | PRICE BOX
+        |--------------------------------------------------------------------------
+        */
 
-}
+        .deal-price-box {
 
+            display: flex;
 
-/* =========================================================
-   DEAL CONTENT
-========================================================= */
+            align-items: center;
 
-.deal-content {
+            justify-content: space-between;
 
-    padding: 20px;
+            gap: 10px;
 
-}
+            padding:
+                12px;
 
+            margin-bottom: 13px;
 
-.deal-restaurant {
+            border-radius: 11px;
 
-    margin-bottom: 7px;
+            background:
+                #fff5f7;
 
-    color: #b33c8b;
+            border:
+                1px solid #ffe1e8;
+        }
 
-    font-size: 12px;
 
-    font-weight: 700;
+        .deal-old-price {
 
-}
+            display: block;
 
+            color: #999;
 
-.deal-title {
+            font-size: 11px;
 
-    margin: 0;
+            text-decoration:
+                line-through;
+        }
 
-    color: #222;
 
-    font-size: 20px;
+        .deal-final-price {
 
-    font-weight: 800;
+            display: block;
 
-    line-height: 1.3;
+            color: #ed1748;
 
-}
+            font-size: 22px;
 
+            font-weight: 900;
+        }
 
-.deal-description {
 
-    margin:
-        8px 0 15px;
+        .deal-markup {
 
-    min-height: 42px;
+            text-align: right;
 
-    color: #777;
+            color: #777;
 
-    font-size: 13px;
+            font-size: 10px;
 
-    line-height: 1.5;
+            line-height: 1.4;
+        }
 
-}
 
+        .deal-markup strong {
 
-/* =========================================================
-   PRICE AREA
-========================================================= */
+            display: block;
 
-.deal-price-row {
+            color: #159447;
 
-    display: flex;
+            font-size: 11px;
+        }
 
-    align-items: center;
 
-    justify-content: space-between;
+        /*
+        |--------------------------------------------------------------------------
+        | DETAILS
+        |--------------------------------------------------------------------------
+        */
 
-    gap: 12px;
+        .deal-details {
 
-    margin-bottom: 17px;
+            display: grid;
 
-    padding:
-        12px 13px;
+            grid-template-columns:
+                repeat(2,1fr);
 
-    border-radius: 12px;
+            gap: 7px;
 
-    background:
-        #fff7fb;
+            margin-bottom: 15px;
+        }
 
-    border:
-        1px solid #f7e4ef;
 
-}
+        .deal-detail {
 
+            min-height: 39px;
 
-.deal-prices {
+            display: flex;
 
-    display: flex;
+            align-items: center;
 
-    align-items: baseline;
+            justify-content: center;
 
-    flex-wrap: wrap;
+            gap: 5px;
 
-    gap: 7px;
+            padding:
+                5px;
 
-}
+            border:
+                1px solid #eee;
 
+            border-radius: 8px;
 
-.old-price {
+            background: #fafafa;
 
-    color: #999;
+            color: #555;
 
-    font-size: 13px;
+            font-size: 10px;
 
-    text-decoration: line-through;
+            font-weight: 600;
 
-}
+            text-align: center;
+        }
 
 
-.new-price {
+        .deal-detail i {
 
-    color: #c43d91;
+            color: #ed1748;
 
-    font-size: 21px;
+            font-size: 10px;
+        }
 
-    font-weight: 800;
 
-}
+        /*
+        |--------------------------------------------------------------------------
+        | BUTTON
+        |--------------------------------------------------------------------------
+        */
 
+        .deal-button {
 
-.save-price {
+            width: 100%;
 
-    flex-shrink: 0;
+            min-height: 43px;
 
-    padding:
-        5px 8px;
+            margin-top: auto;
 
-    border-radius: 7px;
+            display: flex;
 
-    background:
-        #f2e4f0;
+            align-items: center;
 
-    color: #9e3c82;
+            justify-content: center;
 
-    font-size: 11px;
+            gap: 7px;
 
-    font-weight: 800;
+            border-radius: 10px;
 
-}
+            background:
+                linear-gradient(
+                    135deg,
+                    #ed1748,
+                    #f53b73
+                );
 
+            color: #fff;
 
-/* =========================================================
-   META
-========================================================= */
+            font-size: 13px;
 
-.deal-meta {
+            font-weight: 700;
 
-    display: grid;
+            transition:
+                transform .2s ease,
+                filter .2s ease;
+        }
 
-    grid-template-columns:
-        1fr 1fr;
 
-    gap: 8px;
+        .deal-button:hover {
 
-    margin-bottom: 17px;
+            color: #fff;
 
-}
+            transform:
+                translateY(-1px);
 
+            filter:
+                brightness(.96);
+        }
 
-.deal-meta-item {
 
-    min-width: 0;
+        /*
+        |--------------------------------------------------------------------------
+        | EMPTY
+        |--------------------------------------------------------------------------
+        */
 
-    display: flex;
+        .deals-empty {
 
-    align-items: center;
+            grid-column:
+                1 / -1;
 
-    gap: 6px;
+            padding:
+                65px 20px;
 
-    padding:
-        8px 9px;
+            background: #fff;
 
-    border-radius: 9px;
+            border:
+                1px solid #eee;
 
-    background: #f8f8fa;
+            border-radius: 17px;
 
-    color: #666;
+            text-align: center;
 
-    font-size: 11px;
+            box-shadow:
+                0 6px 20px
+                rgba(0,0,0,.05);
+        }
 
-    font-weight: 600;
 
-    white-space: nowrap;
+        .deals-empty i {
 
-}
+            display: block;
 
+            margin-bottom: 15px;
 
-.deal-meta-item i {
+            color: #ed1748;
 
-    flex-shrink: 0;
+            font-size: 50px;
+        }
 
-    color: #c43d91;
 
-}
+        .deals-empty h2 {
 
+            margin: 0;
 
-.deal-meta-item span {
+            color: #222;
 
-    overflow: hidden;
+            font-size: 22px;
+        }
 
-    text-overflow: ellipsis;
 
-}
+        .deals-empty p {
 
+            margin:
+                7px 0 0;
 
-/* =========================================================
-   BUTTON
-========================================================= */
+            color: #777;
 
-.deal-button {
+            font-size: 13px;
+        }
 
-    width: 100%;
 
-    display: flex;
+        .deal-card.hidden {
 
-    align-items: center;
+            display: none;
+        }
 
-    justify-content: center;
 
-    gap: 8px;
+        /*
+        |--------------------------------------------------------------------------
+        | RESPONSIVE
+        |--------------------------------------------------------------------------
+        */
 
-    padding:
-        12px 15px;
+        @media (max-width: 1000px) {
 
-    border-radius: 11px;
+            .deals-grid {
 
-    background:
-        linear-gradient(
-            135deg,
-            #ff416c,
-            #c850c0
-        );
+                grid-template-columns:
+                    repeat(
+                        2,
+                        minmax(0,1fr)
+                    );
+            }
 
-    color: #fff;
+        }
 
-    text-decoration: none;
 
-    font-size: 14px;
+        @media (max-width: 700px) {
 
-    font-weight: 700;
+            .deals-page {
 
-    transition:
-        transform .2s ease,
-        box-shadow .2s ease;
+                padding:
+                    25px 13px 45px;
+            }
 
-}
 
+            .deals-hero {
 
-.deal-button:hover {
+                padding:
+                    27px 22px;
+            }
 
-    color: #fff;
 
-    transform:
-        translateY(-1px);
+            .deals-hero h1 {
 
-    box-shadow:
-        0 8px 18px
-        rgba(196,61,145,.25);
+                font-size: 25px;
+            }
 
-}
 
+            .deals-hero p {
 
-/* =========================================================
-   EMPTY
-========================================================= */
+                font-size: 12px;
+            }
 
-.no-deals {
 
-    padding:
-        70px 20px;
+            .deals-toolbar {
 
-    text-align: center;
+                grid-template-columns:
+                    1fr;
+            }
 
-    background: #fff;
 
-    border-radius: 20px;
+            .deals-grid {
 
-    border:
-        1px solid #f0e5ed;
+                grid-template-columns:
+                    1fr;
 
-    box-shadow:
-        0 8px 28px
-        rgba(60,30,60,.06);
+                gap: 18px;
+            }
 
-}
 
+            .deal-image {
 
-.no-deals i {
+                height: 220px;
+            }
 
-    margin-bottom: 15px;
+        }
 
-    color: #c850a0;
-
-    font-size: 55px;
-
-}
-
-
-.no-deals h2 {
-
-    margin: 0;
-
-    color: #222;
-
-}
-
-
-.no-deals p {
-
-    margin-top: 8px;
-
-    color: #777;
-
-}
-
-
-/* =========================================================
-   FOOTER
-========================================================= */
-
-footer {
-
-    margin-top: 0;
-
-    background: #242024;
-
-    color: #fff;
-
-}
-
-
-.footer-content {
-
-    max-width: 1250px;
-
-    margin: auto;
-
-    padding:
-        45px 20px;
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(4, 1fr);
-
-    gap: 30px;
-
-}
-
-
-.footer-column h3 {
-
-    margin:
-        0 0 15px;
-
-    font-size: 17px;
-
-}
-
-
-.footer-column ul {
-
-    list-style: none;
-
-    padding: 0;
-
-    margin: 0;
-
-}
-
-
-.footer-column li {
-
-    margin-bottom: 9px;
-
-}
-
-
-.footer-column a {
-
-    color: #bbb;
-
-    text-decoration: none;
-
-    font-size: 14px;
-
-}
-
-
-.footer-column a:hover {
-
-    color: #ff5f91;
-
-}
-
-
-.social-icons {
-
-    display: flex;
-
-    gap: 10px;
-
-    margin-top: 15px;
-
-}
-
-
-.social-icons a {
-
-    width: 35px;
-
-    height: 35px;
-
-    border-radius: 50%;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    background: #353035;
-
-    color: #fff;
-
-}
-
-
-.social-icons a:hover {
-
-    background:
-        linear-gradient(
-            135deg,
-            #ff416c,
-            #c850c0
-        );
-
-}
-
-
-.copyright {
-
-    border-top:
-        1px solid #3d383d;
-
-    text-align: center;
-
-    padding:
-        18px 15px;
-
-    color: #aaa;
-
-    font-size: 13px;
-
-}
-
-
-.copyright p {
-
-    margin: 0;
-
-}
-
-
-/* =========================================================
-   RESPONSIVE
-========================================================= */
-
-@media (max-width: 1000px) {
-
-    .deals-grid {
-
-        grid-template-columns:
-            repeat(2, 1fr);
-
-    }
-
-}
-
-
-@media (max-width: 650px) {
-
-    .deals-page {
-
-        padding:
-            25px 12px 50px;
-
-    }
-
-
-    .deals-hero {
-
-        padding:
-            30px 25px;
-
-        border-radius: 18px;
-
-    }
-
-
-    .deals-hero h1 {
-
-        font-size: 29px;
-
-    }
-
-
-    .deals-hero p {
-
-        font-size: 14px;
-
-    }
-
-
-    .deals-grid {
-
-        grid-template-columns: 1fr;
-
-        gap: 18px;
-
-    }
-
-
-    .deal-image {
-
-        height: 220px;
-
-    }
-
-
-    .footer-content {
-
-        grid-template-columns:
-            1fr 1fr;
-
-    }
-
-}
-
-
-@media (max-width: 420px) {
-
-    .footer-content {
-
-        grid-template-columns:
-            1fr;
-
-    }
-
-
-    .deal-price-row {
-
-        align-items: flex-start;
-
-        flex-direction: column;
-
-    }
-
-
-    .deal-meta {
-
-        grid-template-columns:
-            1fr;
-
-    }
-
-}
-
-</style>
+    </style>
 
 </head>
 
@@ -1145,123 +906,20 @@ footer {
 <body>
 
 
-<!-- =========================================================
-     HEADER
-========================================================= -->
+<?php
 
-<header>
+/*
+|--------------------------------------------------------------------------
+| EXISTING CUSTOMER HEADER
+|--------------------------------------------------------------------------
+|
+| Same header as customer pages.
+|
+*/
 
-    <div class="top-bar">
+require_once __DIR__ . '/includes/customer-header.php';
 
-
-        <a
-            href="index.php"
-            class="logo"
-        >
-
-            <i class="fas fa-utensils"></i>
-
-            <h1>
-                Humsafar
-            </h1>
-
-        </a>
-
-
-        <div class="search-bar">
-
-            <input
-                type="text"
-                placeholder="Search for restaurants or food..."
-            >
-
-            <i class="fas fa-search"></i>
-
-        </div>
-
-
-        <div class="user-actions">
-
-            <a
-                href="cart.php"
-                id="cart-btn"
-            >
-
-                <i class="fas fa-shopping-cart"></i>
-
-                Cart
-
-            </a>
-
-
-            <a
-                href="login.php"
-                class="sign-in"
-            >
-
-                Sign In
-
-            </a>
-
-
-            <a
-                href="signup.php"
-                class="sign-up"
-            >
-
-                Sign Up
-
-            </a>
-
-        </div>
-
-    </div>
-
-
-    <nav>
-
-        <ul>
-
-            <li>
-                <a href="index.php">
-                    Home
-                </a>
-            </li>
-
-            <li>
-                <a href="restaurants.php">
-                    Restaurants
-                </a>
-            </li>
-
-            <li>
-                <a
-                    href="deals.php"
-                    class="active"
-                >
-                    Deals
-                </a>
-            </li>
-
-            <li>
-                <a href="my-account.php">
-                    My Account
-                </a>
-            </li>
-
-            <li>
-                <a href="#">
-                    Help
-                </a>
-            </li>
-
-            
-
-        </ul>
-
-    </nav>
-
-</header>
+?>
 
 
 <!-- =========================================================
@@ -1275,50 +933,94 @@ footer {
 
     <section class="deals-hero">
 
-        <div class="deals-hero-content">
+        <h1>
 
-            <h1>
+            <i class="fas fa-tags"></i>
 
-                <i class="fas fa-tags"></i>
+            Today's Deals
 
-                Today's Best Deals
+        </h1>
 
-            </h1>
+        <p>
 
-            <p>
+            Grab amazing deals from our approved restaurants
+            at special prices.
 
-                Save more on your favorite food.
-                Explore special offers from restaurants
-                available on Humsafar.
-
-            </p>
-
-        </div>
+        </p>
 
     </section>
 
 
-    <!-- TITLE -->
+    <!-- =====================================================
+         FILTERS
+    ====================================================== -->
 
-    <div class="deals-section-title">
-
-        <h2>
-            Exclusive Food Deals
-        </h2>
-
-        <p>
-            Grab your favorite meals at special prices.
-        </p>
-
-    </div>
+    <section class="deals-toolbar">
 
 
-    <?php if (!empty($deals)) { ?>
+        <!-- SEARCH -->
+
+        <div class="deal-filter">
+
+            <label for="deal-search">
+                Search Deal
+            </label>
+
+            <input
+                type="text"
+                id="deal-search"
+                placeholder="Search deals or restaurants..."
+                autocomplete="off"
+            >
+
+        </div>
 
 
-        <!-- DEALS -->
+        <!-- SORT -->
 
-        <div class="deals-grid">
+        <div class="deal-filter">
+
+            <label for="deal-sort">
+                Sort By
+            </label>
+
+            <select id="deal-sort">
+
+                <option value="latest">
+                    Latest Deals
+                </option>
+
+                <option value="price-low">
+                    Price: Low to High
+                </option>
+
+                <option value="price-high">
+                    Price: High to Low
+                </option>
+
+                <option value="discount">
+                    Highest Discount
+                </option>
+
+            </select>
+
+        </div>
+
+
+    </section>
+
+
+    <!-- =====================================================
+         DEALS
+    ====================================================== -->
+
+    <section
+        class="deals-grid"
+        id="deals-grid"
+    >
+
+
+        <?php if (!empty($deals)) { ?>
 
 
             <?php foreach ($deals as $deal) { ?>
@@ -1326,63 +1028,200 @@ footer {
 
                 <?php
 
-                $itemName =
-                    $deal['item_name']
-                    ?? 'Special Deal';
+                /*
+                |--------------------------------------------------------------------------
+                | Deal Values
+                |--------------------------------------------------------------------------
+                */
 
-                $restaurantName =
-                    $deal['restaurant_name']
-                    ?? 'Restaurant';
+                $dealId =
+                    (int)(
+                        $deal['id']
+                        ?? 0
+                    );
+
+
+                $restaurantId =
+                    (int)(
+                        $deal['restaurant_id']
+                        ?? 0
+                    );
+
+
+                $dealName =
+                    trim(
+                        (string)(
+                            $deal['name']
+                            ?? $deal['title']
+                            ?? 'Special Deal'
+                        )
+                    );
+
 
                 $description =
-                    $deal['item_description']
-                    ?? 'Delicious food at a special price.';
+                    trim(
+                        (string)(
+                            $deal['description']
+                            ?? ''
+                        )
+                    );
 
-                $itemImage =
-                    $deal['item_image']
-                    ?? '';
 
-                $rating =
+                $restaurantName =
+                    trim(
+                        (string)(
+                            $deal['restaurant_name']
+                            ?? 'Restaurant'
+                        )
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Owner Price
+                |--------------------------------------------------------------------------
+                */
+
+                $ownerPrice =
                     (float)(
-                        $deal['rating']
+                        $deal['price']
+                        ?? $deal['deal_price']
+                        ?? $deal['original_price']
                         ?? 0
                     );
 
-                $deliveryTime =
-                    $deal['delivery_time']
-                    ?? '';
 
-                $deliveryFee =
+                /*
+                |--------------------------------------------------------------------------
+                | Admin Markup
+                |--------------------------------------------------------------------------
+                |
+                | Supports percentage OR fixed markup.
+                |
+                */
+
+                $markupPercent =
                     (float)(
-                        $deal['delivery_fee']
+                        $deal['admin_markup_percent']
                         ?? 0
                     );
 
-                $oldPrice =
+
+                $markupAmount =
                     (float)(
-                        $deal['old_price']
+                        $deal['admin_markup']
+                        ?? $deal['markup']
                         ?? 0
                     );
 
-                $dealPrice =
-                    (float)(
-                        $deal['deal_price']
-                        ?? 0
-                    );
+
+                /*
+                |--------------------------------------------------------------------------
+                | Calculate Admin Markup
+                |--------------------------------------------------------------------------
+                */
+
+                if (
+                    $markupPercent > 0
+                ) {
+
+                    $adminMarkupValue =
+                        $ownerPrice *
+                        ($markupPercent / 100);
+
+                } else {
+
+                    $adminMarkupValue =
+                        $markupAmount;
+                }
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Final Customer Price
+                |--------------------------------------------------------------------------
+                */
+
+                $finalPrice =
+                    $ownerPrice +
+                    $adminMarkupValue;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Discount
+                |--------------------------------------------------------------------------
+                */
 
                 $discount =
-                    (int)(
-                        $deal['discount_percent']
+                    (float)(
+                        $deal['discount']
+                        ?? $deal['discount_percent']
                         ?? 0
                     );
 
-                $saving =
-                    $oldPrice - $dealPrice;
+
+                /*
+                |--------------------------------------------------------------------------
+                | Image
+                |--------------------------------------------------------------------------
+                */
+
+                $image =
+                    dealImage(
+                        $deal['image']
+                        ?? ''
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Valid Until
+                |--------------------------------------------------------------------------
+                */
+
+                $validUntil =
+                    trim(
+                        (string)(
+                            $deal['valid_until']
+                            ?? $deal['end_date']
+                            ?? ''
+                        )
+                    );
+
 
                 ?>
 
 
-                <article class="deal-card">
+                <!-- DEAL CARD -->
+
+                <article
+                    class="deal-card"
+
+                    data-name="<?php
+
+                        echo h(
+                            strtolower(
+                                $dealName
+                                . ' '
+                                . $restaurantName
+                            )
+                        );
+
+                    ?>"
+
+                    data-price="<?php
+                        echo $finalPrice;
+                    ?>"
+
+                    data-discount="<?php
+                        echo $discount;
+                    ?>"
+
+                    data-id="<?php
+                        echo $dealId;
+                    ?>"
+                >
 
 
                     <!-- IMAGE -->
@@ -1390,57 +1229,57 @@ footer {
                     <div class="deal-image">
 
 
-                        <?php if (!empty($itemImage)) { ?>
+                        <?php if ($image !== '') { ?>
+
 
                             <img
-                                src="assets/images/menu/<?php
-                                    echo h($itemImage);
+                                src="<?php
+                                    echo h($image);
                                 ?>"
+
                                 alt="<?php
-                                    echo h($itemName);
+                                    echo h($dealName);
                                 ?>"
+
                                 loading="lazy"
+
                                 onerror="
-                                    this.onerror=null;
-                                    this.src='assets/images/restaurants/<?php
-                                        echo h(
-                                            $deal['restaurant_image']
-                                            ?? ''
-                                        );
-                                    ?>';
+                                    this.style.display='none';
+                                    this.nextElementSibling.style.display='flex';
                                 "
                             >
 
+
+                            <div
+                                class="deal-placeholder"
+                                style="display:none;"
+                            >
+
+                                <i class="fas fa-tags"></i>
+
+                            </div>
+
+
                         <?php } else { ?>
+
 
                             <div class="deal-placeholder">
 
-                                <i class="fas fa-utensils"></i>
+                                <i class="fas fa-tags"></i>
 
                             </div>
+
 
                         <?php } ?>
 
 
-                        <div class="discount-badge">
+                        <!-- DEAL BADGE -->
 
-                            <i class="fas fa-percent"></i>
+                        <div class="deal-badge">
 
-                            <?php echo $discount; ?>% OFF
+                            <i class="fas fa-fire"></i>
 
-                        </div>
-
-
-                        <div class="deal-rating">
-
-                            <i class="fas fa-star"></i>
-
-                            <?php
-                                echo number_format(
-                                    $rating,
-                                    1
-                                );
-                            ?>
+                            Special Deal
 
                         </div>
 
@@ -1453,39 +1292,39 @@ footer {
                     <div class="deal-content">
 
 
+                        <!-- DEAL NAME -->
+
+                        <h2 class="deal-title">
+
+                            <?php
+                            echo h($dealName);
+                            ?>
+
+                        </h2>
+
+
+                        <!-- RESTAURANT -->
+
                         <div class="deal-restaurant">
 
                             <i class="fas fa-store"></i>
 
                             <?php
-                                echo h(
-                                    $restaurantName
-                                );
+                            echo h(
+                                $restaurantName
+                            );
                             ?>
 
                         </div>
 
 
-                        <h3 class="deal-title">
-
-                            <?php
-                                echo h(
-                                    $itemName
-                                );
-                            ?>
-
-                        </h3>
-
+                        <!-- DESCRIPTION -->
 
                         <p class="deal-description">
 
                             <?php
 
-                            if (
-                                trim(
-                                    $description
-                                ) !== ''
-                            ) {
+                            if ($description !== '') {
 
                                 echo h(
                                     $description
@@ -1494,7 +1333,7 @@ footer {
                             } else {
 
                                 echo
-                                    'Delicious food at a special price.';
+                                    'Enjoy this special restaurant deal on Humsafar.';
 
                             }
 
@@ -1503,95 +1342,142 @@ footer {
                         </p>
 
 
-                        <!-- PRICE -->
+                        <!-- =================================================
+                             PRICE
+                        ================================================== -->
 
-                        <div class="deal-price-row">
+                        <div class="deal-price-box">
 
 
-                            <div class="deal-prices">
+                            <div>
 
-                                <span class="old-price">
+                                <?php if ($ownerPrice > 0) { ?>
+
+                                    <span class="deal-old-price">
+
+                                        Restaurant Price:
+                                        Rs.
+                                        <?php
+                                        echo number_format(
+                                            $ownerPrice,
+                                            0
+                                        );
+                                        ?>
+
+                                    </span>
+
+                                <?php } ?>
+
+
+                                <span class="deal-final-price">
 
                                     Rs.
                                     <?php
-                                        echo number_format(
-                                            $oldPrice,
-                                            0
-                                        );
-                                    ?>
-
-                                </span>
-
-
-                                <span class="new-price">
-
-                                    Rs.
-                                    <?php
-                                        echo number_format(
-                                            $dealPrice,
-                                            0
-                                        );
-                                    ?>
-
-                                </span>
-
-                            </div>
-
-
-                            <span class="save-price">
-
-                                Save Rs.
-                                <?php
                                     echo number_format(
-                                        $saving,
+                                        $finalPrice,
                                         0
                                     );
-                                ?>
+                                    ?>
 
-                            </span>
+                                </span>
+
+                            </div>
+
+
+                            <!-- MARKUP INFO -->
+
+                            <div class="deal-markup">
+
+                                <?php if ($adminMarkupValue > 0) { ?>
+
+                                    <strong>
+
+                                        <i class="fas fa-check-circle"></i>
+
+                                        Humsafar Price
+
+                                    </strong>
+
+                                    Includes service markup
+
+                                <?php } else { ?>
+
+                                    <strong>
+
+                                        Special Price
+
+                                    </strong>
+
+                                <?php } ?>
+
+                            </div>
 
 
                         </div>
 
 
-                        <!-- META -->
+                        <!-- DETAILS -->
 
-                        <div class="deal-meta">
+                        <div class="deal-details">
 
 
-                            <div class="deal-meta-item">
+                            <!-- DISCOUNT -->
 
-                                <i
-                                    class="fas fa-clock"
-                                ></i>
+                            <div class="deal-detail">
+
+                                <i class="fas fa-percent"></i>
 
                                 <span>
 
                                     <?php
+
+                                    if ($discount > 0) {
+
+                                        echo
+                                            number_format(
+                                                $discount,
+                                                0
+                                            )
+                                            . '% OFF';
+
+                                    } else {
+
+                                        echo 'Special Offer';
+
+                                    }
+
+                                    ?>
+
+                                </span>
+
+                            </div>
+
+
+                            <!-- VALIDITY -->
+
+                            <div class="deal-detail">
+
+                                <i class="fas fa-calendar"></i>
+
+                                <span>
+
+                                    <?php
+
+                                    if (
+                                        $validUntil !== ''
+                                    ) {
+
                                         echo h(
-                                            $deliveryTime
+                                            $validUntil
                                         );
-                                    ?>
 
-                                </span>
+                                    } else {
 
-                            </div>
+                                        echo
+                                            'Limited Time';
 
+                                    }
 
-                            <div class="deal-meta-item">
-
-                                <i
-                                    class="fas fa-motorcycle"
-                                ></i>
-
-                                <span>
-
-                                    Rs.
-                                    <?php
-                                        echo number_format(
-                                            $deliveryFee,
-                                            0
-                                        );
                                     ?>
 
                                 </span>
@@ -1602,21 +1488,18 @@ footer {
                         </div>
 
 
-                        <!-- BUTTON -->
+                        <!-- VIEW DEAL -->
 
                         <a
-                            href="restaurant.php?id=<?php
-                                echo (int)
-                                    $deal['restaurant_id'];
+                            href="deal.php?id=<?php
+                                echo $dealId;
                             ?>"
                             class="deal-button"
                         >
 
-                            <i
-                                class="fas fa-utensils"
-                            ></i>
+                            View Deal
 
-                            View Restaurant
+                            <i class="fas fa-arrow-right"></i>
 
                         </a>
 
@@ -1630,184 +1513,332 @@ footer {
             <?php } ?>
 
 
-        </div>
+            <!-- FILTER EMPTY -->
+
+            <div
+                id="deals-no-results"
+                class="deals-empty"
+                style="display:none;"
+            >
+
+                <i class="fas fa-search"></i>
+
+                <h2>
+                    No Deals Found
+                </h2>
+
+                <p>
+                    Try searching for another deal or restaurant.
+                </p>
+
+            </div>
 
 
-    <?php } else { ?>
+        <?php } else { ?>
 
 
-        <!-- EMPTY -->
+            <!-- NO DEALS -->
 
-        <div class="no-deals">
+            <div class="deals-empty">
 
-            <i
-                class="fas fa-tags"
-            ></i>
+                <i class="fas fa-tags"></i>
 
-            <h2>
-                No Deals Available
-            </h2>
+                <h2>
+                    No Deals Available
+                </h2>
 
-            <p>
-                There are currently no food deals available.
-            </p>
+                <p>
+                    There are currently no approved deals available.
+                </p>
 
-        </div>
+            </div>
 
 
-    <?php } ?>
+        <?php } ?>
+
+
+    </section>
 
 
 </main>
 
 
 <!-- =========================================================
-     FOOTER
+     JAVASCRIPT
 ========================================================= -->
 
-<footer>
+<script>
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
 
 
-    <div class="footer-content">
+        const grid =
+            document.getElementById(
+                'deals-grid'
+            );
 
 
-        <div class="footer-column">
-
-            <h3>
-                Humsafar
-            </h3>
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        About Us
-                    </a>
-                </li>
-
-                
-
-                <li>
-                    <a href="#">
-                        Press
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Blog
-                    </a>
-                </li>
-
-            </ul>
-
-        </div>
+        if (!grid) {
+            return;
+        }
 
 
-        <div class="footer-column">
-
-            <h3>
-                For Foodies
-            </h3>
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        Code of Conduct
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Community
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Blogger Help
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Mobile Apps
-                    </a>
-                </li>
-
-            </ul>
-
-        </div>
+        const cards =
+            Array.from(
+                grid.querySelectorAll(
+                    '.deal-card'
+                )
+            );
 
 
-        
-
-        <div class="footer-column">
-
-            <h3>
-                Contact Us
-            </h3>
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        Help & Support
-                    </a>
-                </li>
-
-            
-
-                
-
-            </ul>
+        const search =
+            document.getElementById(
+                'deal-search'
+            );
 
 
-            <div class="social-icons">
-
-                <a href="#">
-                    <i class="fab fa-facebook"></i>
-                </a>
-
-                <a href="#">
-                    <i class="fab fa-twitter"></i>
-                </a>
-
-                <a href="#">
-                    <i class="fab fa-instagram"></i>
-                </a>
-
-                <a href="#">
-                    <i class="fab fa-youtube"></i>
-                </a>
-
-            </div>
-
-        </div>
+        const sort =
+            document.getElementById(
+                'deal-sort'
+            );
 
 
-    </div>
+        const noResults =
+            document.getElementById(
+                'deals-no-results'
+            );
 
 
-    <div class="copyright">
+        /*
+        |--------------------------------------------------------------------------
+        | FILTER
+        |--------------------------------------------------------------------------
+        */
 
-        <p>
-
-            &copy;
-            <?php echo date('Y'); ?>
-
-            Humsafar Food Delivery.
-            All rights reserved.
-
-        </p>
-
-    </div>
+        function filterDeals() {
 
 
-</footer>
+            const searchValue =
+                search
+                    ? search.value
+                        .trim()
+                        .toLowerCase()
+                    : '';
+
+
+            let visible = 0;
+
+
+            cards.forEach(
+                function (card) {
+
+
+                    const name =
+                        (
+                            card.dataset.name
+                            || ''
+                        ).toLowerCase();
+
+
+                    if (
+                        name.includes(
+                            searchValue
+                        )
+                    ) {
+
+                        card.classList.remove(
+                            'hidden'
+                        );
+
+                        visible++;
+
+                    } else {
+
+                        card.classList.add(
+                            'hidden'
+                        );
+
+                    }
+
+                }
+            );
+
+
+            sortDeals();
+
+
+            if (noResults) {
+
+                noResults.style.display =
+                    visible === 0
+                        ? 'block'
+                        : 'none';
+
+            }
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SORT
+        |--------------------------------------------------------------------------
+        */
+
+        function sortDeals() {
+
+
+            if (!sort) {
+                return;
+            }
+
+
+            const value =
+                sort.value;
+
+
+            cards.sort(
+                function (a, b) {
+
+
+                    if (
+                        value === 'price-low'
+                    ) {
+
+                        return (
+                            parseFloat(
+                                a.dataset.price || 0
+                            )
+                            -
+                            parseFloat(
+                                b.dataset.price || 0
+                            )
+                        );
+
+                    }
+
+
+                    if (
+                        value === 'price-high'
+                    ) {
+
+                        return (
+                            parseFloat(
+                                b.dataset.price || 0
+                            )
+                            -
+                            parseFloat(
+                                a.dataset.price || 0
+                            )
+                        );
+
+                    }
+
+
+                    if (
+                        value === 'discount'
+                    ) {
+
+                        return (
+                            parseFloat(
+                                b.dataset.discount || 0
+                            )
+                            -
+                            parseFloat(
+                                a.dataset.discount || 0
+                            )
+                        );
+
+                    }
+
+
+                    /*
+                     * Latest
+                     */
+
+                    return (
+                        parseInt(
+                            b.dataset.id || 0
+                        )
+                        -
+                        parseInt(
+                            a.dataset.id || 0
+                        )
+                    );
+
+                }
+            );
+
+
+            cards.forEach(
+                function (card) {
+
+                    grid.appendChild(
+                        card
+                    );
+
+                }
+            );
+
+
+            if (noResults) {
+
+                grid.appendChild(
+                    noResults
+                );
+
+            }
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | EVENTS
+        |--------------------------------------------------------------------------
+        */
+
+        if (search) {
+
+            search.addEventListener(
+                'input',
+                filterDeals
+            );
+
+        }
+
+
+        if (sort) {
+
+            sort.addEventListener(
+                'change',
+                function () {
+
+                    sortDeals();
+
+                    filterDeals();
+
+                }
+            );
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | INITIAL
+        |--------------------------------------------------------------------------
+        */
+
+        filterDeals();
+
+    }
+);
+
+</script>
 
 
 </body>
-
 </html>

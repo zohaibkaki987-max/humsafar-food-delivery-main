@@ -1056,6 +1056,32 @@ if (!file_exists(__DIR__ . '/' . $ordersPage)) {
 
             </a>
 
+           <a
+
+           href="<?php echo restaurantSidebarSafe('restaurant-owner-manage-deals.php'); ?>"
+           class="
+           hrs-nav-item
+        
+        <?php
+        
+        echo restaurantSidebarActive(
+            [
+                'restaurant-owner-manage-deals.php'
+            ]
+        );
+        
+        ?>
+    "
+>
+    <i
+        class="fa-solid fa-tags main-icon"
+    ></i>
+
+    <span>
+        Manage Deals
+    </span>
+</a>
+
         <?php else: ?>
 
             <div

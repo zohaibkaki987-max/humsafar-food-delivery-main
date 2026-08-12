@@ -1,63 +1,25 @@
 <?php
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/session.php';
 
-/* =========================================================
-   HUMSAFAR - RESTAURANTS PAGE
-   Complete standalone page
-========================================================= */
-
-require_once 'includes/config.php';
-require_once 'includes/session.php';
-
-
-/* =========================================================
-   HELPER
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Helper
+|--------------------------------------------------------------------------
+*/
 
 if (!function_exists('h')) {
-
     function h($value)
     {
-        return htmlspecialchars(
-            (string)$value,
-            ENT_QUOTES,
-            'UTF-8'
-        );
+        return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
     }
-
 }
 
-
-/* =========================================================
-   USER INFORMATION
-========================================================= */
-
-$userName = 'Guest';
-
-if (isset($_SESSION['user_id'])) {
-
-    if (!empty($_SESSION['full_name'])) {
-
-        $userName =
-            $_SESSION['full_name'];
-
-    } elseif (!empty($_SESSION['user_name'])) {
-
-        $userName =
-            $_SESSION['user_name'];
-
-    } elseif (!empty($_SESSION['name'])) {
-
-        $userName =
-            $_SESSION['name'];
-
-    }
-
-}
-
-
-/* =========================================================
-   RESTAURANTS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| Get Approved Restaurants
+|--------------------------------------------------------------------------
+*/
 
 $restaurants = [];
 
@@ -65,861 +27,315 @@ $sql = "
     SELECT *
     FROM restaurants
     WHERE status = 1
-    ORDER BY rating DESC
+    ORDER BY rating DESC, id DESC
 ";
 
 $result = $conn->query($sql);
 
-
 if ($result) {
-
     while ($row = $result->fetch_assoc()) {
-
         $restaurants[] = $row;
-
     }
-
 }
 
+/*
+|--------------------------------------------------------------------------
+| Restaurant Image
+|--------------------------------------------------------------------------
+*/
 
-/* =========================================================
-   CART COUNT
-========================================================= */
+function restaurantImage($image)
+{
+    $image = trim((string)$image);
 
-$cartCount = 0;
-
-if (isset($_SESSION['user_id'])) {
-
-    $currentUserId =
-        (int)$_SESSION['user_id'];
-
-    $cartSql = "
-        SELECT COALESCE(SUM(quantity), 0) AS total
-        FROM cart
-        WHERE user_id = $currentUserId
-    ";
-
-    $cartResult =
-        $conn->query($cartSql);
-
-    if ($cartResult) {
-
-        $cartRow =
-            $cartResult->fetch_assoc();
-
-        $cartCount =
-            (int)($cartRow['total'] ?? 0);
-
+    if ($image === '') {
+        return '';
     }
 
+    /*
+     * If database already contains a complete URL
+     */
+    if (
+        strpos($image, 'http://') === 0 ||
+        strpos($image, 'https://') === 0
+    ) {
+        return $image;
+    }
+
+    /*
+     * Existing Humsafar restaurant image directory
+     */
+    return 'assets/images/restaurants/' . ltrim($image, '/');
 }
 
 ?>
 
-
 <!DOCTYPE html>
-
 <html lang="en">
 
 <head>
 
-
     <meta charset="UTF-8">
-
 
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
 
+    <title>Restaurants - Humsafar</title>
 
-    <title>
-        Restaurants - Humsafar
-    </title>
-
-
-    <!-- MAIN WEBSITE CSS -->
-
+    <!-- Existing project CSS -->
     <link
         rel="stylesheet"
         href="css/style.css"
     >
-
-
-    <!-- HEADER CSS -->
 
     <link
         rel="stylesheet"
         href="css/css_header.css"
     >
 
-
-    <!-- FONT AWESOME -->
-
+    <!-- Font Awesome -->
     <link
         rel="stylesheet"
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
     >
 
-
     <style>
 
+        /*
+        |--------------------------------------------------------------------------
+        | Restaurants Page
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           GLOBAL
-        ===================================================== */
-
-        * {
-
-            box-sizing: border-box;
-
-        }
-
-
-        html {
-
-            scroll-behavior: smooth;
-
-        }
-
-
-        body {
-
-            margin: 0;
-
-            background:
-                #f6f7fb;
-
-            color:
-                #292929;
-
-            font-family:
-                'Segoe UI',
-                Tahoma,
-                Geneva,
-                Verdana,
-                sans-serif;
-
-        }
-
-
-        a {
-
-            text-decoration: none;
-
-        }
-
-
-        /* =====================================================
-           HEADER
-        ===================================================== */
-
-        .hs-header {
-
+        .restaurants-page {
             width: 100%;
-
-            background:
-                #ffffff;
-
-            box-shadow:
-                0 2px 12px
-                rgba(0,0,0,.06);
-
-            position: relative;
-
-            z-index: 1000;
-
-        }
-
-
-        .hs-top-bar {
-
-            width: 100%;
-
             max-width: 1250px;
-
-            min-height: 54px;
-
             margin: 0 auto;
-
-            padding:
-                0 20px;
-
-            display: flex;
-
-            align-items: center;
-
-            justify-content: space-between;
-
-            gap: 22px;
-
+            padding: 35px 20px 60px;
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Hero
+        |--------------------------------------------------------------------------
+        */
 
-        /* LOGO */
-
-        .hs-logo {
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 7px;
-
-            color:
-                #ed1748;
-
-            flex-shrink: 0;
-
-        }
-
-
-        .hs-logo i {
-
-            font-size: 17px;
-
-        }
-
-
-        .hs-logo h1 {
-
-            margin: 0;
-
-            font-size: 21px;
-
-            font-weight: 800;
-
-            color:
-                #ed1748;
-
-        }
-
-
-        /* SEARCH */
-
-        .hs-header-search {
-
+        .restaurants-hero {
             position: relative;
-
-            width: 350px;
-
-            max-width: 100%;
-
-        }
-
-
-        .hs-header-search input {
-
-            width: 100%;
-
-            height: 36px;
-
-            padding:
-                0 40px 0 15px;
-
-            border:
-                1px solid #ddd;
-
-            border-radius: 20px;
-
-            outline: none;
-
-            background:
-                #fafafa;
-
-            color:
-                #333;
-
-            font-size: 12px;
-
-        }
-
-
-        .hs-header-search input:focus {
-
-            border-color:
-                #f42a65;
-
-            background:
-                #fff;
-
-            box-shadow:
-                0 0 0 3px
-                rgba(244,42,101,.08);
-
-        }
-
-
-        .hs-header-search i {
-
-            position: absolute;
-
-            right: 14px;
-
-            top: 50%;
-
-            transform:
-                translateY(-50%);
-
-            color:
-                #888;
-
-            font-size: 13px;
-
-        }
-
-
-        /* USER ACTIONS */
-
-        .hs-user-actions {
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 18px;
-
-            flex-shrink: 0;
-
-        }
-
-
-        .hs-user-actions a {
-
-            color:
-                #333;
-
-            font-size: 12px;
-
-            font-weight: 600;
-
-            white-space: nowrap;
-
-        }
-
-
-        .hs-user-actions a:hover {
-
-            color:
-                #ed1748;
-
-        }
-
-
-        .hs-cart {
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 5px;
-
-        }
-
-
-        .hs-cart-count {
-
-            min-width: 17px;
-
-            height: 17px;
-
-            padding: 0 4px;
-
-            display: inline-flex;
-
-            align-items: center;
-
-            justify-content: center;
-
-            border-radius: 50%;
-
-            background:
-                #ed1748;
-
-            color:
-                #fff;
-
-            font-size: 9px;
-
-            font-weight: 700;
-
-        }
-
-
-        .hs-user-name {
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 5px;
-
-        }
-
-
-        .hs-user-name i {
-
-            color:
-                #f3a900;
-
-        }
-
-
-        .hs-logout {
-
-            padding:
-                7px 16px;
-
-            border-radius: 18px;
+            overflow: hidden;
 
             background:
                 linear-gradient(
                     135deg,
-                    #ffd400,
-                    #ffbd00
+                    #ed1748,
+                    #f53b73
                 );
 
-            color:
-                #222 !important;
+            border-radius: 18px;
 
-            font-size: 11px !important;
+            padding: 35px 38px;
 
-            font-weight: 700 !important;
-
-        }
-
-
-        .hs-logout:hover {
-
-            color:
-                #222 !important;
-
-            filter:
-                brightness(.96);
-
-        }
-
-
-        /* NAVIGATION */
-
-        .hs-nav {
-
-            width: 100%;
-
-            background:
-                linear-gradient(
-                    100deg,
-                    #ef003b 0%,
-                    #f32b68 52%,
-                    #ff6190 100%
-                );
-
-        }
-
-
-        .hs-nav ul {
-
-            max-width: 1250px;
-
-            min-height: 43px;
-
-            margin: 0 auto;
-
-            padding:
-                0 20px;
-
-            list-style: none;
-
-            display: flex;
-
-            align-items: center;
-
-            justify-content: center;
-
-            gap: 30px;
-
-        }
-
-
-        .hs-nav li {
-
-            margin: 0;
-
-            padding: 0;
-
-        }
-
-
-        .hs-nav a {
-
-            display: flex;
-
-            align-items: center;
-
-            min-height: 43px;
-
-            color:
-                #fff;
-
-            font-size: 12px;
-
-            font-weight: 700;
-
-            position: relative;
-
-        }
-
-
-        .hs-nav a::after {
-
-            content: "";
-
-            position: absolute;
-
-            left: 0;
-
-            right: 0;
-
-            bottom: 7px;
-
-            height: 2px;
-
-            border-radius: 5px;
-
-            background:
-                #fff;
-
-            transform:
-                scaleX(0);
-
-            transition:
-                transform .2s;
-
-        }
-
-
-        .hs-nav a:hover::after,
-        .hs-nav a.active::after {
-
-            transform:
-                scaleX(1);
-
-        }
-
-
-        /* =====================================================
-           PAGE
-        ===================================================== */
-
-        .restaurants-page {
-
-            width: 100%;
-
-            max-width: 1250px;
-
-            margin:
-                32px auto 0;
-
-            padding:
-                0 20px 55px;
-
-        }
-
-
-        /* =====================================================
-           PAGE TITLE
-        ===================================================== */
-
-        .restaurants-title {
-
-            position: relative;
-
-            overflow: hidden;
-
-            margin-bottom: 24px;
-
-            padding:
-                29px 34px;
-
-            border-radius: 17px;
-
-            background:
-                linear-gradient(
-                    105deg,
-                    #ed0640 0%,
-                    #f52d69 52%,
-                    #ff6190 100%
-                );
+            margin-bottom: 25px;
 
             box-shadow:
                 0 10px 28px
-                rgba(239,30,84,.16);
-
+                rgba(237, 23, 72, .15);
         }
 
-
-        .restaurants-title::before {
-
+        .restaurants-hero::after {
             content: "";
 
             position: absolute;
 
-            width: 170px;
+            width: 180px;
+            height: 180px;
 
-            height: 170px;
-
-            right: -55px;
-
-            top: -85px;
+            right: -50px;
+            top: -70px;
 
             border-radius: 50%;
 
             background:
-                rgba(255,255,255,.09);
-
+                rgba(255,255,255,.08);
         }
 
-
-        .restaurants-title h1 {
-
+        .restaurants-hero h1 {
             position: relative;
+            z-index: 2;
 
+            margin: 0 0 8px;
+
+            color: #fff;
+
+            font-size: 31px;
+            font-weight: 800;
+        }
+
+        .restaurants-hero h1 i {
+            margin-right: 8px;
+        }
+
+        .restaurants-hero p {
+            position: relative;
             z-index: 2;
 
             margin: 0;
 
-            color:
-                #fff;
-
-            font-size: 31px;
-
-            font-weight: 800;
-
-        }
-
-
-        .restaurants-title h1 i {
-
-            margin-right: 9px;
-
-        }
-
-
-        .restaurants-title p {
-
-            position: relative;
-
-            z-index: 2;
-
-            margin:
-                7px 0 0;
-
-            color:
-                rgba(255,255,255,.93);
+            color: rgba(255,255,255,.92);
 
             font-size: 14px;
-
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Toolbar
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           FILTERS
-        ===================================================== */
+        .restaurants-toolbar {
+            background: #fff;
 
-        .filters-container {
-
-            margin-bottom: 27px;
-
-            padding:
-                17px;
-
-            background:
-                #fff;
-
-            border:
-                1px solid #ededed;
+            border: 1px solid #eee;
 
             border-radius: 15px;
 
-            box-shadow:
-                0 7px 23px
-                rgba(0,0,0,.055);
+            padding: 16px;
 
-        }
-
-
-        .filters {
+            margin-bottom: 25px;
 
             display: grid;
 
             grid-template-columns:
                 1fr
                 1fr
-                1fr
-                1.35fr;
+                1.5fr;
 
             gap: 13px;
 
-            align-items: end;
-
+            box-shadow:
+                0 6px 20px
+                rgba(0,0,0,.045);
         }
 
-
-        .filter-group {
-
-            min-width: 0;
-
-        }
-
-
-        .filter-group label {
-
+        .restaurant-filter label {
             display: block;
 
             margin-bottom: 6px;
 
-            color:
-                #444;
+            color: #444;
 
             font-size: 12px;
-
             font-weight: 700;
-
         }
 
-
-        .filter-group select,
-        .restaurant-search {
+        .restaurant-filter select,
+        .restaurant-filter input {
 
             width: 100%;
 
-            height: 43px;
+            height: 42px;
 
-            padding:
-                0 12px;
-
-            border:
-                1px solid #ddd;
+            border: 1px solid #ddd;
 
             border-radius: 9px;
 
-            background:
-                #fff;
-
-            color:
-                #333;
-
-            font-family: inherit;
-
-            font-size: 13px;
+            background: #fff;
 
             outline: none;
 
+            padding: 0 12px;
+
+            font-family: inherit;
+
+            color: #333;
+
+            font-size: 13px;
         }
 
+        .restaurant-filter input {
+            padding-left: 38px;
+        }
 
-        .filter-group select:focus,
-        .restaurant-search:focus {
-
-            border-color:
-                #f32b68;
+        .restaurant-filter select:focus,
+        .restaurant-filter input:focus {
+            border-color: #ed1748;
 
             box-shadow:
                 0 0 0 3px
-                rgba(243,43,104,.09);
-
+                rgba(237,23,72,.08);
         }
 
-
-        /* SEARCH BOX */
-
-        .restaurant-search-box {
-
+        .search-wrapper {
             position: relative;
-
         }
 
-
-        .restaurant-search-box i {
-
+        .search-wrapper i {
             position: absolute;
 
             left: 13px;
-
             top: 50%;
 
             transform:
                 translateY(-50%);
 
-            color:
-                #999;
+            color: #999;
+
+            font-size: 13px;
 
             pointer-events: none;
-
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Restaurant Grid
+        |--------------------------------------------------------------------------
+        */
 
-        .restaurant-search {
-
-            padding-left:
-                38px;
-
-        }
-
-
-        /* =====================================================
-           RESTAURANT GRID
-        ===================================================== */
-
-        .restaurant-grid {
+        .restaurants-grid {
 
             display: grid;
 
             grid-template-columns:
                 repeat(
                     3,
-                    minmax(0,1fr)
+                    minmax(0, 1fr)
                 );
 
             gap: 22px;
-
-            align-items: stretch;
-
         }
 
-
-        /* =====================================================
-           CARD
-        ===================================================== */
+        /*
+        |--------------------------------------------------------------------------
+        | Card
+        |--------------------------------------------------------------------------
+        */
 
         .restaurant-card {
 
-            min-width: 0;
+            background: #fff;
+
+            border: 1px solid #eee;
+
+            border-radius: 17px;
+
+            overflow: hidden;
 
             display: flex;
 
             flex-direction: column;
 
-            overflow: hidden;
-
-            background:
-                #fff;
-
-            border:
-                1px solid #ededed;
-
-            border-radius: 17px;
+            min-width: 0;
 
             box-shadow:
-                0 7px 23px
+                0 6px 22px
                 rgba(0,0,0,.055);
 
             transition:
                 transform .25s ease,
                 box-shadow .25s ease;
-
         }
-
 
         .restaurant-card:hover {
 
@@ -927,101 +343,119 @@ if (isset($_SESSION['user_id'])) {
                 translateY(-5px);
 
             box-shadow:
-                0 15px 32px
+                0 14px 32px
                 rgba(0,0,0,.10);
-
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Image
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           IMAGE
-        ===================================================== */
-
-        .restaurant-image {
-
-            position: relative;
+        .restaurant-card-image {
 
             width: 100%;
 
             height: 205px;
+
+            position: relative;
 
             overflow: hidden;
 
             background:
                 linear-gradient(
                     135deg,
-                    #fff1f5,
-                    #ffe3eb
+                    #fff0f4,
+                    #ffe1ea
                 );
-
         }
 
-
-        .restaurant-image img {
+        .restaurant-card-image img {
 
             width: 100%;
-
             height: 100%;
-
-            display: block;
 
             object-fit: cover;
 
+            display: block;
+
             transition:
                 transform .35s ease;
-
         }
 
-
         .restaurant-card:hover
-        .restaurant-image img {
+        .restaurant-card-image img {
 
             transform:
                 scale(1.05);
-
         }
 
-
-        .restaurant-placeholder {
+        .restaurant-image-placeholder {
 
             width: 100%;
-
             height: 100%;
 
             display: flex;
 
             align-items: center;
-
             justify-content: center;
 
-            color:
-                #f22b65;
+            color: #ed1748;
 
-            font-size: 55px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #fff0f4,
-                    #ffe3ec
-                );
-
+            font-size: 52px;
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Approved Badge
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           RATING BADGE
-        ===================================================== */
-
-        .rating-badge {
+        .approved-badge {
 
             position: absolute;
 
-            right: 11px;
+            left: 12px;
+            top: 12px;
 
-            bottom: 11px;
+            padding:
+                6px 10px;
 
-            min-width: 49px;
+            border-radius: 20px;
+
+            background:
+                rgba(255,255,255,.95);
+
+            color: #159447;
+
+            font-size: 10px;
+
+            font-weight: 700;
+
+            box-shadow:
+                0 4px 12px
+                rgba(0,0,0,.10);
+        }
+
+        .approved-badge i {
+            margin-right: 4px;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Rating
+        |--------------------------------------------------------------------------
+        */
+
+        .restaurant-rating {
+
+            position: absolute;
+
+            right: 12px;
+            bottom: 12px;
+
+            min-width: 48px;
 
             height: 30px;
 
@@ -1031,18 +465,15 @@ if (isset($_SESSION['user_id'])) {
             display: flex;
 
             align-items: center;
-
             justify-content: center;
 
             gap: 4px;
 
-            background:
-                #fff;
+            border-radius: 18px;
 
-            border-radius: 17px;
+            background: #fff;
 
-            color:
-                #333;
+            color: #333;
 
             font-size: 12px;
 
@@ -1050,70 +481,57 @@ if (isset($_SESSION['user_id'])) {
 
             box-shadow:
                 0 4px 13px
-                rgba(0,0,0,.16);
-
+                rgba(0,0,0,.15);
         }
 
-
-        .rating-badge i {
-
-            color:
-                #f6a623;
-
+        .restaurant-rating i {
+            color: #f6a623;
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Card Content
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           CARD CONTENT
-        ===================================================== */
+        .restaurant-card-content {
 
-        .restaurant-info {
-
-            flex: 1;
-
-            min-width: 0;
+            padding: 17px;
 
             display: flex;
 
             flex-direction: column;
 
-            padding:
-                17px;
-
+            flex: 1;
         }
 
-
-        .restaurant-name {
+        .restaurant-card-title {
 
             margin: 0;
 
-            color:
-                #222;
+            color: #222;
 
             font-size: 19px;
 
-            line-height: 1.25;
+            line-height: 1.3;
 
             font-weight: 800;
 
             overflow-wrap: anywhere;
-
         }
 
-
-        .restaurant-description {
+        .restaurant-card-description {
 
             margin:
-                7px 0 14px;
+                7px 0 15px;
 
             min-height: 38px;
 
-            color:
-                #777;
+            color: #777;
 
-            font-size: 13px;
+            font-size: 12.5px;
 
-            line-height: 1.45;
+            line-height: 1.5;
 
             display:
                 -webkit-box;
@@ -1123,38 +541,29 @@ if (isset($_SESSION['user_id'])) {
             -webkit-box-orient: vertical;
 
             overflow: hidden;
-
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Details
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           META BOXES
-        ===================================================== */
-
-        .restaurant-meta {
-
-            width: 100%;
+        .restaurant-details {
 
             display: grid;
 
             grid-template-columns:
-                repeat(
-                    3,
-                    minmax(0,1fr)
-                );
+                repeat(3, 1fr);
 
             gap: 7px;
 
             margin-bottom: 15px;
-
         }
 
+        .restaurant-detail {
 
-        .meta-box {
-
-            min-width: 0;
-
-            min-height: 39px;
+            min-height: 40px;
 
             padding:
                 5px 4px;
@@ -1162,53 +571,71 @@ if (isset($_SESSION['user_id'])) {
             display: flex;
 
             align-items: center;
-
             justify-content: center;
 
             gap: 4px;
 
             border:
-                1px solid #ededed;
+                1px solid #eee;
 
             border-radius: 8px;
 
-            background:
-                #fafafa;
+            background: #fafafa;
 
-            color:
-                #555;
+            color: #555;
 
-            font-size: 10.5px;
+            font-size: 10px;
 
             font-weight: 600;
 
             text-align: center;
-
-            line-height: 1.25;
-
-            overflow-wrap:
-                anywhere;
-
         }
 
-
-        .meta-box i {
-
-            flex-shrink: 0;
-
-            color:
-                #f32b68;
+        .restaurant-detail i {
+            color: #ed1748;
 
             font-size: 10px;
-
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | Address
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           BUTTON
-        ===================================================== */
+        .restaurant-address {
 
-        .view-btn {
+            display: flex;
+
+            align-items: flex-start;
+
+            gap: 7px;
+
+            margin-bottom: 15px;
+
+            color: #777;
+
+            font-size: 11px;
+
+            line-height: 1.5;
+        }
+
+        .restaurant-address i {
+
+            color: #ed1748;
+
+            margin-top: 2px;
+
+            flex-shrink: 0;
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Button
+        |--------------------------------------------------------------------------
+        */
+
+        .restaurant-view-btn {
 
             width: 100%;
 
@@ -1219,13 +646,9 @@ if (isset($_SESSION['user_id'])) {
             display: flex;
 
             align-items: center;
-
             justify-content: center;
 
             gap: 7px;
-
-            padding:
-                10px 13px;
 
             border-radius: 10px;
 
@@ -1233,57 +656,44 @@ if (isset($_SESSION['user_id'])) {
                 linear-gradient(
                     135deg,
                     #ed1748,
-                    #f53b74
+                    #f53b73
                 );
 
-            color:
-                #fff;
+            color: #fff;
 
             font-size: 13px;
 
             font-weight: 700;
 
-            box-shadow:
-                0 5px 14px
-                rgba(237,23,72,.16);
-
             transition:
-                transform .2s,
-                box-shadow .2s,
-                filter .2s;
-
+                transform .2s ease,
+                filter .2s ease;
         }
 
+        .restaurant-view-btn:hover {
 
-        .view-btn:hover {
-
-            color:
-                #fff;
+            color: #fff;
 
             transform:
                 translateY(-1px);
 
             filter:
-                brightness(.97);
-
-            box-shadow:
-                0 7px 18px
-                rgba(237,23,72,.24);
-
+                brightness(.96);
         }
 
+        /*
+        |--------------------------------------------------------------------------
+        | No Result
+        |--------------------------------------------------------------------------
+        */
 
-        /* =====================================================
-           NO RESULTS
-        ===================================================== */
+        .restaurants-empty {
 
-        .no-restaurants {
+            grid-column: 1 / -1;
 
-            padding:
-                65px 20px;
+            padding: 65px 20px;
 
-            background:
-                #fff;
+            background: #fff;
 
             border:
                 1px solid #eee;
@@ -1293,732 +703,170 @@ if (isset($_SESSION['user_id'])) {
             text-align: center;
 
             box-shadow:
-                0 7px 23px
+                0 6px 20px
                 rgba(0,0,0,.05);
-
         }
 
-
-        .no-restaurants i {
+        .restaurants-empty i {
 
             display: block;
 
-            margin-bottom: 14px;
+            margin-bottom: 15px;
 
-            color:
-                #f32b68;
+            color: #ed1748;
 
             font-size: 50px;
-
         }
 
-
-        .no-restaurants h2 {
+        .restaurants-empty h2 {
 
             margin: 0;
 
-            color:
-                #222;
+            color: #222;
 
             font-size: 22px;
-
         }
 
-
-        .no-restaurants p {
+        .restaurants-empty p {
 
             margin:
                 7px 0 0;
 
-            color:
-                #777;
+            color: #777;
 
             font-size: 13px;
-
         }
-
 
         .restaurant-card.hidden {
-
             display: none;
-
         }
 
-
-        /* =====================================================
-           FOOTER
-        ===================================================== */
-
-        .hs-footer {
-
-            margin-top: 15px;
-
-            background:
-                #252525;
-
-            color:
-                #fff;
-
-        }
-
-
-        .hs-footer-content {
-
-            width: 100%;
-
-            max-width: 1250px;
-
-            margin: 0 auto;
-
-            padding:
-                43px 20px;
-
-            display: grid;
-
-            grid-template-columns:
-                repeat(4,1fr);
-
-            gap: 30px;
-
-        }
-
-
-        .hs-footer-column h3 {
-
-            margin:
-                0 0 15px;
-
-            color:
-                #fff;
-
-            font-size: 17px;
-
-        }
-
-
-        .hs-footer-column ul {
-
-            margin: 0;
-
-            padding: 0;
-
-            list-style: none;
-
-        }
-
-
-        .hs-footer-column li {
-
-            margin-bottom: 9px;
-
-        }
-
-
-        .hs-footer-column a {
-
-            color:
-                #bbb;
-
-            font-size: 13px;
-
-            transition:
-                color .2s;
-
-        }
-
-
-        .hs-footer-column a:hover {
-
-            color:
-                #ff4f83;
-
-        }
-
-
-        .hs-social {
-
-            display: flex;
-
-            gap: 9px;
-
-            margin-top: 16px;
-
-        }
-
-
-        .hs-social a {
-
-            width: 35px;
-
-            height: 35px;
-
-            display: flex;
-
-            align-items: center;
-
-            justify-content: center;
-
-            border-radius: 50%;
-
-            background:
-                rgba(255,255,255,.08);
-
-            color:
-                #fff;
-
-        }
-
-
-        .hs-social a:hover {
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #ed1748,
-                    #f65385
-                );
-
-            color:
-                #fff;
-
-        }
-
-
-        .hs-copyright {
-
-            padding:
-                17px 15px;
-
-            border-top:
-                1px solid
-                rgba(255,255,255,.10);
-
-            text-align: center;
-
-            color:
-                #aaa;
-
-            font-size: 12px;
-
-        }
-
-
-        .hs-copyright p {
-
-            margin: 0;
-
-        }
-
-
-        /* =====================================================
-           TABLET
-        ===================================================== */
+        /*
+        |--------------------------------------------------------------------------
+        | Responsive
+        |--------------------------------------------------------------------------
+        */
 
         @media (max-width: 1000px) {
 
-
-            .hs-top-bar {
-
-                gap: 14px;
-
-            }
-
-
-            .hs-header-search {
-
-                width: 280px;
-
-            }
-
-
-            .hs-nav ul {
-
-                gap: 20px;
-
-            }
-
-
-            .restaurant-grid {
+            .restaurants-grid {
 
                 grid-template-columns:
                     repeat(
                         2,
-                        minmax(0,1fr)
+                        minmax(0, 1fr)
                     );
-
             }
 
-
-            .filters {
+            .restaurants-toolbar {
 
                 grid-template-columns:
-                    repeat(
-                        2,
-                        minmax(0,1fr)
-                    );
-
+                    1fr 1fr;
             }
 
+            .restaurant-filter:last-child {
+
+                grid-column:
+                    1 / -1;
+            }
         }
-
-
-        /* =====================================================
-           MOBILE
-        ===================================================== */
 
         @media (max-width: 700px) {
 
-
-            .hs-top-bar {
-
-                min-height: auto;
-
-                padding:
-                    12px 15px;
-
-                flex-wrap: wrap;
-
-                justify-content: center;
-
-            }
-
-
-            .hs-logo {
-
-                order: 1;
-
-            }
-
-
-            .hs-header-search {
-
-                order: 3;
-
-                width: 100%;
-
-            }
-
-
-            .hs-user-actions {
-
-                order: 2;
-
-                margin-left: auto;
-
-                gap: 10px;
-
-            }
-
-
-            .hs-user-name {
-
-                display: none;
-
-            }
-
-
-            .hs-nav ul {
-
-                padding:
-                    5px 10px;
-
-                gap:
-                    0 16px;
-
-                flex-wrap: wrap;
-
-                justify-content: center;
-
-            }
-
-
-            .hs-nav a {
-
-                min-height: 35px;
-
-                font-size: 11px;
-
-            }
-
-
             .restaurants-page {
 
-                margin-top:
-                    22px;
+                padding:
+                    25px 13px 45px;
+            }
+
+            .restaurants-hero {
 
                 padding:
-                    0 12px 45px;
-
+                    27px 22px;
             }
 
+            .restaurants-hero h1 {
 
-            .restaurants-title {
-
-                padding:
-                    25px 21px;
-
+                font-size: 25px;
             }
 
+            .restaurants-hero p {
 
-            .restaurants-title h1 {
-
-                font-size:
-                    25px;
-
+                font-size: 12px;
             }
 
+            .restaurants-toolbar {
 
-            .restaurants-title p {
-
-                font-size:
-                    12px;
-
+                grid-template-columns:
+                    1fr;
             }
 
+            .restaurant-filter:last-child {
 
-            .filters {
+                grid-column:
+                    auto;
+            }
+
+            .restaurants-grid {
 
                 grid-template-columns:
                     1fr;
 
+                gap: 18px;
             }
 
+            .restaurant-card-image {
 
-            .restaurant-grid {
-
-                grid-template-columns:
-                    1fr;
-
-                gap:
-                    18px;
-
+                height: 220px;
             }
-
-
-            .restaurant-image {
-
-                height:
-                    220px;
-
-            }
-
-
-            .hs-footer-content {
-
-                grid-template-columns:
-                    repeat(2,1fr);
-
-                gap:
-                    25px;
-
-            }
-
         }
-
-
-        /* =====================================================
-           SMALL MOBILE
-        ===================================================== */
-
-        @media (max-width: 420px) {
-
-
-            .hs-user-actions {
-
-                gap:
-                    7px;
-
-            }
-
-
-            .hs-user-actions a {
-
-                font-size:
-                    11px;
-
-            }
-
-
-            .hs-logout {
-
-                padding:
-                    6px 11px;
-
-            }
-
-
-            .restaurant-meta {
-
-                gap:
-                    5px;
-
-            }
-
-
-            .meta-box {
-
-                font-size:
-                    9.5px;
-
-            }
-
-
-            .hs-footer-content {
-
-                grid-template-columns:
-                    1fr;
-
-            }
-
-        }
-
 
     </style>
 
-
 </head>
-
 
 <body>
 
 
-<!-- =========================================================
-     HEADER
-========================================================= -->
-
-<header class="hs-header">
-
-
-    <!-- TOP BAR -->
-
-    <div class="hs-top-bar">
-
-
-        <!-- LOGO -->
-
-        <a
-            href="index.php"
-            class="hs-logo"
-        >
-
-            <i
-                class="fas fa-utensils"
-            ></i>
-
-            <h1>
-                Humsafar
-            </h1>
-
-        </a>
-
-
-        <!-- SEARCH -->
-
-        <div class="hs-header-search">
-
-            <input
-                type="text"
-                id="header-search"
-                placeholder="Search for restaurants or food..."
-                autocomplete="off"
-            >
-
-            <i
-                class="fas fa-search"
-            ></i>
-
-        </div>
-
-
-        <!-- USER -->
-
-        <div class="hs-user-actions">
-
-
-            <a
-                href="cart.php"
-                class="hs-cart"
-            >
-
-                <i
-                    class="fas fa-shopping-cart"
-                ></i>
-
-                Cart
-
-                <?php if ($cartCount > 0) { ?>
-
-                    <span
-                        class="hs-cart-count"
-                    >
-                        <?php
-                            echo $cartCount;
-                        ?>
-                    </span>
-
-                <?php } ?>
-
-
-            </a>
-
-
-            <?php if (isset($_SESSION['user_id'])) { ?>
-
-
-                <a
-                    href="my-account.php"
-                    class="hs-user-name"
-                >
-
-                    <i
-                        class="fas fa-user"
-                    ></i>
-
-                    <?php
-                        echo h(
-                            $userName
-                        );
-                    ?>
-
-                </a>
-
-
-                <a
-                    href="logout.php"
-                    class="hs-logout"
-                >
-                    Logout
-                </a>
-
-
-            <?php } else { ?>
-
-
-                <a
-                    href="login.php"
-                >
-                    Sign In
-                </a>
-
-
-                <a
-                    href="signup.php"
-                    class="hs-logout"
-                >
-                    Sign Up
-                </a>
-
-
-            <?php } ?>
-
-
-        </div>
-
-
-    </div>
-
-
-    <!-- NAVIGATION -->
-
-    <nav class="hs-nav">
-
-
-        <ul>
-
-
-            <li>
-
-                <a
-                    href="index.php"
-                >
-                    Home
-                </a>
-
-            </li>
-
-
-            <li>
-
-                <a
-                    href="restaurants.php"
-                    class="active"
-                >
-                    Restaurants
-                </a>
-
-            </li>
-
-
-            <li>
-
-                <a
-                    href="deals.php"
-                >
-                    Deals
-                </a>
-
-            </li>
-
-
-            <li>
-
-                <a
-                    href="my-account.php"
-                >
-                    My Account
-                </a>
-
-            </li>
-
-
-            <li>
-
-                <a
-                    href="#"
-                >
-                    Help
-                </a>
-
-            </li>
-
-        </ul>
-
-
-    </nav>
-
-
-</header>
+<?php
+/*
+|--------------------------------------------------------------------------
+| EXISTING CUSTOMER HEADER
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| Do NOT create another header here.
+| The existing customer-header.php handles the customer navbar/header.
+|
+*/
+
+require_once __DIR__ . '/includes/customer-header.php';
+?>
 
 
 <!-- =========================================================
-     MAIN
+     RESTAURANTS PAGE
 ========================================================= -->
 
 <main class="restaurants-page">
 
 
-    <!-- =====================================================
-         PAGE TITLE
-    ====================================================== -->
+    <!-- PAGE HERO -->
 
-    <section class="restaurants-title">
-
+    <section class="restaurants-hero">
 
         <h1>
 
-            <i
-                class="fas fa-store"
-            ></i>
+            <i class="fas fa-store"></i>
 
-            All Restaurants
+            Restaurants
 
         </h1>
 
-
         <p>
-            Discover the best restaurants in your area
+            Discover approved restaurants and order your
+            favorite food from Humsafar.
         </p>
-
 
     </section>
 
@@ -2027,153 +875,83 @@ if (isset($_SESSION['user_id'])) {
          FILTERS
     ====================================================== -->
 
-    <section class="filters-container">
+    <section class="restaurants-toolbar">
 
 
-        <div class="filters">
+        <!-- SORT -->
+
+        <div class="restaurant-filter">
+
+            <label for="restaurant-sort">
+                Sort By
+            </label>
+
+            <select id="restaurant-sort">
+
+                <option value="rating">
+                    Highest Rated
+                </option>
+
+                <option value="name">
+                    Name
+                </option>
+
+                <option value="delivery">
+                    Fastest Delivery
+                </option>
+
+            </select>
+
+        </div>
 
 
-            <!-- SORT -->
+        <!-- DELIVERY -->
 
-            <div class="filter-group">
+        <div class="restaurant-filter">
 
-                <label
-                    for="sort-by"
+            <label for="delivery-filter">
+                Delivery
+            </label>
+
+            <select id="delivery-filter">
+
+                <option value="all">
+                    All Restaurants
+                </option>
+
+                <option value="free">
+                    Free Delivery
+                </option>
+
+                <option value="paid">
+                    Paid Delivery
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <!-- SEARCH -->
+
+        <div class="restaurant-filter">
+
+            <label for="restaurant-search">
+                Search Restaurant
+            </label>
+
+            <div class="search-wrapper">
+
+                <i class="fas fa-search"></i>
+
+                <input
+                    type="text"
+                    id="restaurant-search"
+                    placeholder="Search restaurant..."
+                    autocomplete="off"
                 >
-                    Sort by:
-                </label>
-
-
-                <select
-                    id="sort-by"
-                >
-
-                    <option value="rating">
-                        Rating
-                    </option>
-
-                    <option value="delivery-time">
-                        Delivery Time
-                    </option>
-
-                    <option value="name">
-                        Name
-                    </option>
-
-                </select>
 
             </div>
-
-
-            <!-- PRICE -->
-
-            <div class="filter-group">
-
-                <label
-                    for="price-range"
-                >
-                    Price Range:
-                </label>
-
-
-                <select
-                    id="price-range"
-                >
-
-                    <option value="all">
-                        All
-                    </option>
-
-                    <option value="$">
-                        $
-                    </option>
-
-                    <option value="$$">
-                        $$
-                    </option>
-
-                    <option value="$$$">
-                        $$$
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- CUISINE -->
-
-            <div class="filter-group">
-
-                <label
-                    for="cuisine"
-                >
-                    Cuisine:
-                </label>
-
-
-                <select
-                    id="cuisine"
-                >
-
-                    <option value="all">
-                        All Cuisines
-                    </option>
-
-                    <option value="italian">
-                        Italian
-                    </option>
-
-                    <option value="asian">
-                        Asian
-                    </option>
-
-                    <option value="mexican">
-                        Mexican
-                    </option>
-
-                    <option value="indian">
-                        Indian
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <!-- SEARCH -->
-
-            <div class="filter-group">
-
-                <label
-                    for="restaurant-search"
-                >
-                    Search Restaurant:
-                </label>
-
-
-                <div
-                    class="restaurant-search-box"
-                >
-
-                    <i
-                        class="fas fa-search"
-                    ></i>
-
-
-                    <input
-                        type="text"
-                        id="restaurant-search"
-                        class="restaurant-search"
-                        placeholder="Search restaurants..."
-                        autocomplete="off"
-                    >
-
-                </div>
-
-
-            </div>
-
 
         </div>
 
@@ -2182,17 +960,16 @@ if (isset($_SESSION['user_id'])) {
 
 
     <!-- =====================================================
-         RESTAURANTS
+         RESTAURANT CARDS
     ====================================================== -->
 
+    <section
+        class="restaurants-grid"
+        id="restaurants-grid"
+    >
 
-    <?php if (!empty($restaurants)) { ?>
 
-
-        <section
-            class="restaurant-grid"
-            id="restaurant-grid"
-        >
+        <?php if (!empty($restaurants)) { ?>
 
 
             <?php foreach ($restaurants as $restaurant) { ?>
@@ -2200,21 +977,19 @@ if (isset($_SESSION['user_id'])) {
 
                 <?php
 
-                $id =
+                $restaurantId =
                     (int)(
                         $restaurant['id']
                         ?? 0
                     );
 
-
-                $name =
+                $restaurantName =
                     trim(
                         (string)(
                             $restaurant['name']
                             ?? 'Restaurant'
                         )
                     );
-
 
                 $description =
                     trim(
@@ -2224,13 +999,11 @@ if (isset($_SESSION['user_id'])) {
                         )
                     );
 
-
                 $rating =
                     (float)(
                         $restaurant['rating']
                         ?? 0
                     );
-
 
                 $deliveryTime =
                     trim(
@@ -2240,42 +1013,25 @@ if (isset($_SESSION['user_id'])) {
                         )
                     );
 
-
                 $deliveryFee =
                     (float)(
                         $restaurant['delivery_fee']
                         ?? 0
                     );
 
-
-                $image =
+                $address =
                     trim(
                         (string)(
-                            $restaurant['image']
+                            $restaurant['address']
                             ?? ''
                         )
                     );
 
-
-                /* PRICE CATEGORY */
-
-                if ($deliveryFee >= 300) {
-
-                    $priceRange =
-                        '$$$';
-
-                } elseif ($deliveryFee >= 150) {
-
-                    $priceRange =
-                        '$$';
-
-                } else {
-
-                    $priceRange =
-                        '$';
-
-                }
-
+                $image =
+                    restaurantImage(
+                        $restaurant['image']
+                        ?? ''
+                    );
 
                 ?>
 
@@ -2286,7 +1042,7 @@ if (isset($_SESSION['user_id'])) {
                     data-name="<?php
                         echo h(
                             strtolower(
-                                $name
+                                $restaurantName
                             )
                         );
                     ?>"
@@ -2295,55 +1051,71 @@ if (isset($_SESSION['user_id'])) {
                         echo $rating;
                     ?>"
 
-                    data-delivery-time="<?php
-                        echo h(
-                            $deliveryTime
+                    data-delivery="<?php
+
+                        preg_match(
+                            '/\d+/',
+                            $deliveryTime,
+                            $timeMatch
                         );
+
+                        echo
+                            !empty($timeMatch)
+                                ? (int)$timeMatch[0]
+                                : 999;
+
                     ?>"
 
-                    data-price="<?php
-                        echo h(
-                            $priceRange
-                        );
+                    data-delivery-fee="<?php
+                        echo $deliveryFee;
                     ?>"
                 >
 
 
                     <!-- IMAGE -->
 
-                    <div
-                        class="restaurant-image"
-                    >
+                    <div class="restaurant-card-image">
 
 
-                        <?php if (!empty($image)) { ?>
+                        <?php if ($image !== '') { ?>
 
 
                             <img
-                                src="assets/images/restaurants/<?php
-                                    echo h(
-                                        $image
-                                    );
+                                src="<?php
+                                    echo h($image);
                                 ?>"
+
                                 alt="<?php
                                     echo h(
-                                        $name
+                                        $restaurantName
                                     );
                                 ?>"
+
                                 loading="lazy"
+
+                                onerror="
+                                    this.style.display='none';
+                                    this.nextElementSibling.style.display='flex';
+                                "
                             >
+
+
+                            <div
+                                class="restaurant-image-placeholder"
+                                style="display:none;"
+                            >
+
+                                <i class="fas fa-store"></i>
+
+                            </div>
 
 
                         <?php } else { ?>
 
 
-                            <div
-                                class="restaurant-placeholder"
-                            >
+                            <div class="restaurant-image-placeholder">
 
-                                <i
-                                    class="fas fa-store"
-                                ></i>
+                                <i class="fas fa-store"></i>
 
                             </div>
 
@@ -2351,23 +1123,28 @@ if (isset($_SESSION['user_id'])) {
                         <?php } ?>
 
 
+                        <!-- APPROVED -->
+
+                        <div class="approved-badge">
+
+                            <i class="fas fa-check-circle"></i>
+
+                            Approved
+
+                        </div>
+
+
                         <!-- RATING -->
 
-                        <div
-                            class="rating-badge"
-                        >
+                        <div class="restaurant-rating">
 
-                            <i
-                                class="fas fa-star"
-                            ></i>
+                            <i class="fas fa-star"></i>
 
                             <?php
-
                             echo number_format(
                                 $rating,
                                 1
                             );
-
                             ?>
 
                         </div>
@@ -2376,23 +1153,19 @@ if (isset($_SESSION['user_id'])) {
                     </div>
 
 
-                    <!-- INFO -->
+                    <!-- CONTENT -->
 
-                    <div
-                        class="restaurant-info"
-                    >
+                    <div class="restaurant-card-content">
 
 
                         <!-- NAME -->
 
-                        <h2
-                            class="restaurant-name"
-                        >
+                        <h2 class="restaurant-card-title">
 
                             <?php
-                                echo h(
-                                    $name
-                                );
+                            echo h(
+                                $restaurantName
+                            );
                             ?>
 
                         </h2>
@@ -2400,15 +1173,11 @@ if (isset($_SESSION['user_id'])) {
 
                         <!-- DESCRIPTION -->
 
-                        <p
-                            class="restaurant-description"
-                        >
+                        <p class="restaurant-card-description">
 
                             <?php
 
-                            if (
-                                $description !== ''
-                            ) {
+                            if ($description !== '') {
 
                                 echo h(
                                     $description
@@ -2426,22 +1195,36 @@ if (isset($_SESSION['user_id'])) {
                         </p>
 
 
-                        <!-- META -->
+                        <!-- DETAILS -->
 
-                        <div
-                            class="restaurant-meta"
-                        >
+                        <div class="restaurant-details">
 
 
-                            <!-- DELIVERY TIME -->
+                            <!-- RATING -->
 
-                            <div
-                                class="meta-box"
-                            >
+                            <div class="restaurant-detail">
 
-                                <i
-                                    class="fas fa-clock"
-                                ></i>
+                                <i class="fas fa-star"></i>
+
+                                <span>
+
+                                    <?php
+                                    echo number_format(
+                                        $rating,
+                                        1
+                                    );
+                                    ?>
+
+                                </span>
+
+                            </div>
+
+
+                            <!-- TIME -->
+
+                            <div class="restaurant-detail">
+
+                                <i class="fas fa-clock"></i>
 
                                 <span>
 
@@ -2457,8 +1240,7 @@ if (isset($_SESSION['user_id'])) {
 
                                     } else {
 
-                                        echo
-                                            'N/A';
+                                        echo 'N/A';
 
                                     }
 
@@ -2469,52 +1251,32 @@ if (isset($_SESSION['user_id'])) {
                             </div>
 
 
-                            <!-- DELIVERY FEE -->
+                            <!-- DELIVERY -->
 
-                            <div
-                                class="meta-box"
-                            >
+                            <div class="restaurant-detail">
 
-                                <i
-                                    class="fas fa-motorcycle"
-                                ></i>
-
-                                <span>
-
-                                    Rs.
-
-                                    <?php
-
-                                    echo number_format(
-                                        $deliveryFee,
-                                        0
-                                    );
-
-                                    ?>
-
-                                </span>
-
-                            </div>
-
-
-                            <!-- RATING -->
-
-                            <div
-                                class="meta-box"
-                            >
-
-                                <i
-                                    class="fas fa-star"
-                                ></i>
+                                <i class="fas fa-motorcycle"></i>
 
                                 <span>
 
                                     <?php
 
-                                    echo number_format(
-                                        $rating,
-                                        1
-                                    );
+                                    if (
+                                        $deliveryFee <= 0
+                                    ) {
+
+                                        echo 'Free';
+
+                                    } else {
+
+                                        echo
+                                            'Rs. ' .
+                                            number_format(
+                                                $deliveryFee,
+                                                0
+                                            );
+
+                                    }
 
                                     ?>
 
@@ -2526,20 +1288,41 @@ if (isset($_SESSION['user_id'])) {
                         </div>
 
 
-                        <!-- VIEW BUTTON -->
+                        <!-- ADDRESS -->
+
+                        <?php if ($address !== '') { ?>
+
+                            <div class="restaurant-address">
+
+                                <i class="fas fa-location-dot"></i>
+
+                                <span>
+
+                                    <?php
+                                    echo h(
+                                        $address
+                                    );
+                                    ?>
+
+                                </span>
+
+                            </div>
+
+                        <?php } ?>
+
+
+                        <!-- BUTTON -->
 
                         <a
                             href="restaurant.php?id=<?php
-                                echo $id;
+                                echo $restaurantId;
                             ?>"
-                            class="view-btn"
+                            class="restaurant-view-btn"
                         >
 
-                            <i
-                                class="fas fa-utensils"
-                            ></i>
-
                             View Restaurant
+
+                            <i class="fas fa-arrow-right"></i>
 
                         </a>
 
@@ -2553,257 +1336,54 @@ if (isset($_SESSION['user_id'])) {
             <?php } ?>
 
 
-        </section>
-
-
-        <!-- =================================================
-             FILTER EMPTY
-        ================================================== -->
-
-        <div
-            class="no-restaurants"
-            id="no-filter-results"
-            style="display:none;"
-        >
-
-            <i
-                class="fas fa-store-slash"
-            ></i>
-
-
-            <h2>
-                No Restaurants Found
-            </h2>
-
-
-            <p>
-                Try changing your search or filters.
-            </p>
-
-
-        </div>
-
-
-    <?php } else { ?>
-
-
-        <!-- =================================================
-             DATABASE EMPTY
-        ================================================== -->
-
-        <div
-            class="no-restaurants"
-        >
-
-            <i
-                class="fas fa-store-slash"
-            ></i>
-
-
-            <h2>
-                No Restaurants Available
-            </h2>
-
-
-            <p>
-                There are currently no restaurants to display.
-            </p>
-
-
-        </div>
-
-
-    <?php } ?>
-
-
-</main>
-
-
-<!-- =========================================================
-     FOOTER
-========================================================= -->
-
-<footer
-    class="hs-footer"
->
-
-
-    <div
-        class="hs-footer-content"
-    >
-
-
-        <!-- COLUMN 1 -->
-
-        <div
-            class="hs-footer-column"
-        >
-
-            <h3>
-                Humsafar
-            </h3>
-
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        About Us
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Careers
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Press
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Blog
-                    </a>
-                </li>
-
-            </ul>
-
-        </div>
-
-
-        <!-- COLUMN 2 -->
-
-        <div
-            class="hs-footer-column"
-        >
-
-            <h3>
-                For Foodies
-            </h3>
-
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        Code of Conduct
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Community
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Blogger Help
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Mobile Apps
-                    </a>
-                </li>
-
-            </ul>
-
-        </div>
-
-
-        
-
-
-        <!-- COLUMN 4 -->
-
-        <div
-            class="hs-footer-column"
-        >
-
-            <h3>
-                Contact Us
-            </h3>
-
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        Help & Support
-                    </a>
-                </li>
-
-               
-            </ul>
-
+            <!-- FILTER EMPTY -->
 
             <div
-                class="hs-social"
+                id="restaurants-no-filter-results"
+                class="restaurants-empty"
+                style="display:none;"
             >
 
-                <a href="#">
-                    <i
-                        class="fab fa-facebook"
-                    ></i>
-                </a>
+                <i class="fas fa-search"></i>
 
+                <h2>
+                    No Restaurant Found
+                </h2>
 
-                <a href="#">
-                    <i
-                        class="fab fa-twitter"
-                    ></i>
-                </a>
-
-
-                <a href="#">
-                    <i
-                        class="fab fa-instagram"
-                    ></i>
-                </a>
-
-
-                <a href="#">
-                    <i
-                        class="fab fa-youtube"
-                    ></i>
-                </a>
+                <p>
+                    Try another restaurant name or change the filter.
+                </p>
 
             </div>
 
 
-        </div>
+        <?php } else { ?>
 
 
-    </div>
+            <!-- NO APPROVED RESTAURANTS -->
+
+            <div class="restaurants-empty">
+
+                <i class="fas fa-store-slash"></i>
+
+                <h2>
+                    No Restaurants Available
+                </h2>
+
+                <p>
+                    There are currently no approved restaurants available.
+                </p>
+
+            </div>
 
 
-    <div
-        class="hs-copyright"
-    >
-
-        <p>
-
-            &copy;
-
-            <?php
-                echo date('Y');
-            ?>
-
-            Humsafar Food Delivery.
-            All rights reserved.
-
-        </p>
-
-    </div>
+        <?php } ?>
 
 
-</footer>
+    </section>
+
+
+</main>
 
 
 <!-- =========================================================
@@ -2812,7 +1392,6 @@ if (isset($_SESSION['user_id'])) {
 
 <script>
 
-
 document.addEventListener(
     'DOMContentLoaded',
     function () {
@@ -2820,14 +1399,12 @@ document.addEventListener(
 
         const grid =
             document.getElementById(
-                'restaurant-grid'
+                'restaurants-grid'
             );
 
 
         if (!grid) {
-
             return;
-
         }
 
 
@@ -2839,59 +1416,54 @@ document.addEventListener(
             );
 
 
-        const sortBy =
-            document.getElementById(
-                'sort-by'
-            );
-
-
-        const priceRange =
-            document.getElementById(
-                'price-range'
-            );
-
-
-        const search =
+        const searchInput =
             document.getElementById(
                 'restaurant-search'
             );
 
 
-        const headerSearch =
+        const deliveryFilter =
             document.getElementById(
-                'header-search'
+                'delivery-filter'
             );
 
 
-        const noResults =
+        const sortSelect =
             document.getElementById(
-                'no-filter-results'
+                'restaurant-sort'
             );
 
 
-        /* =====================================================
-           FILTER
-        ===================================================== */
+        const emptyResult =
+            document.getElementById(
+                'restaurants-no-filter-results'
+            );
 
-        function filterRestaurants() {
+
+        /*
+        |--------------------------------------------------------------------------
+        | Apply Filters
+        |--------------------------------------------------------------------------
+        */
+
+        function applyFilters() {
 
 
-            const searchValue =
-                search
-                    ? search.value
+            const search =
+                searchInput
+                    ? searchInput.value
                         .trim()
                         .toLowerCase()
                     : '';
 
 
-            const priceValue =
-                priceRange
-                    ? priceRange.value
+            const delivery =
+                deliveryFilter
+                    ? deliveryFilter.value
                     : 'all';
 
 
-            let visibleCount =
-                0;
+            let visible = 0;
 
 
             cards.forEach(
@@ -2905,34 +1477,54 @@ document.addEventListener(
                         ).toLowerCase();
 
 
-                    const price =
-                        card.dataset.price
-                        || '$';
+                    const fee =
+                        parseFloat(
+                            card.dataset.deliveryFee
+                            || 0
+                        );
 
 
                     const matchesSearch =
                         name.includes(
-                            searchValue
+                            search
                         );
 
 
-                    const matchesPrice =
-                        priceValue === 'all'
-                        ||
-                        price === priceValue;
+                    let matchesDelivery =
+                        true;
+
+
+                    if (
+                        delivery === 'free'
+                    ) {
+
+                        matchesDelivery =
+                            fee <= 0;
+
+                    }
+
+
+                    if (
+                        delivery === 'paid'
+                    ) {
+
+                        matchesDelivery =
+                            fee > 0;
+
+                    }
 
 
                     if (
                         matchesSearch
                         &&
-                        matchesPrice
+                        matchesDelivery
                     ) {
 
                         card.classList.remove(
                             'hidden'
                         );
 
-                        visibleCount++;
+                        visible++;
 
                     } else {
 
@@ -2949,10 +1541,10 @@ document.addEventListener(
             sortRestaurants();
 
 
-            if (noResults) {
+            if (emptyResult) {
 
-                noResults.style.display =
-                    visibleCount === 0
+                emptyResult.style.display =
+                    visible === 0
                         ? 'block'
                         : 'none';
 
@@ -2961,22 +1553,22 @@ document.addEventListener(
         }
 
 
-        /* =====================================================
-           SORT
-        ===================================================== */
+        /*
+        |--------------------------------------------------------------------------
+        | Sorting
+        |--------------------------------------------------------------------------
+        */
 
         function sortRestaurants() {
 
 
-            if (!sortBy) {
-
+            if (!sortSelect) {
                 return;
-
             }
 
 
-            const sortValue =
-                sortBy.value;
+            const value =
+                sortSelect.value;
 
 
             cards.sort(
@@ -2984,19 +1576,16 @@ document.addEventListener(
 
 
                     if (
-                        sortValue ===
-                        'rating'
+                        value === 'rating'
                     ) {
 
                         return (
                             parseFloat(
-                                b.dataset.rating
-                                || 0
+                                b.dataset.rating || 0
                             )
                             -
                             parseFloat(
-                                a.dataset.rating
-                                || 0
+                                a.dataset.rating || 0
                             )
                         );
 
@@ -3004,45 +1593,31 @@ document.addEventListener(
 
 
                     if (
-                        sortValue ===
-                        'delivery-time'
+                        value === 'delivery'
                     ) {
 
-
-                        const aTime =
-                            parseInt(
-                                a.dataset.deliveryTime
-                                || '0'
-                            );
-
-
-                        const bTime =
-                            parseInt(
-                                b.dataset.deliveryTime
-                                || '0'
-                            );
-
-
                         return (
-                            aTime -
-                            bTime
+                            parseInt(
+                                a.dataset.delivery || 999
+                            )
+                            -
+                            parseInt(
+                                b.dataset.delivery || 999
+                            )
                         );
 
                     }
 
 
                     if (
-                        sortValue ===
-                        'name'
+                        value === 'name'
                     ) {
 
                         return (
                             (
-                                a.dataset.name
-                                || ''
+                                a.dataset.name || ''
                             ).localeCompare(
-                                b.dataset.name
-                                || ''
+                                b.dataset.name || ''
                             )
                         );
 
@@ -3065,62 +1640,53 @@ document.addEventListener(
                 }
             );
 
-        }
 
+            if (emptyResult) {
 
-        /* =====================================================
-           EVENTS
-        ===================================================== */
+                grid.appendChild(
+                    emptyResult
+                );
 
-        if (sortBy) {
-
-            sortBy.addEventListener(
-                'change',
-                filterRestaurants
-            );
+            }
 
         }
 
 
-        if (priceRange) {
+        /*
+        |--------------------------------------------------------------------------
+        | Events
+        |--------------------------------------------------------------------------
+        */
 
-            priceRange.addEventListener(
-                'change',
-                filterRestaurants
-            );
+        if (searchInput) {
 
-        }
-
-
-        if (search) {
-
-            search.addEventListener(
+            searchInput.addEventListener(
                 'input',
-                filterRestaurants
+                applyFilters
             );
 
         }
 
 
-        /* =====================================================
-           HEADER SEARCH
-        ===================================================== */
+        if (deliveryFilter) {
 
-        if (headerSearch) {
+            deliveryFilter.addEventListener(
+                'change',
+                applyFilters
+            );
 
-            headerSearch.addEventListener(
-                'input',
+        }
+
+
+        if (sortSelect) {
+
+            sortSelect.addEventListener(
+                'change',
                 function () {
 
+                    sortRestaurants();
 
-                    if (search) {
-
-                        search.value =
-                            headerSearch.value;
-
-                        filterRestaurants();
-
-                    }
+                    applyFilters();
 
                 }
             );
@@ -3128,18 +1694,19 @@ document.addEventListener(
         }
 
 
-        /* INITIAL */
+        /*
+        |--------------------------------------------------------------------------
+        | Initial
+        |--------------------------------------------------------------------------
+        */
 
-        filterRestaurants();
-
+        applyFilters();
 
     }
 );
-
 
 </script>
 
 
 </body>
-
 </html>

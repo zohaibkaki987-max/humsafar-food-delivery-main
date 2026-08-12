@@ -1,12 +1,14 @@
 <?php
 
-require_once 'includes/config.php';
-require_once 'includes/session.php';
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/session.php';
 
 
-/* =====================================================
-   CHECK LOGIN
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER LOGIN
+|--------------------------------------------------------------------------
+*/
 
 if (!isset($_SESSION['user_id'])) {
 
@@ -15,55 +17,65 @@ if (!isset($_SESSION['user_id'])) {
 
 }
 
-
 $user_id = (int) $_SESSION['user_id'];
 
 
-/* =====================================================
-   HELPER
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| HELPER
+|--------------------------------------------------------------------------
+*/
 
 function h($value)
 {
     return htmlspecialchars(
-        (string)$value,
+        (string) $value,
         ENT_QUOTES,
         'UTF-8'
     );
 }
 
 
-/* =====================================================
-   GET ORDERS
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| GET CUSTOMER ORDERS
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| Project uses mysqli connection: $conn
+|
+| Cancelled orders are intentionally included.
+|
+*/
+
+$orders = [];
 
 $stmt = $conn->prepare("
-   SELECT
-    o.id,
-    o.order_number,
-    o.restaurant_id,
-    o.address_id,
-    o.payment_method,
-    o.subtotal,
-    o.delivery_fee,
-    o.discount,
-    o.total,
-    o.order_status,
-    o.customer_note,
-    o.created_at,
+    SELECT
+        o.id,
+        o.order_number,
+        o.restaurant_id,
+        o.address_id,
+        o.payment_method,
+        o.subtotal,
+        o.delivery_fee,
+        o.discount,
+        o.total,
+        o.order_status,
+        o.customer_note,
+        o.created_at,
 
-    r.name AS restaurant_name,
-    r.image AS restaurant_image
+        r.name AS restaurant_name,
+        r.image AS restaurant_image
 
-FROM orders o
+    FROM orders o
 
-LEFT JOIN restaurants r
-    ON o.restaurant_id = r.id
+    LEFT JOIN restaurants r
+        ON o.restaurant_id = r.id
 
-WHERE o.user_id = ?
-AND o.order_status != 'cancelled'
+    WHERE o.user_id = ?
 
-ORDER BY o.id DESC
+    ORDER BY o.id DESC
 ");
 
 
@@ -86,17 +98,17 @@ $stmt->bind_param(
 $stmt->execute();
 
 
-$result = $stmt->get_result();
-
-
-$orders = [];
+$result =
+    $stmt->get_result();
 
 
 while (
-    $row = $result->fetch_assoc()
+    $row =
+    $result->fetch_assoc()
 ) {
 
-    $orders[] = $row;
+    $orders[] =
+        $row;
 
 }
 
@@ -104,50 +116,151 @@ while (
 $stmt->close();
 
 
-/* =====================================================
-   STATUS CLASS
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| STATUS LABEL
+|--------------------------------------------------------------------------
+*/
 
-function getStatusClass($status)
+function getStatusLabel($status)
 {
 
-    switch (strtolower($status)) {
+    $status =
+        strtolower(
+            trim(
+                (string) $status
+            )
+        );
+
+
+    switch ($status) {
 
         case 'pending':
-            return 'status-pending';
+            return 'Open';
 
         case 'confirmed':
+            return 'Confirmed';
+
         case 'accepted':
-            return 'status-confirmed';
+            return 'Accepted';
 
         case 'preparing':
-            return 'status-preparing';
+            return 'Preparing';
+
+        case 'ready':
+            return 'Ready';
+
+        case 'ready_for_pickup':
+            return 'Ready for Pickup';
 
         case 'out_for_delivery':
-        case 'out for delivery':
+            return 'Out for Delivery';
+
         case 'on_the_way':
-            return 'status-delivery';
+            return 'Out for Delivery';
+
+        case 'picked_up':
+            return 'Out for Delivery';
 
         case 'delivered':
+            return 'Delivered';
+
         case 'completed':
-            return 'status-delivered';
+            return 'Delivered';
 
         case 'cancelled':
+            return 'Cancelled';
+
         case 'canceled':
-            return 'status-cancelled';
+            return 'Cancelled';
 
         default:
-            return 'status-default';
+
+            return ucfirst(
+                str_replace(
+                    '_',
+                    ' ',
+                    $status
+                )
+            );
 
     }
 
 }
 
 
+/*
+|--------------------------------------------------------------------------
+| STATUS CLASS
+|--------------------------------------------------------------------------
+*/
+
+function getStatusClass($status)
+{
+
+    $status =
+        strtolower(
+            trim(
+                (string) $status
+            )
+        );
+
+
+    switch ($status) {
+
+        case 'pending':
+            return 'pending';
+
+        case 'confirmed':
+        case 'accepted':
+            return 'accepted';
+
+        case 'preparing':
+            return 'preparing';
+
+        case 'ready':
+        case 'ready_for_pickup':
+            return 'ready';
+
+        case 'out_for_delivery':
+        case 'on_the_way':
+        case 'picked_up':
+            return 'delivery';
+
+        case 'delivered':
+        case 'completed':
+            return 'delivered';
+
+        case 'cancelled':
+        case 'canceled':
+            return 'cancelled';
+
+        default:
+            return 'default';
+
+    }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| STATUS ICON
+|--------------------------------------------------------------------------
+*/
+
 function getStatusIcon($status)
 {
 
-    switch (strtolower($status)) {
+    $status =
+        strtolower(
+            trim(
+                (string) $status
+            )
+        );
+
+
+    switch ($status) {
 
         case 'pending':
             return 'fa-clock';
@@ -159,9 +272,13 @@ function getStatusIcon($status)
         case 'preparing':
             return 'fa-kitchen-set';
 
+        case 'ready':
+        case 'ready_for_pickup':
+            return 'fa-box';
+
         case 'out_for_delivery':
-        case 'out for delivery':
         case 'on_the_way':
+        case 'picked_up':
             return 'fa-motorcycle';
 
         case 'delivered':
@@ -179,8 +296,129 @@ function getStatusIcon($status)
 
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| STATUS PROGRESS
+|--------------------------------------------------------------------------
+*/
+
+function getProgressStep($status)
+{
+
+    $status =
+        strtolower(
+            trim(
+                (string) $status
+            )
+        );
+
+
+    switch ($status) {
+
+        case 'pending':
+            return 1;
+
+        case 'confirmed':
+        case 'accepted':
+            return 2;
+
+        case 'preparing':
+            return 3;
+
+        case 'ready':
+        case 'ready_for_pickup':
+            return 4;
+
+        case 'out_for_delivery':
+        case 'on_the_way':
+        case 'picked_up':
+            return 5;
+
+        case 'delivered':
+        case 'completed':
+            return 6;
+
+        default:
+            return 1;
+
+    }
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| STATISTICS
+|--------------------------------------------------------------------------
+*/
+
+$totalOrders =
+    count($orders);
+
+
+$openOrders = 0;
+
+$deliveredOrders = 0;
+
+$cancelledOrders = 0;
+
+
+foreach (
+    $orders as $order
+) {
+
+    $status =
+        strtolower(
+            trim(
+                (string)
+                ($order['order_status'] ?? '')
+            )
+        );
+
+
+    if (
+        in_array(
+            $status,
+            [
+                'delivered',
+                'completed'
+            ],
+            true
+        )
+    ) {
+
+        $deliveredOrders++;
+
+    }
+
+    elseif (
+        in_array(
+            $status,
+            [
+                'cancelled',
+                'canceled'
+            ],
+            true
+        )
+    ) {
+
+        $cancelledOrders++;
+
+    }
+
+    else {
+
+        $openOrders++;
+
+    }
+
+}
+
 ?>
+
 <!DOCTYPE html>
+
 <html lang="en">
 
 <head>
@@ -202,19 +440,14 @@ function getStatusIcon($status)
         href="css/style.css"
     >
 
-    <link
-        rel="stylesheet"
-        href="css/css_header.css"
-    >
-
-
-    <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-    >
-
 
     <style>
+
+        /*
+        |--------------------------------------------------------------------------
+        | PAGE
+        |--------------------------------------------------------------------------
+        */
 
         * {
             box-sizing: border-box;
@@ -222,449 +455,1390 @@ function getStatusIcon($status)
 
 
         body {
+
             margin: 0;
-            background: #f5f6fa;
-            color: #333;
+
+            background:
+                #f5f6fa;
+
+            color:
+                #333;
+
             font-family:
                 'Segoe UI',
                 Tahoma,
                 Geneva,
                 Verdana,
                 sans-serif;
+
         }
 
 
         .orders-container {
-            max-width: 1100px;
-            margin: 40px auto;
-            padding: 0 20px 50px;
+
+            max-width:
+                1100px;
+
+            margin:
+                38px auto;
+
+            padding:
+                0 20px 60px;
+
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | PAGE HEADER
+        |--------------------------------------------------------------------------
+        */
 
         .page-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            margin-bottom: 25px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                20px;
+
+            margin-bottom:
+                25px;
+
         }
 
 
-        .page-header h1 {
-            margin: 0;
-            color: #222;
-            font-size: 32px;
+        .page-heading h1 {
+
+            margin:
+                0;
+
+            color:
+                #fff;
+
+            font-size:
+                32px;
+
+            font-weight:
+                800;
+
         }
 
 
-        .page-header p {
-            margin: 7px 0 0;
-            color: #777;
+        .page-heading p {
+
+            margin:
+                7px 0 0;
+
+            color:
+                #fff;
+
+            font-size:
+                14px;
+
         }
 
 
-        .back-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 11px 17px;
-            background: #fff;
-            color: #333;
-            border-radius: 10px;
-            text-decoration: none;
-            border: 1px solid #eee;
-            font-weight: 600;
+        .continue-btn {
+
+            display:
+                inline-flex;
+
+            align-items:
+                center;
+
+            gap:
+                8px;
+
+            padding:
+                11px 17px;
+
+            background:
+                #fff;
+
+            color:
+                #333;
+
+            border:
+                1px solid #eee;
+
+            border-radius:
+                10px;
+
+            text-decoration:
+                none;
+
+            font-size:
+                13px;
+
+            font-weight:
+                700;
+
         }
 
 
-        .back-btn:hover {
-            background: #f1f1f1;
+        .continue-btn:hover {
+
+            background:
+                #fff1f5;
+
+            color:
+                #ed0038;
+
+            border-color:
+                #ed0038;
+
         }
 
 
-        /* =================================================
-           EMPTY ORDERS
-        ================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | STAT CARDS
+        |--------------------------------------------------------------------------
+        */
 
-        .empty-orders {
-            background: #fff;
-            border-radius: 20px;
-            padding: 65px 25px;
-            text-align: center;
+        .order-stats {
+
+            display:
+                grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap:
+                15px;
+
+            margin-bottom:
+                25px;
+
+        }
+
+
+        .stat-card {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                14px;
+
+            padding:
+                17px;
+
+            background:
+                #fff;
+
+            border:
+                1px solid #eee;
+
+            border-radius:
+                15px;
+
             box-shadow:
-                0 10px 30px rgba(0,0,0,.06);
+                0 7px 22px
+                rgba(0,0,0,.04);
+
         }
 
 
-        .empty-icon {
-            width: 90px;
-            height: 90px;
-            margin: 0 auto 20px;
-            border-radius: 50%;
-            background: #fff1f2;
-            color: #E23744;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
+        .stat-icon {
+
+            width:
+                45px;
+
+            height:
+                45px;
+
+            border-radius:
+                12px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            background:
+                #fff1f5;
+
+            color:
+                #ed0038;
+
+            font-size:
+                18px;
+
         }
 
 
-        .empty-orders h2 {
-            margin: 0;
-            color: #222;
+        .stat-number {
+
+            font-size:
+                21px;
+
+            font-weight:
+                800;
+
+            color:
+                #222;
+
         }
 
 
-        .empty-orders p {
-            color: #777;
-            margin: 10px 0 25px;
+        .stat-label {
+
+            margin-top:
+                2px;
+
+            color:
+                #888;
+
+            font-size:
+                11px;
+
         }
 
 
-        .shop-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 13px 22px;
-            border-radius: 10px;
-            background: #E23744;
-            color: #fff;
-            text-decoration: none;
-            font-weight: 700;
-        }
-
-
-        .shop-btn:hover {
-            background: #c91f31;
-        }
-
-
-        /* =================================================
-           ORDER CARD
-        ================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | ORDER CARD
+        |--------------------------------------------------------------------------
+        */
 
         .order-card {
-            background: #fff;
-            border-radius: 18px;
-            margin-bottom: 22px;
-            overflow: hidden;
+
+            margin-bottom:
+                20px;
+
+            overflow:
+                hidden;
+
+            background:
+                #fff;
+
+            border:
+                1px solid #eee;
+
+            border-radius:
+                18px;
+
             box-shadow:
-                0 8px 25px rgba(0,0,0,.06);
-            border: 1px solid #eee;
+                0 8px 25px
+                rgba(0,0,0,.06);
+
         }
 
+
+        /*
+        |--------------------------------------------------------------------------
+        | ORDER TOP
+        |--------------------------------------------------------------------------
+        */
 
         .order-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 20px 22px;
-            border-bottom: 1px solid #eee;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                20px;
+
+            padding:
+                19px 22px;
+
+            border-bottom:
+                1px solid #eee;
+
         }
 
 
-        .order-info h3 {
-            margin: 0;
-            color: #222;
-            font-size: 18px;
+        .order-number {
+
+            margin:
+                0;
+
+            color:
+                #222;
+
+            font-size:
+                17px;
+
+            font-weight:
+                800;
+
         }
 
 
         .order-date {
-            margin-top: 6px;
-            color: #888;
-            font-size: 13px;
+
+            margin-top:
+                6px;
+
+            color:
+                #888;
+
+            font-size:
+                12px;
+
         }
 
 
+        .order-date i {
+
+            margin-right:
+                5px;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | STATUS
+        |--------------------------------------------------------------------------
+        */
+
         .order-status {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            padding: 8px 13px;
-            border-radius: 25px;
-            font-size: 13px;
-            font-weight: 700;
+
+            display:
+                inline-flex;
+
+            align-items:
+                center;
+
+            gap:
+                7px;
+
+            padding:
+                8px 13px;
+
+            border-radius:
+                25px;
+
+            font-size:
+                11px;
+
+            font-weight:
+                800;
+
+            white-space:
+                nowrap;
+
         }
 
 
         .status-pending {
-            background: #fff5d9;
-            color: #a36a00;
+
+            background:
+                #fff5df;
+
+            color:
+                #b87800;
+
         }
 
 
-        .status-confirmed {
-            background: #e8f5ff;
-            color: #0874b9;
+        .status-accepted {
+
+            background:
+                #eaf4ff;
+
+            color:
+                #1672b8;
+
         }
 
 
         .status-preparing {
-            background: #fff0df;
-            color: #c26400;
+
+            background:
+                #fff0e5;
+
+            color:
+                #d15c1c;
+
+        }
+
+
+        .status-ready {
+
+            background:
+                #f1ebff;
+
+            color:
+                #6944c1;
+
         }
 
 
         .status-delivery {
-            background: #f0eaff;
-            color: #6941c6;
+
+            background:
+                #e9f8ef;
+
+            color:
+                #168249;
+
         }
 
 
         .status-delivered {
-            background: #e8f8ef;
-            color: #198754;
+
+            background:
+                #e5f8eb;
+
+            color:
+                #13803f;
+
         }
 
 
         .status-cancelled {
-            background: #ffe9eb;
-            color: #d92d3a;
+
+            background:
+                #ffebed;
+
+            color:
+                #d22b3a;
+
         }
 
 
         .status-default {
-            background: #eee;
-            color: #555;
+
+            background:
+                #f0f0f0;
+
+            color:
+                #666;
+
         }
 
 
-        /* =================================================
-           RESTAURANT
-        ================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | RESTAURANT
+        |--------------------------------------------------------------------------
+        */
 
         .restaurant-row {
-            display: flex;
-            align-items: center;
-            gap: 13px;
-            padding: 18px 22px 10px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                14px;
+
+            padding:
+                17px 22px;
+
         }
 
 
         .restaurant-image {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            overflow: hidden;
-            background: #fff1f2;
-            color: #E23744;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 21px;
-            flex-shrink: 0;
+
+            width:
+                58px;
+
+            height:
+                58px;
+
+            overflow:
+                hidden;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            flex-shrink:
+                0;
+
+            background:
+                #fff1f5;
+
+            color:
+                #ed0038;
+
+            border-radius:
+                13px;
+
         }
 
 
         .restaurant-image img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+
+            width:
+                100%;
+
+            height:
+                100%;
+
+            object-fit:
+                cover;
+
         }
 
 
         .restaurant-row h4 {
-            margin: 0;
-            color: #222;
-            font-size: 16px;
+
+            margin:
+                0;
+
+            color:
+                #222;
+
+            font-size:
+                16px;
+
         }
 
 
         .restaurant-row span {
-            display: block;
-            margin-top: 3px;
-            color: #888;
-            font-size: 12px;
+
+            display:
+                block;
+
+            margin-top:
+                3px;
+
+            color:
+                #888;
+
+            font-size:
+                12px;
+
         }
 
 
-        /* =================================================
-           ORDER ITEMS
-        ================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | ITEMS
+        |--------------------------------------------------------------------------
+        */
 
         .items-container {
-            padding: 8px 22px 18px;
+
+            padding:
+                5px 22px 17px;
+
+        }
+
+
+        .items-title {
+
+            margin-bottom:
+                5px;
+
+            color:
+                #555;
+
+            font-size:
+                12px;
+
+            font-weight:
+                800;
+
+            text-transform:
+                uppercase;
+
         }
 
 
         .order-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 12px 0;
-            border-bottom: 1px solid #f0f0f0;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                20px;
+
+            padding:
+                12px 0;
+
+            border-bottom:
+                1px solid #f0f0f0;
+
         }
 
 
         .order-item:last-child {
-            border-bottom: 0;
+
+            border-bottom:
+                0;
+
         }
 
 
         .item-left {
-            min-width: 0;
+
+            min-width:
+                0;
+
         }
 
 
         .item-name {
-            color: #222;
-            font-weight: 600;
+
+            color:
+                #222;
+
+            font-size:
+                13px;
+
+            font-weight:
+                650;
+
         }
 
 
         .item-qty {
-            margin-top: 4px;
-            color: #888;
-            font-size: 13px;
+
+            margin-top:
+                4px;
+
+            color:
+                #888;
+
+            font-size:
+                12px;
+
         }
 
 
         .item-price {
-            color: #222;
-            font-weight: 700;
-            white-space: nowrap;
+
+            color:
+                #222;
+
+            font-size:
+                13px;
+
+            font-weight:
+                750;
+
+            white-space:
+                nowrap;
+
         }
 
 
-        /* =================================================
-           ORDER FOOTER
-        ================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | TRACKING
+        |--------------------------------------------------------------------------
+        */
+
+        .tracking {
+
+            margin:
+                5px 22px 20px;
+
+            padding:
+                17px;
+
+            background:
+                #fafafa;
+
+            border:
+                1px solid #eee;
+
+            border-radius:
+                13px;
+
+        }
+
+
+        .tracking-header {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            margin-bottom:
+                18px;
+
+        }
+
+
+        .tracking-title {
+
+            color:
+                #333;
+
+            font-size:
+                13px;
+
+            font-weight:
+                800;
+
+        }
+
+
+        .tracking-current {
+
+            color:
+                #ed0038;
+
+            font-size:
+                11px;
+
+            font-weight:
+                800;
+
+        }
+
+
+        .progress {
+
+            position:
+                relative;
+
+            display:
+                flex;
+
+            justify-content:
+                space-between;
+
+        }
+
+
+        .progress-line {
+
+            position:
+                absolute;
+
+            top:
+                13px;
+
+            left:
+                8%;
+
+            right:
+                8%;
+
+            height:
+                3px;
+
+            background:
+                #ddd;
+
+            z-index:
+                0;
+
+        }
+
+
+        .progress-fill {
+
+            height:
+                100%;
+
+            background:
+                #ed0038;
+
+            transition:
+                width .3s ease;
+
+        }
+
+
+        .progress-step {
+
+            position:
+                relative;
+
+            z-index:
+                1;
+
+            width:
+                16.66%;
+
+            text-align:
+                center;
+
+        }
+
+
+        .progress-dot {
+
+            width:
+                28px;
+
+            height:
+                28px;
+
+            margin:
+                0 auto 7px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            border:
+                3px solid #fafafa;
+
+            border-radius:
+                50%;
+
+            background:
+                #ddd;
+
+            color:
+                #999;
+
+            font-size:
+                10px;
+
+        }
+
+
+        .progress-step.active
+        .progress-dot {
+
+            background:
+                #ed0038;
+
+            color:
+                #fff;
+
+        }
+
+
+        .progress-step.completed
+        .progress-dot {
+
+            background:
+                #28a745;
+
+            color:
+                #fff;
+
+        }
+
+
+        .progress-step span {
+
+            display:
+                block;
+
+            color:
+                #999;
+
+            font-size:
+                8px;
+
+            line-height:
+                1.2;
+
+        }
+
+
+        .progress-step.active span,
+        .progress-step.completed span {
+
+            color:
+                #333;
+
+            font-weight:
+                700;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CANCELLED
+        |--------------------------------------------------------------------------
+        */
+
+        .cancelled-box {
+
+            margin:
+                5px 22px 20px;
+
+            padding:
+                14px 16px;
+
+            background:
+                #fff0f1;
+
+            border:
+                1px solid #ffd4d8;
+
+            border-radius:
+                11px;
+
+            color:
+                #c72a38;
+
+            font-size:
+                12px;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | FOOTER
+        |--------------------------------------------------------------------------
+        */
 
         .order-bottom {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 18px 22px;
-            background: #fafafa;
-            border-top: 1px solid #eee;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            gap:
+                20px;
+
+            padding:
+                18px 22px;
+
+            background:
+                #fafafa;
+
+            border-top:
+                1px solid #eee;
+
         }
 
 
         .total-label {
-            color: #777;
-            font-size: 13px;
+
+            color:
+                #777;
+
+            font-size:
+                12px;
+
         }
 
 
         .total-price {
-            display: block;
-            margin-top: 3px;
-            color: #E23744;
-            font-size: 21px;
-            font-weight: 800;
+
+            display:
+                block;
+
+            margin-top:
+                3px;
+
+            color:
+                #ed0038;
+
+            font-size:
+                21px;
+
+            font-weight:
+                800;
+
+        }
+
+
+        .payment-method {
+
+            margin-top:
+                4px;
+
+            color:
+                #888;
+
+            font-size:
+                11px;
+
         }
 
 
         .view-order-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 11px 17px;
-            border-radius: 9px;
-            background: #E23744;
-            color: #fff;
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 700;
+
+            display:
+                inline-flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            gap:
+                8px;
+
+            padding:
+                11px 17px;
+
+            background:
+                #ed0038;
+
+            color:
+                #fff;
+
+            border-radius:
+                9px;
+
+            text-decoration:
+                none;
+
+            font-size:
+                13px;
+
+            font-weight:
+                750;
+
         }
 
 
         .view-order-btn:hover {
-            background: #c91f31;
-        }
-.cancel-order-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 11px 17px;
-    border-radius: 9px;
-    background: #dc3545;
-    color: #fff;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 700;
-    border: none;
-    cursor: pointer;
-}
 
-.cancel-order-btn:hover {
-    background: #bb2d3b;
-}
+            background:
+                #d90035;
 
-        /* =================================================
-           PAYMENT
-        ================================================= */
+            color:
+                #fff;
 
-        .payment-method {
-            margin-top: 3px;
-            color: #777;
-            font-size: 12px;
         }
 
 
-        /* =================================================
-           MOBILE
-        ================================================= */
+        /*
+        |--------------------------------------------------------------------------
+        | EMPTY
+        |--------------------------------------------------------------------------
+        */
 
-        @media (max-width: 700px) {
+        .empty-orders {
+
+            padding:
+                70px 25px;
+
+            text-align:
+                center;
+
+            background:
+                #fff;
+
+            border:
+                1px solid #eee;
+
+            border-radius:
+                20px;
+
+            box-shadow:
+                0 8px 25px
+                rgba(0,0,0,.05);
+
+        }
+
+
+        .empty-icon {
+
+            width:
+                90px;
+
+            height:
+                90px;
+
+            margin:
+                0 auto 20px;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            background:
+                #fff1f5;
+
+            color:
+                #ed0038;
+
+            border-radius:
+                50%;
+
+            font-size:
+                38px;
+
+        }
+
+
+        .empty-orders h2 {
+
+            margin:
+                0;
+
+            color:
+                #222;
+
+            font-size:
+                22px;
+
+        }
+
+
+        .empty-orders p {
+
+            margin:
+                9px 0 23px;
+
+            color:
+                #777;
+
+            font-size:
+                13px;
+
+        }
+
+
+        .shop-btn {
+
+            display:
+                inline-flex;
+
+            align-items:
+                center;
+
+            gap:
+                8px;
+
+            padding:
+                12px 21px;
+
+            background:
+                #ed0038;
+
+            color:
+                #fff;
+
+            border-radius:
+                10px;
+
+            text-decoration:
+                none;
+
+            font-size:
+                13px;
+
+            font-weight:
+                750;
+
+        }
+
+
+        .shop-btn:hover {
+
+            background:
+                #d90035;
+
+            color:
+                #fff;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | MOBILE
+        |--------------------------------------------------------------------------
+        */
+
+        @media (max-width: 750px) {
 
             .orders-container {
-                margin-top: 25px;
-                padding: 0 12px 35px;
+
+                margin-top:
+                    25px;
+
+                padding:
+                    0 12px 40px;
+
             }
 
 
             .page-header {
-                align-items: flex-start;
-                flex-direction: column;
+
+                align-items:
+                    flex-start;
+
+                flex-direction:
+                    column;
+
             }
 
 
-            .page-header h1 {
-                font-size: 27px;
+            .continue-btn {
+
+                width:
+                    100%;
+
+                justify-content:
+                    center;
+
+            }
+
+
+            .order-stats {
+
+                grid-template-columns:
+                    1fr;
+
             }
 
 
             .order-top {
-                align-items: flex-start;
-                flex-direction: column;
-                padding: 17px;
+
+                align-items:
+                    flex-start;
+
+                flex-direction:
+                    column;
+
+                padding:
+                    17px;
+
             }
 
 
             .restaurant-row {
-                padding-left: 17px;
-                padding-right: 17px;
+
+                padding-left:
+                    17px;
+
+                padding-right:
+                    17px;
+
             }
 
 
             .items-container {
-                padding-left: 17px;
-                padding-right: 17px;
+
+                padding-left:
+                    17px;
+
+                padding-right:
+                    17px;
+
+            }
+
+
+            .tracking {
+
+                margin-left:
+                    17px;
+
+                margin-right:
+                    17px;
+
+                overflow-x:
+                    auto;
+
+            }
+
+
+            .progress {
+
+                min-width:
+                    520px;
+
             }
 
 
             .order-bottom {
-                align-items: flex-start;
-                flex-direction: column;
-                padding: 17px;
+
+                align-items:
+                    flex-start;
+
+                flex-direction:
+                    column;
+
+                padding:
+                    17px;
+
             }
 
 
             .view-order-btn {
-                width: 100%;
-                justify-content: center;
+
+                width:
+                    100%;
+
+            }
+
+        }
+
+
+        @media (max-width: 450px) {
+
+            .page-heading h1 {
+
+                font-size:
+                    27px;
+
             }
 
 
-            .order-item {
-                align-items: flex-start;
+            .order-status {
+
+                font-size:
+                    10px;
+
+            }
+
+
+            .restaurant-image {
+
+                width:
+                    50px;
+
+                height:
+                    50px;
+
             }
 
         }
@@ -677,25 +1851,42 @@ function getStatusIcon($status)
 <body>
 
 
-<!-- =====================================================
-     MAIN
-===================================================== -->
+<?php
 
-<div class="orders-container">
+/*
+|--------------------------------------------------------------------------
+| EXISTING HUMSAFAR CUSTOMER HEADER
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| customer-header.php is inside includes/
+|
+*/
+
+require_once __DIR__ . '/includes/customer-header.php';
+
+?>
 
 
-    <!-- =================================================
-         PAGE HEADER
-    ================================================= -->
+<!-- =========================================================
+     MY ORDERS
+========================================================= -->
+
+<main class="orders-container">
+
+
+    <!-- PAGE HEADER -->
 
     <div class="page-header">
 
 
-        <div>
+        <div class="page-heading">
 
             <h1>
 
-                <i class="fas fa-box-open"></i>
+                <i
+                    class="fas fa-box-open"
+                ></i>
 
                 My Orders
 
@@ -703,18 +1894,22 @@ function getStatusIcon($status)
 
 
             <p>
+
                 View your recent and previous orders.
+
             </p>
 
         </div>
 
 
         <a
-            href="index.php"
-            class="back-btn"
+            href="restaurants.php"
+            class="continue-btn"
         >
 
-            <i class="fas fa-arrow-left"></i>
+            <i
+                class="fas fa-arrow-left"
+            ></i>
 
             Continue Shopping
 
@@ -724,39 +1919,160 @@ function getStatusIcon($status)
     </div>
 
 
-    <?php if (empty($orders)) { ?>
+
+    <!-- =====================================================
+         STATISTICS
+    ====================================================== -->
+
+    <div class="order-stats">
+
+
+        <div class="stat-card">
+
+            <div class="stat-icon">
+
+                <i
+                    class="fas fa-receipt"
+                ></i>
+
+            </div>
+
+
+            <div>
+
+                <div class="stat-number">
+
+                    <?php
+                    echo $totalOrders;
+                    ?>
+
+                </div>
+
+
+                <div class="stat-label">
+
+                    Total Orders
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="stat-card">
+
+            <div class="stat-icon">
+
+                <i
+                    class="fas fa-clock"
+                ></i>
+
+            </div>
+
+
+            <div>
+
+                <div class="stat-number">
+
+                    <?php
+                    echo $openOrders;
+                    ?>
+
+                </div>
+
+
+                <div class="stat-label">
+
+                    Open Orders
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <div class="stat-card">
+
+            <div class="stat-icon">
+
+                <i
+                    class="fas fa-circle-check"
+                ></i>
+
+            </div>
+
+
+            <div>
+
+                <div class="stat-number">
+
+                    <?php
+                    echo $deliveredOrders;
+                    ?>
+
+                </div>
+
+
+                <div class="stat-label">
+
+                    Delivered
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+    </div>
+
+
+
+    <?php if (empty($orders)): ?>
 
 
         <!-- =================================================
-             NO ORDERS
-        ================================================= -->
+             EMPTY ORDERS
+        ================================================== -->
 
         <div class="empty-orders">
 
 
             <div class="empty-icon">
 
-                <i class="fas fa-receipt"></i>
+                <i
+                    class="fas fa-receipt"
+                ></i>
 
             </div>
 
 
             <h2>
+
                 No Orders Yet
+
             </h2>
 
 
             <p>
+
                 You haven't placed any orders yet.
+
             </p>
 
 
             <a
-                href="index.php"
+                href="restaurants.php"
                 class="shop-btn"
             >
 
-                <i class="fas fa-utensils"></i>
+                <i
+                    class="fas fa-utensils"
+                ></i>
 
                 Start Ordering
 
@@ -766,27 +2082,36 @@ function getStatusIcon($status)
         </div>
 
 
-    <?php } else { ?>
+    <?php else: ?>
 
 
         <!-- =================================================
-             ORDERS LIST
-        ================================================= -->
+             ORDERS
+        ================================================== -->
 
         <?php foreach (
             $orders as $order
-        ) { ?>
+        ): ?>
 
 
             <?php
 
             $status =
-                $order['order_status'];
+                $order['order_status']
+                ?? 'pending';
+
+
+            $statusLabel =
+                getStatusLabel(
+                    $status
+                );
+
 
             $statusClass =
                 getStatusClass(
                     $status
                 );
+
 
             $statusIcon =
                 getStatusIcon(
@@ -794,13 +2119,9 @@ function getStatusIcon($status)
                 );
 
 
-            $statusText =
-                ucfirst(
-                    str_replace(
-                        '_',
-                        ' ',
-                        $status
-                    )
+            $progressStep =
+                getProgressStep(
+                    $status
                 );
 
 
@@ -832,6 +2153,45 @@ function getStatusIcon($status)
 
             }
 
+
+            $restaurantName =
+                $order['restaurant_name']
+                ?? 'Restaurant';
+
+
+            $restaurantImage =
+                $order['restaurant_image']
+                ?? '';
+
+
+            $total =
+                (float)
+                (
+                    $order['total']
+                    ?? 0
+                );
+
+
+            $payment =
+                $order['payment_method']
+                ?? 'Cash on Delivery';
+
+
+            $isCancelled =
+                in_array(
+                    strtolower(
+                        trim(
+                            (string)
+                            $status
+                        )
+                    ),
+                    [
+                        'cancelled',
+                        'canceled'
+                    ],
+                    true
+                );
+
             ?>
 
 
@@ -840,24 +2200,24 @@ function getStatusIcon($status)
 
                 <!-- =================================================
                      ORDER HEADER
-                ================================================= -->
+                ================================================== -->
 
                 <div class="order-top">
 
 
-                    <div class="order-info">
+                    <div>
 
 
-                        <h3>
+                        <h3 class="order-number">
 
                             Order #
 
                             <?php
-                                echo h(
-                                    $order[
-                                        'order_number'
-                                    ]
-                                );
+                            echo h(
+                                $order[
+                                    'order_number'
+                                ]
+                            );
                             ?>
 
                         </h3>
@@ -865,12 +2225,14 @@ function getStatusIcon($status)
 
                         <div class="order-date">
 
-                            <i class="far fa-calendar"></i>
+                            <i
+                                class="far fa-calendar"
+                            ></i>
 
                             <?php
-                                echo h(
-                                    $orderDate
-                                );
+                            echo h(
+                                $orderDate
+                            );
                             ?>
 
                         </div>
@@ -882,10 +2244,10 @@ function getStatusIcon($status)
                     <div
                         class="
                             order-status
-                            <?php
-                                echo h(
-                                    $statusClass
-                                );
+                            status-<?php
+                            echo h(
+                                $statusClass
+                            );
                             ?>
                         "
                     >
@@ -894,18 +2256,18 @@ function getStatusIcon($status)
                             class="
                                 fas
                                 <?php
-                                    echo h(
-                                        $statusIcon
-                                    );
+                                echo h(
+                                    $statusIcon
+                                );
                                 ?>
                             "
                         ></i>
 
 
                         <?php
-                            echo h(
-                                $statusText
-                            );
+                        echo h(
+                            $statusLabel
+                        );
                         ?>
 
                     </div>
@@ -914,9 +2276,10 @@ function getStatusIcon($status)
                 </div>
 
 
+
                 <!-- =================================================
                      RESTAURANT
-                ================================================= -->
+                ================================================== -->
 
                 <div class="restaurant-row">
 
@@ -926,40 +2289,43 @@ function getStatusIcon($status)
 
                         <?php if (
                             !empty(
-                                $order[
-                                    'restaurant_image'
-                                ]
+                                $restaurantImage
                             )
-                        ) { ?>
+                        ): ?>
 
 
                             <img
                                 src="
                                     assets/images/restaurants/<?php
-                                        echo h(
-                                            $order[
-                                                'restaurant_image'
-                                            ]
-                                        );
+                                    echo h(
+                                        $restaurantImage
+                                    );
                                     ?>
                                 "
                                 alt="<?php
-                                    echo h(
-                                        $order[
-                                            'restaurant_name'
-                                        ]
-                                    );
+                                echo h(
+                                    $restaurantName
+                                );
                                 ?>"
+                                onerror="
+                                    this.style.display='none';
+                                    this.parentElement.innerHTML='<i class=&quot;fas fa-store&quot;></i>';
+                                "
                             >
 
 
-                        <?php } else { ?>
+                        <?php else: ?>
 
 
-                            <i class="fas fa-store"></i>
+                            <i
+                                class="
+                                    fas
+                                    fa-store
+                                "
+                            ></i>
 
 
-                        <?php } ?>
+                        <?php endif; ?>
 
 
                     </div>
@@ -971,19 +2337,18 @@ function getStatusIcon($status)
                         <h4>
 
                             <?php
-                                echo h(
-                                    $order[
-                                        'restaurant_name'
-                                    ] ??
-                                    'Restaurant'
-                                );
+                            echo h(
+                                $restaurantName
+                            );
                             ?>
 
                         </h4>
 
 
                         <span>
+
                             Order details
+
                         </span>
 
 
@@ -993,75 +2358,83 @@ function getStatusIcon($status)
                 </div>
 
 
+
                 <!-- =================================================
                      ORDER ITEMS
-                ================================================= -->
+                ================================================== -->
+
+                <?php
+
+                $items = [];
+
+
+                $itemStmt =
+                    $conn->prepare("
+                        SELECT
+                            item_name,
+                            item_price,
+                            quantity,
+                            subtotal
+
+                        FROM order_items
+
+                        WHERE order_id = ?
+
+                        ORDER BY id ASC
+                    ");
+
+
+                if ($itemStmt) {
+
+                    $itemStmt->bind_param(
+                        "i",
+                        $order['id']
+                    );
+
+
+                    $itemStmt->execute();
+
+
+                    $itemResult =
+                        $itemStmt->get_result();
+
+
+                    while (
+                        $item =
+                        $itemResult->fetch_assoc()
+                    ) {
+
+                        $items[] =
+                            $item;
+
+                    }
+
+
+                    $itemStmt->close();
+
+                }
+
+                ?>
+
 
                 <div class="items-container">
 
 
-                    <?php
-
-                    $itemStmt =
-                        $conn->prepare("
-                            SELECT
-                                item_name,
-                                item_price,
-                                quantity,
-                                subtotal
-
-                            FROM order_items
-
-                            WHERE order_id = ?
-
-                            ORDER BY id ASC
-                        ");
-
-
-                    $items = [];
-
-
-                    if ($itemStmt) {
-
-                        $itemStmt->bind_param(
-                            "i",
-                            $order['id']
-                        );
-
-
-                        $itemStmt->execute();
-
-
-                        $itemResult =
-                            $itemStmt->get_result();
-
-
-                        while (
-                            $item =
-                            $itemResult->fetch_assoc()
-                        ) {
-
-                            $items[] =
-                                $item;
-
-                        }
-
-
-                        $itemStmt->close();
-
-                    }
-
-                    ?>
-
-
                     <?php if (
                         !empty($items)
-                    ) { ?>
+                    ): ?>
+
+
+                        <div class="items-title">
+
+                            Ordered Items
+
+                        </div>
 
 
                         <?php foreach (
                             $items as $item
-                        ) { ?>
+                        ): ?>
 
 
                             <div class="order-item">
@@ -1073,11 +2446,12 @@ function getStatusIcon($status)
                                     <div class="item-name">
 
                                         <?php
-                                            echo h(
-                                                $item[
-                                                    'item_name'
-                                                ]
-                                            );
+                                        echo h(
+                                            $item[
+                                                'item_name'
+                                            ]
+                                            ?? 'Item'
+                                        );
                                         ?>
 
                                     </div>
@@ -1085,24 +2459,15 @@ function getStatusIcon($status)
 
                                     <div class="item-qty">
 
-                                        Qty:
-                                        <?php
-                                            echo (int)
-                                                $item[
-                                                    'quantity'
-                                                ];
-                                        ?>
-
-                                        × Rs.
+                                        Quantity:
 
                                         <?php
-                                            echo number_format(
-                                                (float)
-                                                $item[
-                                                    'item_price'
-                                                ],
-                                                2
-                                            );
+                                        echo h(
+                                            $item[
+                                                'quantity'
+                                            ]
+                                            ?? 1
+                                        );
                                         ?>
 
                                     </div>
@@ -1116,13 +2481,33 @@ function getStatusIcon($status)
                                     Rs.
 
                                     <?php
-                                        echo number_format(
-                                            (float)
-                                            $item[
-                                                'subtotal'
-                                            ],
-                                            2
+
+                                    $itemSubtotal =
+                                        $item['subtotal']
+                                        ??
+                                        (
+                                            (
+                                                $item[
+                                                    'item_price'
+                                                ]
+                                                ?? 0
+                                            )
+                                            *
+                                            (
+                                                $item[
+                                                    'quantity'
+                                                ]
+                                                ?? 1
+                                            )
                                         );
+
+
+                                    echo number_format(
+                                        (float)
+                                        $itemSubtotal,
+                                        2
+                                    );
+
                                     ?>
 
                                 </div>
@@ -1131,169 +2516,465 @@ function getStatusIcon($status)
                             </div>
 
 
-                        <?php } ?>
+                        <?php endforeach; ?>
 
 
-                    <?php } else { ?>
+                    <?php else: ?>
 
 
                         <div
                             style="
-                                padding:12px 0;
+                                padding:10px 0;
                                 color:#888;
+                                font-size:12px;
                             "
                         >
 
-                            Order items not available.
+                            Order items are not available.
 
                         </div>
 
 
-                    <?php } ?>
+                    <?php endif; ?>
 
 
                 </div>
 
 
-<!-- =================================================
-     ORDER FOOTER
-================================================= -->
 
-<div class="order-bottom">
+                <?php if (!$isCancelled): ?>
 
 
-    <div>
+                    <!-- =================================================
+                         ORDER TRACKING
+                    ================================================== -->
 
-        <span class="total-label">
-            Total Amount
-        </span>
-
-
-        <strong class="total-price">
-
-            Rs.
-
-            <?php
-                echo number_format(
-                    (float)
-                    $order['total'],
-                    2
-                );
-            ?>
-
-        </strong>
+                    <div class="tracking">
 
 
-        <div class="payment-method">
-
-            <i class="fas fa-credit-card"></i>
-
-            <?php
-
-            if (
-                $order['payment_method'] === 'card'
-            ) {
-
-                echo 'Card Payment';
-
-            } elseif (
-                $order['payment_method'] === 'online'
-            ) {
-
-                echo 'Online Payment';
-
-            } else {
-
-                echo 'Cash on Delivery';
-
-            }
-
-            ?>
-
-        </div>
-
-    </div>
+                        <div
+                            class="tracking-header"
+                        >
 
 
-    <!-- BUTTONS -->
+                            <div class="tracking-title">
 
-    <div
-        style="
-            display:flex;
-            gap:10px;
-            flex-wrap:wrap;
-            justify-content:flex-end;
-        "
-    >
+                                Order Tracking
+
+                            </div>
 
 
-        <!-- VIEW ORDER -->
+                            <div class="tracking-current">
 
-        <a
-            href="order_success.php?order_id=<?php echo (int)$order['id']; ?>"
-            class="view-order-btn"
-        >
+                                <?php
+                                echo h(
+                                    $statusLabel
+                                );
+                                ?>
 
-            <i class="fas fa-eye"></i>
-
-            View Order
-
-        </a>
+                            </div>
 
 
-        <!-- CANCEL ORDER -->
-
-        <?php
-
-        $currentStatus = strtolower(
-            trim(
-                $order['order_status']
-            )
-        );
+                        </div>
 
 
-        $canCancel = in_array(
-            $currentStatus,
-            [
-                'pending',
-                'confirmed',
-                'accepted'
-            ],
-            true
-        );
 
-        ?>
+                        <div class="progress">
 
 
-        <?php if ($canCancel) { ?>
+                            <div
+                                class="progress-line"
+                            >
 
-            <a
-                href="cancel_order.php?order_id=<?php echo (int)$order['id']; ?>"
-                class="cancel-order-btn"
-                onclick="return confirm('Are you sure you want to cancel this order?');"
-            >
+                                <div
+                                    class="progress-fill"
+                                    style="
+                                        width:
+                                        <?php
 
-                <i class="fas fa-xmark"></i>
+                                        $progressWidth =
+                                            (
+                                                (
+                                                    $progressStep - 1
+                                                )
+                                                /
+                                                5
+                                            )
+                                            * 100;
 
-                Cancel Order
+                                        echo
+                                            $progressWidth
+                                            . '%';
 
-            </a>
+                                        ?>
+                                    "
+                                ></div>
 
-        <?php } ?>
-
-
-    </div>
-
-
-</div>
-
-        <?php } ?>
+                            </div>
 
 
-    <?php } ?>
+
+                            <!-- PLACED -->
+
+                            <div
+                                class="
+                                    progress-step
+                                    <?php
+                                    echo
+                                        $progressStep >= 1
+                                        ? 'completed'
+                                        : '';
+                                    ?>
+                                "
+                            >
+
+                                <div
+                                    class="progress-dot"
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-receipt
+                                        "
+                                    ></i>
+
+                                </div>
 
 
-</div>
+                                <span>
+                                    Placed
+                                </span>
+
+                            </div>
+
+
+
+                            <!-- ACCEPTED -->
+
+                            <div
+                                class="
+                                    progress-step
+                                    <?php
+                                    echo
+                                        $progressStep >= 2
+                                        ? 'completed'
+                                        : '';
+                                    ?>
+                                "
+                            >
+
+                                <div
+                                    class="progress-dot"
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-circle-check
+                                        "
+                                    ></i>
+
+                                </div>
+
+
+                                <span>
+                                    Accepted
+                                </span>
+
+                            </div>
+
+
+
+                            <!-- PREPARING -->
+
+                            <div
+                                class="
+                                    progress-step
+                                    <?php
+                                    echo
+                                        $progressStep >= 3
+                                        ? 'completed'
+                                        : '';
+                                    ?>
+                                "
+                            >
+
+                                <div
+                                    class="progress-dot"
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-kitchen-set
+                                        "
+                                    ></i>
+
+                                </div>
+
+
+                                <span>
+                                    Preparing
+                                </span>
+
+                            </div>
+
+
+
+                            <!-- READY -->
+
+                            <div
+                                class="
+                                    progress-step
+                                    <?php
+                                    echo
+                                        $progressStep >= 4
+                                        ? 'completed'
+                                        : '';
+                                    ?>
+                                "
+                            >
+
+                                <div
+                                    class="progress-dot"
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-box
+                                        "
+                                    ></i>
+
+                                </div>
+
+
+                                <span>
+                                    Ready
+                                </span>
+
+                            </div>
+
+
+
+                            <!-- OUT FOR DELIVERY -->
+
+                            <div
+                                class="
+                                    progress-step
+                                    <?php
+                                    echo
+                                        $progressStep >= 5
+                                        ? 'completed'
+                                        : '';
+                                    ?>
+                                "
+                            >
+
+                                <div
+                                    class="progress-dot"
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-motorcycle
+                                        "
+                                    ></i>
+
+                                </div>
+
+
+                                <span>
+                                    Out for Delivery
+                                </span>
+
+                            </div>
+
+
+
+                            <!-- DELIVERED -->
+
+                            <div
+                                class="
+                                    progress-step
+                                    <?php
+                                    echo
+                                        $progressStep >= 6
+                                        ? 'completed'
+                                        : '';
+                                    ?>
+                                "
+                            >
+
+                                <div
+                                    class="progress-dot"
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-house
+                                        "
+                                    ></i>
+
+                                </div>
+
+
+                                <span>
+                                    Delivered
+                                </span>
+
+                            </div>
+
+
+                        </div>
+
+
+                    </div>
+
+
+                <?php else: ?>
+
+
+                    <!-- =================================================
+                         CANCELLED
+                    ================================================== -->
+
+                    <div class="cancelled-box">
+
+
+                        <i
+                            class="
+                                fas
+                                fa-circle-xmark
+                            "
+                        ></i>
+
+
+                        <strong>
+                            Order Cancelled
+                        </strong>
+
+
+                        <br>
+
+
+                        This order has been cancelled.
+
+                    </div>
+
+
+                <?php endif; ?>
+
+
+
+                <!-- =================================================
+                     ORDER FOOTER
+                ================================================== -->
+
+                <div class="order-bottom">
+
+
+                    <div>
+
+
+                        <span class="total-label">
+
+                            Total Amount
+
+                        </span>
+
+
+                        <strong
+                            class="total-price"
+                        >
+
+                            Rs.
+
+                            <?php
+                            echo number_format(
+                                $total,
+                                2
+                            );
+                            ?>
+
+                        </strong>
+
+
+                        <div
+                            class="payment-method"
+                        >
+
+                            Payment:
+
+                            <?php
+
+                            echo h(
+                                ucfirst(
+                                    str_replace(
+                                        '_',
+                                        ' ',
+                                        $payment
+                                    )
+                                )
+                            );
+
+                            ?>
+
+                        </div>
+
+
+                    </div>
+
+
+                    <?php if (
+                        file_exists(
+                            __DIR__
+                            . '/order-details.php'
+                        )
+                    ): ?>
+
+
+                        <a
+                            href="
+                                order-details.php?id=<?php
+                                echo (int)
+                                $order['id'];
+                                ?>
+                            "
+                            class="view-order-btn"
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-eye
+                                "
+                            ></i>
+
+                            View Order
+
+                        </a>
+
+
+                    <?php endif; ?>
+
+
+                </div>
+
+
+            </div>
+
+
+        <?php endforeach; ?>
+
+
+    <?php endif; ?>
+
+
+</main>
 
 
 </body>
