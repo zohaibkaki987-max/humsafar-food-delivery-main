@@ -1,26 +1,41 @@
 <?php
 
-require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/../includes/config.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+
 /*
 |--------------------------------------------------------------------------
-| CUSTOMER AUTHENTICATION
+| CUSTOMER ID
+|--------------------------------------------------------------------------
+| Existing project login flow:
+| customer_id preferred, then user_id.
 |--------------------------------------------------------------------------
 */
 
+$customerId = 0;
+
 if (
-    !isset($_SESSION['user_id']) ||
-    (int) $_SESSION['user_id'] <= 0
+    isset($_SESSION['customer_id']) &&
+    (int) $_SESSION['customer_id'] > 0
 ) {
-    header('Location: login.php');
-    exit;
+    $customerId = (int) $_SESSION['customer_id'];
+
+} elseif (
+    isset($_SESSION['user_id']) &&
+    (int) $_SESSION['user_id'] > 0
+) {
+    $customerId = (int) $_SESSION['user_id'];
 }
 
-$userId = (int) $_SESSION['user_id'];
+
+if ($customerId <= 0) {
+    header('Location: ../login.php');
+    exit;
+}
 
 
 /*
@@ -29,12 +44,12 @@ $userId = (int) $_SESSION['user_id'];
 |--------------------------------------------------------------------------
 */
 
-require_once __DIR__ . '/includes/customer-header.php';
+require_once __DIR__ . '/../includes/customer-header.php';
 
 
 /*
 |--------------------------------------------------------------------------
-| HELPERS
+| HELPER
 |--------------------------------------------------------------------------
 */
 
@@ -55,6 +70,7 @@ function e($value)
 */
 
 if (empty($_SESSION['address_csrf_token'])) {
+
     $_SESSION['address_csrf_token'] =
         bin2hex(random_bytes(32));
 }
@@ -75,11 +91,23 @@ $errorMessage = '';
 
 /*
 |--------------------------------------------------------------------------
-| EDIT ADDRESS DATA
+| FORM DATA
 |--------------------------------------------------------------------------
 */
 
-$editAddress = null;
+$form = [
+    'id' => 0,
+    'address_title' => 'Home',
+    'full_name' => '',
+    'phone' => '',
+    'address' => '',
+    'area' => '',
+    'city' => 'Hyderabad',
+    'delivery_instructions' => '',
+    'latitude' => '',
+    'longitude' => '',
+    'is_default' => 0
+];
 
 
 /*
@@ -101,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
 
         $errorMessage =
-            'Invalid security token. Please refresh the page.';
+            'Security verification failed. Please refresh the page.';
 
     } else {
 
@@ -111,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
-        | SAVE ADDRESS
+        | SAVE / UPDATE ADDRESS
         |--------------------------------------------------------------------------
         */
 
@@ -122,55 +150,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctype_digit(
                     (string) $_POST['address_id']
                 )
-                ?
-                (int) $_POST['address_id']
-                :
-                0;
+                ? (int) $_POST['address_id']
+                : 0;
+
 
             $addressTitle =
                 trim(
                     $_POST['address_title'] ?? 'Home'
                 );
 
+
             $fullName =
                 trim(
                     $_POST['full_name'] ?? ''
                 );
+
 
             $phone =
                 trim(
                     $_POST['phone'] ?? ''
                 );
 
+
             $address =
                 trim(
                     $_POST['address'] ?? ''
                 );
+
 
             $area =
                 trim(
                     $_POST['area'] ?? ''
                 );
 
+
             $city =
                 trim(
                     $_POST['city'] ?? ''
                 );
+
 
             $deliveryInstructions =
                 trim(
                     $_POST['delivery_instructions'] ?? ''
                 );
 
-            $latitude =
+
+            $latitudeInput =
                 trim(
                     $_POST['latitude'] ?? ''
                 );
 
-            $longitude =
+
+            $longitudeInput =
                 trim(
                     $_POST['longitude'] ?? ''
                 );
+
 
             $isDefault =
                 isset($_POST['is_default'])
@@ -184,38 +220,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             |--------------------------------------------------------------------------
             */
 
-            if (
-                $fullName === '' ||
-                $phone === '' ||
-                $address === '' ||
-                $city === ''
-            ) {
+            if ($fullName === '') {
 
                 $errorMessage =
-                    'Please fill all required fields.';
+                    'Please enter your full name.';
+
+            } elseif ($phone === '') {
+
+                $errorMessage =
+                    'Please enter your phone number.';
+
+            } elseif ($address === '') {
+
+                $errorMessage =
+                    'Please enter your complete address.';
+
+            } elseif ($city === '') {
+
+                $errorMessage =
+                    'Please enter your city.';
 
             } else {
 
-                /*
-                |--------------------------------------------------------------------------
-                | NORMALIZE LOCATION
-                |--------------------------------------------------------------------------
-                */
 
-                $latitudeValue =
-                    $latitude !== ''
-                    ? (float) $latitude
+                $latitude =
+                    $latitudeInput !== ''
+                    ? (float) $latitudeInput
                     : null;
 
-                $longitudeValue =
-                    $longitude !== ''
-                    ? (float) $longitude
+
+                $longitude =
+                    $longitudeInput !== ''
+                    ? (float) $longitudeInput
                     : null;
 
 
                 /*
                 |--------------------------------------------------------------------------
-                | DEFAULT ADDRESS
+                | REMOVE OLD DEFAULT
                 |--------------------------------------------------------------------------
                 */
 
@@ -232,10 +274,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         $stmt->bind_param(
                             "i",
-                            $userId
+                            $customerId
                         );
 
                         $stmt->execute();
+
                         $stmt->close();
                     }
                 }
@@ -267,7 +310,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             AND user_id = ?
                         ");
 
-                    if ($stmt) {
+
+                    if (!$stmt) {
+
+                        $errorMessage =
+                            'Database error: ' .
+                            $conn->error;
+
+                    } else {
 
                         $stmt->bind_param(
                             "sssssssddiii",
@@ -278,12 +328,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $area,
                             $city,
                             $deliveryInstructions,
-                            $latitudeValue,
-                            $longitudeValue,
+                            $latitude,
+                            $longitude,
                             $isDefault,
                             $addressId,
-                            $userId
+                            $customerId
                         );
+
 
                         if ($stmt->execute()) {
 
@@ -297,13 +348,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $stmt->error;
                         }
 
+
                         $stmt->close();
-
-                    } else {
-
-                        $errorMessage =
-                            'Database error: ' .
-                            $conn->error;
                     }
 
 
@@ -347,11 +393,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             )
                         ");
 
-                    if ($stmt) {
+
+                    if (!$stmt) {
+
+                        $errorMessage =
+                            'Database error: ' .
+                            $conn->error;
+
+                    } else {
 
                         $stmt->bind_param(
                             "issssssddi",
-                            $userId,
+                            $customerId,
                             $addressTitle,
                             $fullName,
                             $phone,
@@ -359,10 +412,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $area,
                             $city,
                             $deliveryInstructions,
-                            $latitudeValue,
-                            $longitudeValue,
+                            $latitude,
+                            $longitude,
                             $isDefault
                         );
+
 
                         if ($stmt->execute()) {
 
@@ -376,20 +430,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $stmt->error;
                         }
 
+
                         $stmt->close();
-
-                    } else {
-
-                        $errorMessage =
-                            'Database error: ' .
-                            $conn->error;
                     }
                 }
 
 
                 /*
                 |--------------------------------------------------------------------------
-                | IF NO DEFAULT EXISTS
+                | IF THERE IS NO DEFAULT ADDRESS
                 |--------------------------------------------------------------------------
                 */
 
@@ -404,13 +453,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             LIMIT 1
                         ");
 
+
                     $hasDefault = false;
+
 
                     if ($stmt) {
 
                         $stmt->bind_param(
                             "i",
-                            $userId
+                            $customerId
                         );
 
                         $stmt->execute();
@@ -426,6 +477,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
 
+                    /*
+                    | First saved address becomes default
+                    */
+
                     if (!$hasDefault) {
 
                         $stmt =
@@ -437,14 +492,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 LIMIT 1
                             ");
 
+
                         if ($stmt) {
 
                             $stmt->bind_param(
                                 "i",
-                                $userId
+                                $customerId
                             );
 
                             $stmt->execute();
+
                             $stmt->close();
                         }
                     }
@@ -455,7 +512,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         /*
         |--------------------------------------------------------------------------
-        | SET DEFAULT
+        | SET DEFAULT ADDRESS
         |--------------------------------------------------------------------------
         */
 
@@ -466,15 +523,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctype_digit(
                     (string) $_POST['address_id']
                 )
-                ?
-                (int) $_POST['address_id']
-                :
-                0;
+                ? (int) $_POST['address_id']
+                : 0;
+
 
             if ($addressId > 0) {
 
+
                 /*
-                | Remove existing default.
+                | Remove current default
                 */
 
                 $stmt =
@@ -484,20 +541,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         WHERE user_id = ?
                     ");
 
+
                 if ($stmt) {
 
                     $stmt->bind_param(
                         "i",
-                        $userId
+                        $customerId
                     );
 
                     $stmt->execute();
+
                     $stmt->close();
                 }
 
 
                 /*
-                | Set selected address.
+                | Set selected address as default
                 */
 
                 $stmt =
@@ -508,13 +567,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         AND user_id = ?
                     ");
 
+
                 if ($stmt) {
 
                     $stmt->bind_param(
                         "ii",
                         $addressId,
-                        $userId
+                        $customerId
                     );
+
 
                     if ($stmt->execute()) {
 
@@ -526,6 +587,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $errorMessage =
                             'Unable to set default address.';
                     }
+
 
                     $stmt->close();
                 }
@@ -546,16 +608,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctype_digit(
                     (string) $_POST['address_id']
                 )
-                ?
-                (int) $_POST['address_id']
-                :
-                0;
+                ? (int) $_POST['address_id']
+                : 0;
+
 
             if ($addressId > 0) {
 
+
                 /*
-                | Check if selected address is default.
+                | Check if address is default
                 */
+
+                $wasDefault = 0;
+
 
                 $stmt =
                     $conn->prepare("
@@ -566,14 +631,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         LIMIT 1
                     ");
 
-                $wasDefault = 0;
 
                 if ($stmt) {
 
                     $stmt->bind_param(
                         "ii",
                         $addressId,
-                        $userId
+                        $customerId
                     );
 
                     $stmt->execute();
@@ -584,18 +648,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $row =
                         $result->fetch_assoc();
 
+
                     if ($row) {
 
                         $wasDefault =
-                            (int) $row['is_default'];
+                            (int)
+                            $row['is_default'];
                     }
+
 
                     $stmt->close();
                 }
 
 
                 /*
-                | Delete.
+                | Delete
                 */
 
                 $stmt =
@@ -605,13 +672,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         AND user_id = ?
                     ");
 
+
                 if ($stmt) {
 
                     $stmt->bind_param(
                         "ii",
                         $addressId,
-                        $userId
+                        $customerId
                     );
+
 
                     if ($stmt->execute()) {
 
@@ -621,15 +690,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
 
                         $errorMessage =
-                            'Unable to delete address.';
+                            'Unable to delete address: ' .
+                            $stmt->error;
                     }
+
 
                     $stmt->close();
                 }
 
 
                 /*
-                | Assign another default if needed.
+                | Select another address as default
                 */
 
                 if (
@@ -646,14 +717,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             LIMIT 1
                         ");
 
+
                     if ($stmt) {
 
                         $stmt->bind_param(
                             "i",
-                            $userId
+                            $customerId
                         );
 
                         $stmt->execute();
+
                         $stmt->close();
                     }
                 }
@@ -665,7 +738,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 /*
 |--------------------------------------------------------------------------
-| EDIT ADDRESS
+| LOAD EDIT ADDRESS
 |--------------------------------------------------------------------------
 */
 
@@ -678,6 +751,7 @@ if (
 
     $editId =
         (int) $_GET['edit'];
+
 
     $stmt =
         $conn->prepare("
@@ -699,12 +773,13 @@ if (
             LIMIT 1
         ");
 
+
     if ($stmt) {
 
         $stmt->bind_param(
             "ii",
             $editId,
-            $userId
+            $customerId
         );
 
         $stmt->execute();
@@ -712,10 +787,16 @@ if (
         $result =
             $stmt->get_result();
 
-        $editAddress =
+        $editData =
             $result->fetch_assoc();
 
         $stmt->close();
+
+
+        if ($editData) {
+
+            $form = $editData;
+        }
     }
 }
 
@@ -724,14 +805,10 @@ if (
 |--------------------------------------------------------------------------
 | LOAD SAVED ADDRESSES
 |--------------------------------------------------------------------------
-|
-| IMPORTANT:
-| The query uses the SAME $_SESSION['user_id']
-| that was used while inserting the address.
-|--------------------------------------------------------------------------
 */
 
 $addresses = [];
+
 
 $stmt =
     $conn->prepare("
@@ -756,17 +833,19 @@ $stmt =
             id DESC
     ");
 
+
 if ($stmt) {
 
     $stmt->bind_param(
         "i",
-        $userId
+        $customerId
     );
 
     $stmt->execute();
 
     $result =
         $stmt->get_result();
+
 
     while (
         $row =
@@ -777,62 +856,10 @@ if ($stmt) {
             $row;
     }
 
+
     $stmt->close();
 }
 
-
-/*
-|--------------------------------------------------------------------------
-| FORM DATA
-|--------------------------------------------------------------------------
-*/
-
-$form = [
-
-    'id' =>
-        $editAddress['id']
-        ?? 0,
-
-    'address_title' =>
-        $editAddress['address_title']
-        ?? 'Home',
-
-    'full_name' =>
-        $editAddress['full_name']
-        ?? '',
-
-    'phone' =>
-        $editAddress['phone']
-        ?? '',
-
-    'address' =>
-        $editAddress['address']
-        ?? '',
-
-    'area' =>
-        $editAddress['area']
-        ?? '',
-
-    'city' =>
-        $editAddress['city']
-        ?? 'Hyderabad',
-
-    'delivery_instructions' =>
-        $editAddress['delivery_instructions']
-        ?? '',
-
-    'latitude' =>
-        $editAddress['latitude']
-        ?? '',
-
-    'longitude' =>
-        $editAddress['longitude']
-        ?? '',
-
-    'is_default' =>
-        $editAddress['is_default']
-        ?? 0
-];
 
 $isEditing =
     (int) $form['id'] > 0;
@@ -876,230 +903,146 @@ $isEditing =
 
 
         .addresses-page {
-
-            width: 100%;
             max-width: 1150px;
-
-            margin:
-                35px auto;
-
-            padding:
-                0 20px 60px;
+            margin: 35px auto;
+            padding: 0 20px 60px;
         }
 
 
-        /* =====================================================
-           PAGE TITLE
-        ===================================================== */
+        /* PAGE TITLE */
 
         .page-title {
-
             margin-bottom: 25px;
         }
 
 
         .page-title h1 {
-
             margin: 0;
-
             color: #ed0038;
-
             font-size: 32px;
-
             font-weight: 800;
         }
 
 
         .page-title p {
-
-            margin:
-                7px 0 0;
-
+            margin: 7px 0 0;
             color: #ed0038;
-
             font-size: 14px;
-
-            font-weight: 500;
+            font-weight: 600;
         }
 
 
-        /* =====================================================
-           MESSAGES
-        ===================================================== */
+        /* ALERTS */
 
         .alert {
-
-            padding:
-                13px 16px;
-
+            padding: 13px 16px;
             margin-bottom: 18px;
-
             border-radius: 10px;
-
             font-size: 13px;
-
             font-weight: 600;
         }
 
 
         .alert-success {
-
             background: #eaf8ef;
-
             color: #187943;
-
-            border:
-                1px solid #c7ead3;
+            border: 1px solid #c7ead3;
         }
 
 
         .alert-error {
-
             background: #fff0f2;
-
             color: #c6283d;
-
-            border:
-                1px solid #ffd1d8;
+            border: 1px solid #ffd1d8;
         }
 
 
-        /* =====================================================
-           LAYOUT
-        ===================================================== */
+        /* MAIN GRID */
 
         .address-grid {
-
             display: grid;
-
-            grid-template-columns:
-                390px 1fr;
-
+            grid-template-columns: 390px 1fr;
             gap: 22px;
-
             align-items: start;
         }
 
 
-        /* =====================================================
-           CARD
-        ===================================================== */
+        /* CARD */
 
         .card {
-
             background: #fff;
-
-            border:
-                1px solid #ebebeb;
-
+            border: 1px solid #ebebeb;
             border-radius: 18px;
-
             box-shadow:
-                0 7px 25px
-                rgba(0,0,0,.05);
-
+                0 7px 25px rgba(0,0,0,.05);
             overflow: hidden;
         }
 
 
         .card-title {
-
-            padding:
-                18px 20px;
-
-            border-bottom:
-                1px solid #eeeeee;
+            padding: 18px 20px;
+            border-bottom: 1px solid #eee;
         }
 
 
-        .card-title h2 {
-
+        .card-title h2,
+        .saved-header h2 {
             margin: 0;
-
             color: #222;
-
             font-size: 18px;
-
             font-weight: 800;
         }
 
 
         .card-title span {
-
             display: block;
-
             margin-top: 4px;
-
             color: #999;
-
             font-size: 11px;
         }
 
 
-        /* =====================================================
-           FORM
-        ===================================================== */
+        /* FORM */
 
         .form {
-
             padding: 20px;
         }
 
 
         .form-group {
-
             margin-bottom: 15px;
         }
 
 
         .form-label {
-
             display: block;
-
             margin-bottom: 7px;
-
             color: #444;
-
             font-size: 12px;
-
             font-weight: 700;
         }
 
 
         .required {
-
             color: #ed0038;
         }
 
 
         .input {
-
             width: 100%;
-
             min-height: 44px;
-
-            padding:
-                11px 12px;
-
+            padding: 11px 12px;
             background: #fff;
-
-            border:
-                1px solid #ddd;
-
+            border: 1px solid #ddd;
             border-radius: 9px;
-
             outline: none;
-
             color: #333;
-
             font-size: 13px;
         }
 
 
         .input:focus {
-
             border-color: #ed0038;
-
             box-shadow:
                 0 0 0 3px
                 rgba(237,0,56,.08);
@@ -1107,272 +1050,166 @@ $isEditing =
 
 
         textarea.input {
-
             min-height: 82px;
-
             resize: vertical;
         }
 
 
         .two-col {
-
             display: grid;
-
-            grid-template-columns:
-                1fr 1fr;
-
+            grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
 
 
-        /* =====================================================
-           ADDRESS TYPES
-        ===================================================== */
+        /* ADDRESS TYPES */
 
         .types {
-
             display: grid;
-
             grid-template-columns:
                 repeat(3, 1fr);
-
             gap: 7px;
         }
 
 
         .types input {
-
             display: none;
         }
 
 
         .types label {
-
             display: flex;
-
             align-items: center;
-
             justify-content: center;
-
-            gap: 5px;
-
             min-height: 40px;
-
-            border:
-                1px solid #e4e4e4;
-
+            border: 1px solid #e4e4e4;
             border-radius: 9px;
-
             background: #fafafa;
-
             color: #777;
-
             cursor: pointer;
-
             font-size: 10px;
-
             font-weight: 700;
         }
 
 
         .types input:checked + label {
-
             color: #ed0038;
-
             background: #fff1f5;
-
             border-color: #ed0038;
         }
 
 
-        /* =====================================================
-           DEFAULT
-        ===================================================== */
+        /* DEFAULT */
 
         .default-option {
-
             display: flex;
-
             align-items: center;
-
             gap: 9px;
-
             padding: 11px;
-
             background: #fafafa;
-
-            border:
-                1px solid #eee;
-
+            border: 1px solid #eee;
             border-radius: 9px;
         }
 
 
         .default-option input {
-
             width: 16px;
-
             height: 16px;
-
             accent-color: #ed0038;
         }
 
 
         .default-option label {
-
             color: #555;
-
             font-size: 11px;
-
             font-weight: 600;
-
             cursor: pointer;
         }
 
 
-        /* =====================================================
-           BUTTONS
-        ===================================================== */
+        /* BUTTONS */
 
         .form-buttons {
-
             display: flex;
-
             gap: 8px;
-
             margin-top: 18px;
         }
 
 
         .btn {
-
             min-height: 43px;
-
-            padding:
-                10px 15px;
-
+            padding: 10px 15px;
             border: none;
-
             border-radius: 9px;
-
             cursor: pointer;
-
             text-decoration: none;
-
             font-size: 12px;
-
             font-weight: 700;
         }
 
 
         .btn-save {
-
             flex: 1;
-
             background: #ed0038;
-
             color: #fff;
         }
 
 
         .btn-save:hover {
-
             background: #d90032;
         }
 
 
         .btn-cancel {
-
-            background: #eeeeee;
-
+            background: #eee;
             color: #555;
         }
 
 
-        /* =====================================================
-           SAVED HEADER
-        ===================================================== */
+        /* SAVED HEADER */
 
         .saved-header {
-
             display: flex;
-
             align-items: center;
-
             justify-content: space-between;
-
-            padding:
-                18px 20px;
-
-            border-bottom:
-                1px solid #eee;
-        }
-
-
-        .saved-header h2 {
-
-            margin: 0;
-
-            color: #222;
-
-            font-size: 18px;
-
-            font-weight: 800;
+            padding: 18px 20px;
+            border-bottom: 1px solid #eee;
         }
 
 
         .count {
-
-            padding:
-                5px 10px;
-
+            padding: 5px 10px;
             border-radius: 20px;
-
             background: #fff1f5;
-
             color: #ed0038;
-
             font-size: 10px;
-
             font-weight: 700;
         }
 
 
-        /* =====================================================
-           SAVED LIST
-        ===================================================== */
+        /* SAVED LIST */
 
         .saved-list {
-
             padding: 15px;
         }
 
 
         .address-box {
-
             padding: 17px;
-
             margin-bottom: 12px;
-
-            border:
-                1px solid #e8e8e8;
-
+            border: 1px solid #e8e8e8;
             border-radius: 14px;
-
             background: #fff;
         }
 
 
         .address-box:last-child {
-
             margin-bottom: 0;
         }
 
 
         .address-box.default {
-
             border-color: #f2a7b9;
-
             background:
                 linear-gradient(
                     135deg,
@@ -1383,317 +1220,192 @@ $isEditing =
 
 
         .address-head {
-
             display: flex;
-
             align-items: center;
-
             justify-content: space-between;
-
             gap: 10px;
-
             margin-bottom: 13px;
         }
 
 
         .address-name-wrap {
-
             display: flex;
-
             align-items: center;
-
             gap: 9px;
         }
 
 
         .address-icon {
-
             width: 39px;
-
             height: 39px;
-
             display: flex;
-
             align-items: center;
-
             justify-content: center;
-
             border-radius: 10px;
-
             background: #fff1f5;
-
             color: #ed0038;
         }
 
 
         .address-title {
-
             color: #222;
-
             font-size: 14px;
-
             font-weight: 800;
         }
 
 
         .customer-name {
-
             margin-top: 3px;
-
             color: #999;
-
             font-size: 10px;
         }
 
 
         .default-badge {
-
-            padding:
-                5px 8px;
-
+            padding: 5px 8px;
             border-radius: 20px;
-
             background: #ed0038;
-
             color: #fff;
-
             font-size: 9px;
-
             font-weight: 700;
-
-            white-space: nowrap;
         }
 
 
         .address-info {
-
             padding-left: 48px;
         }
 
 
         .info-row {
-
             display: flex;
-
             align-items: flex-start;
-
             gap: 8px;
-
             margin-bottom: 8px;
-
             color: #555;
-
             font-size: 11px;
-
             line-height: 1.5;
         }
 
 
         .info-row i {
-
             width: 14px;
-
             flex-shrink: 0;
-
             color: #ed0038;
-
-            margin-top: 2px;
-
-            text-align: center;
         }
 
 
         .instructions {
-
             margin-top: 10px;
-
             padding: 9px;
-
             border-radius: 8px;
-
             background: #fafafa;
-
             color: #777;
-
             font-size: 10px;
-
             line-height: 1.5;
         }
 
 
-        /* =====================================================
-           ACTIONS
-        ===================================================== */
+        /* ACTIONS */
 
         .actions {
-
             display: flex;
-
             align-items: center;
-
             flex-wrap: wrap;
-
             gap: 7px;
-
             padding-top: 13px;
-
             margin-top: 13px;
-
-            border-top:
-                1px solid #eee;
+            border-top: 1px solid #eee;
         }
 
 
         .action-btn {
-
             min-height: 33px;
-
-            padding:
-                7px 10px;
-
+            padding: 7px 10px;
             border-radius: 8px;
-
             cursor: pointer;
-
             text-decoration: none;
-
             font-family: inherit;
-
             font-size: 9px;
-
             font-weight: 700;
         }
 
 
         .edit {
-
             background: #f2f2f2;
-
             color: #555;
-
-            border:
-                1px solid #e5e5e5;
+            border: 1px solid #e5e5e5;
         }
 
 
         .default-btn {
-
             background: #fff1f5;
-
             color: #ed0038;
-
-            border:
-                1px solid #ffd0da;
+            border: 1px solid #ffd0da;
         }
 
 
         .delete {
-
             margin-left: auto;
-
             background: #fff0f1;
-
             color: #c92c3d;
-
-            border:
-                1px solid #ffd1d6;
+            border: 1px solid #ffd1d6;
         }
 
 
-        /* =====================================================
-           EMPTY
-        ===================================================== */
+        /* EMPTY */
 
         .empty {
-
-            padding:
-                55px 20px;
-
+            padding: 55px 20px;
             text-align: center;
         }
 
 
         .empty-icon {
-
             width: 65px;
-
             height: 65px;
-
             display: flex;
-
             align-items: center;
-
             justify-content: center;
-
-            margin:
-                0 auto 14px;
-
+            margin: 0 auto 14px;
             border-radius: 50%;
-
             background: #fff1f5;
-
             color: #ed0038;
-
             font-size: 24px;
         }
 
 
         .empty h3 {
-
             margin: 0;
-
             color: #333;
-
             font-size: 16px;
         }
 
 
         .empty p {
-
             max-width: 340px;
-
-            margin:
-                7px auto 0;
-
+            margin: 7px auto 0;
             color: #888;
-
             font-size: 11px;
-
             line-height: 1.5;
         }
 
-
-        /* =====================================================
-           NOTE
-        ===================================================== */
 
         .note {
-
-            margin:
-                0 15px 15px;
-
+            margin: 0 15px 15px;
             padding: 12px;
-
             border-radius: 10px;
-
             background: #fafafa;
-
             color: #777;
-
             font-size: 10px;
-
             line-height: 1.5;
         }
 
 
-        /* =====================================================
-           RESPONSIVE
-        ===================================================== */
+        /* RESPONSIVE */
 
         @media (max-width: 900px) {
 
             .address-grid {
-
                 grid-template-columns: 1fr;
             }
         }
@@ -1702,48 +1414,27 @@ $isEditing =
         @media (max-width: 600px) {
 
             .addresses-page {
-
                 margin-top: 25px;
-
-                padding:
-                    0 12px 40px;
+                padding: 0 12px 40px;
             }
 
 
             .page-title h1 {
-
                 font-size: 27px;
             }
 
 
-            .page-title p {
-
-                font-size: 12px;
-            }
-
-
             .two-col {
-
                 grid-template-columns: 1fr;
             }
 
 
-            .address-head {
-
-                align-items: flex-start;
-
-                flex-direction: column;
-            }
-
-
             .address-info {
-
                 padding-left: 0;
             }
 
 
             .delete {
-
                 margin-left: 0;
             }
         }
@@ -1759,9 +1450,7 @@ $isEditing =
 <main class="addresses-page">
 
 
-    <!-- =====================================================
-         PAGE TITLE
-    ====================================================== -->
+    <!-- PAGE TITLE -->
 
     <div class="page-title">
 
@@ -1770,15 +1459,13 @@ $isEditing =
         </h1>
 
         <p>
-            Manage your saved delivery addresses
+            Add, edit and manage your delivery addresses
         </p>
 
     </div>
 
 
-    <!-- =====================================================
-         ALERTS
-    ====================================================== -->
+    <!-- SUCCESS MESSAGE -->
 
     <?php if ($successMessage !== ''): ?>
 
@@ -1793,6 +1480,8 @@ $isEditing =
     <?php endif; ?>
 
 
+    <!-- ERROR MESSAGE -->
+
     <?php if ($errorMessage !== ''): ?>
 
         <div class="alert alert-error">
@@ -1806,16 +1495,12 @@ $isEditing =
     <?php endif; ?>
 
 
-    <!-- =====================================================
-         GRID
-    ====================================================== -->
-
     <div class="address-grid">
 
 
-        <!-- =================================================
-             ADD / EDIT
-        ================================================== -->
+        <!-- =====================================================
+             LEFT - ADD / EDIT ADDRESS
+        ====================================================== -->
 
         <section class="card">
 
@@ -1833,7 +1518,7 @@ $isEditing =
                 </h2>
 
                 <span>
-                    Your delivery information
+                    Your address will be available in Cart and Checkout
                 </span>
 
             </div>
@@ -1844,10 +1529,13 @@ $isEditing =
                 class="form"
             >
 
+
                 <input
                     type="hidden"
                     name="csrf_token"
-                    value="<?php echo e($csrfToken); ?>"
+                    value="<?php
+                    echo e($csrfToken);
+                    ?>"
                 >
 
 
@@ -1934,11 +1622,13 @@ $isEditing =
                                 value="Other"
                                 <?php
                                 echo
-                                    (
-                                        $form['address_title']
-                                        !== 'Home' &&
-                                        $form['address_title']
-                                        !== 'Work'
+                                    !in_array(
+                                        $form['address_title'],
+                                        [
+                                            'Home',
+                                            'Work'
+                                        ],
+                                        true
                                     )
                                     ? 'checked'
                                     : '';
@@ -1957,7 +1647,7 @@ $isEditing =
                 </div>
 
 
-                <!-- NAME + PHONE -->
+                <!-- NAME / PHONE -->
 
                 <div class="two-col">
 
@@ -2048,7 +1738,7 @@ $isEditing =
                         class="input"
                         maxlength="255"
                         required
-                        placeholder="House, street, road etc."
+                        placeholder="House number, street, road..."
                     ><?php
                     echo e(
                         $form['address']
@@ -2058,7 +1748,7 @@ $isEditing =
                 </div>
 
 
-                <!-- AREA + CITY -->
+                <!-- AREA / CITY -->
 
                 <div class="two-col">
 
@@ -2142,7 +1832,7 @@ $isEditing =
                         id="delivery_instructions"
                         name="delivery_instructions"
                         class="input"
-                        placeholder="Any special instructions for rider?"
+                        placeholder="Example: Call me when you arrive..."
                     ><?php
                     echo e(
                         $form[
@@ -2154,12 +1844,11 @@ $isEditing =
                 </div>
 
 
-                <!-- HIDDEN COORDINATES -->
+                <!-- LOCATION DATA -->
 
                 <input
                     type="hidden"
                     name="latitude"
-                    id="latitude"
                     value="<?php
                     echo e(
                         $form['latitude']
@@ -2171,7 +1860,6 @@ $isEditing =
                 <input
                     type="hidden"
                     name="longitude"
-                    id="longitude"
                     value="<?php
                     echo e(
                         $form['longitude']
@@ -2183,6 +1871,7 @@ $isEditing =
                 <!-- DEFAULT -->
 
                 <div class="default-option">
+
 
                     <input
                         type="checkbox"
@@ -2201,9 +1890,10 @@ $isEditing =
 
                     <label for="is_default">
 
-                        Make this my default delivery address
+                        Make this my default address
 
                     </label>
+
 
                 </div>
 
@@ -2233,9 +1923,7 @@ $isEditing =
                             href="manage-addresses.php"
                             class="btn btn-cancel"
                         >
-
                             Cancel
-
                         </a>
 
                     <?php endif; ?>
@@ -2246,18 +1934,18 @@ $isEditing =
 
             </form>
 
-
         </section>
 
 
-        <!-- =================================================
-             SAVED ADDRESSES
-        ================================================== -->
+        <!-- =====================================================
+             RIGHT - SAVED ADDRESSES
+        ====================================================== -->
 
         <section class="card">
 
 
             <div class="saved-header">
+
 
                 <h2>
                     Saved Addresses
@@ -2271,12 +1959,14 @@ $isEditing =
                     ?>
 
                     Address<?php
-                    echo count($addresses) === 1
+                    echo
+                        count($addresses) === 1
                         ? ''
                         : 'es';
                     ?>
 
                 </span>
+
 
             </div>
 
@@ -2284,9 +1974,10 @@ $isEditing =
             <?php if (empty($addresses)): ?>
 
 
-                <!-- EMPTY -->
+                <!-- EMPTY STATE -->
 
                 <div class="empty">
+
 
                     <div class="empty-icon">
                         📍
@@ -2300,8 +1991,9 @@ $isEditing =
 
                     <p>
                         Add your first delivery address
-                        using the form.
+                        using the form on the left.
                     </p>
+
 
                 </div>
 
@@ -2324,8 +2016,7 @@ $isEditing =
                                 <?php
                                 echo
                                     (int)
-                                    $saved['is_default']
-                                    === 1
+                                    $saved['is_default'] === 1
                                     ? 'default'
                                     : '';
                                 ?>
@@ -2344,6 +2035,7 @@ $isEditing =
                                     "
                                 >
 
+
                                     <div
                                         class="
                                             address-icon
@@ -2352,22 +2044,22 @@ $isEditing =
 
                                         <?php
 
-                                        if (
+                                        $title =
                                             strtolower(
                                                 $saved[
                                                     'address_title'
                                                 ]
-                                            ) === 'home'
+                                            );
+
+
+                                        if (
+                                            $title === 'home'
                                         ) {
 
                                             echo '🏠';
 
                                         } elseif (
-                                            strtolower(
-                                                $saved[
-                                                    'address_title'
-                                                ]
-                                            ) === 'work'
+                                            $title === 'work'
                                         ) {
 
                                             echo '💼';
@@ -2375,7 +2067,6 @@ $isEditing =
                                         } else {
 
                                             echo '📍';
-
                                         }
 
                                         ?>
@@ -2384,6 +2075,7 @@ $isEditing =
 
 
                                     <div>
+
 
                                         <div
                                             class="
@@ -2418,7 +2110,9 @@ $isEditing =
 
                                         </div>
 
+
                                     </div>
+
 
                                 </div>
 
@@ -2430,15 +2124,15 @@ $isEditing =
                                     ] === 1
                                 ): ?>
 
+
                                     <span
                                         class="
                                             default-badge
                                         "
                                     >
-
                                         Default
-
                                     </span>
+
 
                                 <?php endif; ?>
 
@@ -2453,9 +2147,13 @@ $isEditing =
 
                                 <div class="info-row">
 
-                                    <i>📍</i>
+                                    <i>
+                                        📍
+                                    </i>
+
 
                                     <span>
+
 
                                         <?php
                                         echo e(
@@ -2468,18 +2166,14 @@ $isEditing =
 
                                         <?php if (
                                             !empty(
-                                                $saved[
-                                                    'area'
-                                                ]
+                                                $saved['area']
                                             )
                                         ): ?>
 
                                             ,
                                             <?php
                                             echo e(
-                                                $saved[
-                                                    'area'
-                                                ]
+                                                $saved['area']
                                             );
                                             ?>
 
@@ -2489,32 +2183,34 @@ $isEditing =
                                         ,
                                         <?php
                                         echo e(
-                                            $saved[
-                                                'city'
-                                            ]
+                                            $saved['city']
                                         );
                                         ?>
 
+
                                     </span>
+
 
                                 </div>
 
 
                                 <div class="info-row">
 
-                                    <i>📞</i>
+                                    <i>
+                                        📞
+                                    </i>
+
 
                                     <span>
 
                                         <?php
                                         echo e(
-                                            $saved[
-                                                'phone'
-                                            ]
+                                            $saved['phone']
                                         );
                                         ?>
 
                                     </span>
+
 
                                 </div>
 
@@ -2527,6 +2223,7 @@ $isEditing =
                                     )
                                 ): ?>
 
+
                                     <div
                                         class="
                                             instructions
@@ -2534,8 +2231,9 @@ $isEditing =
                                     >
 
                                         <strong>
-                                            Delivery Instructions:
+                                            Rider Note:
                                         </strong>
+
 
                                         <?php
                                         echo e(
@@ -2545,7 +2243,9 @@ $isEditing =
                                         );
                                         ?>
 
+
                                     </div>
+
 
                                 <?php endif; ?>
 
@@ -2565,8 +2265,7 @@ $isEditing =
                                         manage-addresses.php?edit=<?php
                                         echo (int)
                                             $saved['id'];
-                                        ?>
-                                    "
+                                        ?>"
                                     class="
                                         action-btn
                                         edit
@@ -2592,6 +2291,7 @@ $isEditing =
                                         method="POST"
                                         style="margin:0;"
                                     >
+
 
                                         <input
                                             type="hidden"
@@ -2633,6 +2333,7 @@ $isEditing =
 
                                         </button>
 
+
                                     </form>
 
 
@@ -2650,6 +2351,7 @@ $isEditing =
                                         );
                                     "
                                 >
+
 
                                     <input
                                         type="hidden"
@@ -2691,6 +2393,7 @@ $isEditing =
 
                                     </button>
 
+
                                 </form>
 
 
@@ -2709,7 +2412,7 @@ $isEditing =
             <?php endif; ?>
 
 
-            <!-- NOTE -->
+            <!-- CART / CHECKOUT NOTE -->
 
             <div class="note">
 
@@ -2717,9 +2420,10 @@ $isEditing =
                     Delivery Address:
                 </strong>
 
-                Addresses saved here will be available
-                in your cart and checkout. Your default
-                address will be selected automatically.
+                The addresses saved here are stored
+                for this customer and can be used by
+                Cart and Checkout. Your default address
+                is automatically marked for delivery.
 
             </div>
 

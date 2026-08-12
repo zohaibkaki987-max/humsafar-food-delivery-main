@@ -1635,7 +1635,7 @@ if ($customerId > 0) {
                 ================================================== -->
 
                 <a
-                    href="manage-addresses.php"
+                    href="customer/manage-addresses.php"
                     class="
                         action
                         address-action
