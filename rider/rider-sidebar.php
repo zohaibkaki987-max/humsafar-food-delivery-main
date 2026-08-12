@@ -1,10 +1,41 @@
+```php
 <?php
+
+/*
+|--------------------------------------------------------------------------
+| HUMSAFAR RIDER SIDEBAR
+|--------------------------------------------------------------------------
+| This sidebar always checks the latest rider status from the database.
+| Admin approval does NOT depend on an old session status.
+|--------------------------------------------------------------------------
+*/
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| Database Connection
+|--------------------------------------------------------------------------
+*/
+
+if (!isset($conn)) {
+
+    require_once __DIR__ . '/../includes/config.php';
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Helper
+|--------------------------------------------------------------------------
+*/
+
 if (!function_exists('rider_e')) {
+
     function rider_e($value)
     {
         return htmlspecialchars(
@@ -13,49 +44,260 @@ if (!function_exists('rider_e')) {
             'UTF-8'
         );
     }
+
 }
 
-$riderName = $_SESSION['rider_name'] ?? 'Rider';
 
-$riderStatus = strtolower(
-    $_SESSION['rider_status'] ?? 'pending'
+/*
+|--------------------------------------------------------------------------
+| Current Page
+|--------------------------------------------------------------------------
+*/
+
+$currentPage = basename(
+    $_SERVER['PHP_SELF']
 );
 
-$currentPage = basename($_SERVER['PHP_SELF']);
 
-$isApproved = ($riderStatus === 'approved');
+/*
+|--------------------------------------------------------------------------
+| Rider ID
+|--------------------------------------------------------------------------
+*/
+
+$riderId = isset($_SESSION['rider_id'])
+    ? (int)$_SESSION['rider_id']
+    : 0;
+
+
+/*
+|--------------------------------------------------------------------------
+| Default Values
+|--------------------------------------------------------------------------
+*/
+
+$riderName =
+    $_SESSION['rider_name'] ?? 'Rider';
+
+$riderStatus = 'pending';
+
+
+/*
+|--------------------------------------------------------------------------
+| GET LATEST RIDER STATUS FROM DATABASE
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+| We do NOT depend only on $_SESSION['rider_status'].
+| The admin may approve the rider after the session was created.
+|
+*/
+
+if (
+    $riderId > 0 &&
+    isset($conn) &&
+    $conn
+) {
+
+    $statusStmt = $conn->prepare("
+        SELECT
+            full_name,
+            status
+        FROM riders
+        WHERE id = ?
+        LIMIT 1
+    ");
+
+
+    if ($statusStmt) {
+
+        $statusStmt->bind_param(
+            'i',
+            $riderId
+        );
+
+
+        $statusStmt->execute();
+
+
+        $statusResult =
+            $statusStmt->get_result();
+
+
+        $statusRow =
+            $statusResult->fetch_assoc();
+
+
+        $statusStmt->close();
+
+
+        if ($statusRow) {
+
+            /*
+            |--------------------------------------------------------------------------
+            | Latest Name
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                !empty(
+                    $statusRow['full_name']
+                )
+            ) {
+
+                $riderName =
+                    $statusRow['full_name'];
+
+                $_SESSION['rider_name'] =
+                    $riderName;
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Latest Status
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                isset(
+                    $statusRow['status']
+                )
+            ) {
+
+                $riderStatus =
+                    strtolower(
+                        trim(
+                            (string)$statusRow['status']
+                        )
+                    );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Update Session
+                |--------------------------------------------------------------------------
+                */
+
+                $_SESSION['rider_status'] =
+                    $riderStatus;
+
+            }
+
+        }
+
+    }
+
+} else {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fallback
+    |--------------------------------------------------------------------------
+    */
+
+    $riderStatus =
+        strtolower(
+            trim(
+                (string)(
+                    $_SESSION['rider_status']
+                    ?? 'pending'
+                )
+            )
+        );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| APPROVAL / ACCESS CHECK
+|--------------------------------------------------------------------------
+|
+| These statuses mean the rider can use delivery features.
+|
+*/
+
+$isApproved = in_array(
+    $riderStatus,
+    [
+        'approved',
+        'active'
+    ],
+    true
+);
+
+
+/*
+|--------------------------------------------------------------------------
+| Active Page Helper
+|--------------------------------------------------------------------------
+*/
 
 function riderNavActive($page)
 {
     global $currentPage;
 
-    return $currentPage === $page ? 'active' : '';
+    return $currentPage === $page
+        ? 'active'
+        : '';
 }
 
 
-/* Rider initials */
+/*
+|--------------------------------------------------------------------------
+| Rider Initials
+|--------------------------------------------------------------------------
+*/
 
 $nameParts = preg_split(
     '/\s+/',
     trim($riderName)
 );
 
+
 $initials = '';
 
-if (!empty($nameParts[0])) {
+
+if (
+    !empty(
+        $nameParts[0]
+    )
+) {
+
     $initials .= strtoupper(
-        substr($nameParts[0], 0, 1)
+        substr(
+            $nameParts[0],
+            0,
+            1
+        )
     );
+
 }
 
-if (!empty($nameParts[1])) {
+
+if (
+    !empty(
+        $nameParts[1]
+    )
+) {
+
     $initials .= strtoupper(
-        substr($nameParts[1], 0, 1)
+        substr(
+            $nameParts[1],
+            0,
+            1
+        )
     );
+
 }
+
 
 if ($initials === '') {
+
     $initials = 'R';
+
 }
 
 ?>
@@ -64,6 +306,7 @@ if ($initials === '') {
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
 >
+
 
 <style>
 
@@ -159,7 +402,7 @@ if ($initials === '') {
     color:
         rgba(255,255,255,.8);
 
-    font-size: 7px;
+    font-size: 8px;
 
     font-weight: 800;
 
@@ -185,12 +428,12 @@ if ($initials === '') {
 .rider-sidebar-section {
 
     margin:
-        7px 11px 10px;
+        9px 11px 10px;
 
     color:
-        rgba(255,255,255,.72);
+        rgba(255,255,255,.78);
 
-    font-size: 8px;
+    font-size: 10px;
 
     font-weight: 800;
 
@@ -208,9 +451,9 @@ if ($initials === '') {
 
     width: 100%;
 
-    min-height: 42px;
+    min-height: 45px;
 
-    margin-bottom: 3px;
+    margin-bottom: 4px;
 
     padding:
         0 13px;
@@ -227,7 +470,7 @@ if ($initials === '') {
 
     text-decoration: none;
 
-    font-size: 11px;
+    font-size: 14px;
 
     font-weight: 700;
 
@@ -238,7 +481,7 @@ if ($initials === '') {
 
 .rider-sidebar-item i {
 
-    width: 17px;
+    width: 19px;
 
     flex-shrink: 0;
 
@@ -246,7 +489,7 @@ if ($initials === '') {
 
     color: #fff;
 
-    font-size: 12px;
+    font-size: 14px;
 }
 
 
@@ -308,7 +551,7 @@ if ($initials === '') {
 
     width: auto !important;
 
-    font-size: 9px !important;
+    font-size: 10px !important;
 }
 
 
@@ -366,7 +609,7 @@ if ($initials === '') {
 
     justify-content: center;
 
-    font-size: 11px;
+    font-size: 12px;
 
     font-weight: 900;
 }
@@ -382,7 +625,7 @@ if ($initials === '') {
 
     color: #fff;
 
-    font-size: 8px;
+    font-size: 10px;
 
     font-weight: 800;
 
@@ -407,7 +650,7 @@ if ($initials === '') {
     color:
         rgba(255,255,255,.75);
 
-    font-size: 7px;
+    font-size: 9px;
 
     font-weight: 700;
 
@@ -426,13 +669,15 @@ if ($initials === '') {
 }
 
 
-.rider-status-dot.approved {
+.rider-status-dot.approved,
+.rider-status-dot.active {
 
     background: #40d477;
 }
 
 
-.rider-status-dot.rejected {
+.rider-status-dot.rejected,
+.rider-status-dot.blocked {
 
     background: #ffb0bd;
 }
@@ -573,7 +818,6 @@ if ($initials === '') {
     </div>
 
 
-
     <!-- =====================================================
          NAVIGATION
     ====================================================== -->
@@ -592,7 +836,10 @@ if ($initials === '') {
 
         <a
             href="rider-dashboard.php"
-            class="rider-sidebar-item <?= riderNavActive('rider-dashboard.php') ?>"
+            class="rider-sidebar-item
+            <?= riderNavActive(
+                'rider-dashboard.php'
+            ) ?>"
         >
 
             <i class="fas fa-chart-line"></i>
@@ -604,13 +851,18 @@ if ($initials === '') {
         </a>
 
 
-        <!-- AVAILABLE ORDERS -->
+        <!-- =================================================
+             AVAILABLE ORDERS
+        ================================================== -->
 
         <?php if ($isApproved): ?>
 
             <a
                 href="rider-orders.php"
-                class="rider-sidebar-item <?= riderNavActive('rider-orders.php') ?>"
+                class="rider-sidebar-item
+                <?= riderNavActive(
+                    'rider-orders.php'
+                ) ?>"
             >
 
                 <i class="fas fa-receipt"></i>
@@ -634,20 +886,27 @@ if ($initials === '') {
                     Available Orders
                 </span>
 
-                <i class="fas fa-lock rider-sidebar-lock"></i>
+                <i
+                    class="fas fa-lock rider-sidebar-lock"
+                ></i>
 
             </div>
 
         <?php endif; ?>
 
 
-        <!-- MY DELIVERIES -->
+        <!-- =================================================
+             MY DELIVERIES
+        ================================================== -->
 
         <?php if ($isApproved): ?>
 
             <a
                 href="rider-deliveries.php"
-                class="rider-sidebar-item <?= riderNavActive('rider-deliveries.php') ?>"
+                class="rider-sidebar-item
+                <?= riderNavActive(
+                    'rider-deliveries.php'
+                ) ?>"
             >
 
                 <i class="fas fa-motorcycle"></i>
@@ -671,20 +930,27 @@ if ($initials === '') {
                     My Deliveries
                 </span>
 
-                <i class="fas fa-lock rider-sidebar-lock"></i>
+                <i
+                    class="fas fa-lock rider-sidebar-lock"
+                ></i>
 
             </div>
 
         <?php endif; ?>
 
 
-        <!-- EARNINGS -->
+        <!-- =================================================
+             EARNINGS
+        ================================================== -->
 
         <?php if ($isApproved): ?>
 
             <a
                 href="rider-earnings.php"
-                class="rider-sidebar-item <?= riderNavActive('rider-earnings.php') ?>"
+                class="rider-sidebar-item
+                <?= riderNavActive(
+                    'rider-earnings.php'
+                ) ?>"
             >
 
                 <i class="fas fa-wallet"></i>
@@ -708,20 +974,21 @@ if ($initials === '') {
                     Earnings
                 </span>
 
-                <i class="fas fa-lock rider-sidebar-lock"></i>
+                <i
+                    class="fas fa-lock rider-sidebar-lock"
+                ></i>
 
             </div>
 
         <?php endif; ?>
 
 
-
-        <!-- ACCOUNT -->
+        <!-- =================================================
+             ACCOUNT
+        ================================================== -->
 
         <div class="rider-sidebar-section">
-
             ACCOUNT
-
         </div>
 
 
@@ -729,7 +996,10 @@ if ($initials === '') {
 
         <a
             href="rider-profile.php"
-            class="rider-sidebar-item <?= riderNavActive('rider-profile.php') ?>"
+            class="rider-sidebar-item
+            <?= riderNavActive(
+                'rider-profile.php'
+            ) ?>"
         >
 
             <i class="fas fa-user"></i>
@@ -745,7 +1015,10 @@ if ($initials === '') {
 
         <a
             href="rider-vehicle.php"
-            class="rider-sidebar-item <?= riderNavActive('rider-vehicle.php') ?>"
+            class="rider-sidebar-item
+            <?= riderNavActive(
+                'rider-vehicle.php'
+            ) ?>"
         >
 
             <i class="fas fa-motorcycle"></i>
@@ -757,19 +1030,21 @@ if ($initials === '') {
         </a>
 
 
-
-        <!-- SUPPORT -->
+        <!-- =================================================
+             SUPPORT
+        ================================================== -->
 
         <div class="rider-sidebar-section">
-
             SUPPORT
-
         </div>
 
 
         <a
             href="rider-support.php"
-            class="rider-sidebar-item <?= riderNavActive('rider-support.php') ?>"
+            class="rider-sidebar-item
+            <?= riderNavActive(
+                'rider-support.php'
+            ) ?>"
         >
 
             <i class="far fa-circle-question"></i>
@@ -784,7 +1059,6 @@ if ($initials === '') {
     </nav>
 
 
-
     <!-- =====================================================
          RIDER PROFILE
     ====================================================== -->
@@ -796,7 +1070,9 @@ if ($initials === '') {
 
             <div class="rider-sidebar-avatar">
 
-                <?= rider_e($initials) ?>
+                <?= rider_e(
+                    $initials
+                ) ?>
 
             </div>
 
@@ -805,18 +1081,28 @@ if ($initials === '') {
 
                 <div class="rider-sidebar-profile-name">
 
-                    <?= rider_e($riderName) ?>
+                    <?= rider_e(
+                        $riderName
+                    ) ?>
 
                 </div>
 
 
                 <div class="rider-sidebar-profile-status">
 
+
                     <span
-                        class="rider-status-dot <?= rider_e($riderStatus) ?>"
+                        class="rider-status-dot
+                        <?= rider_e(
+                            $riderStatus
+                        ) ?>"
                     ></span>
 
-                    <?= rider_e($riderStatus) ?>
+
+                    <?= rider_e(
+                        $riderStatus
+                    ) ?>
+
 
                 </div>
 
@@ -833,10 +1119,17 @@ if ($initials === '') {
 
 <script>
 
+/*
+|--------------------------------------------------------------------------
+| Rider Sidebar Mobile Toggle
+|--------------------------------------------------------------------------
+*/
+
 const riderSidebar =
     document.getElementById(
         'riderSidebar'
     );
+
 
 const riderSidebarMenu =
     document.getElementById(
@@ -863,3 +1156,4 @@ if (
 }
 
 </script>
+```
