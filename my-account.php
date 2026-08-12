@@ -3,28 +3,39 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/customer-header.php';
 
+
 /*
 |--------------------------------------------------------------------------
 | CUSTOMER DATA
-|--------------------------------------------------------------------------
-| customer-header.php project ka existing customer session/auth flow
-| handle karta hai.
 |--------------------------------------------------------------------------
 */
 
 $customer = null;
 
-/*
- * Try common customer session IDs used by the project.
- */
 $customerId = 0;
 
+
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER SESSION
+|--------------------------------------------------------------------------
+*/
+
 if (isset($_SESSION['customer_id'])) {
-    $customerId = (int) $_SESSION['customer_id'];
+
+    $customerId =
+        (int) $_SESSION['customer_id'];
+
 } elseif (isset($_SESSION['user_id'])) {
-    $customerId = (int) $_SESSION['user_id'];
+
+    $customerId =
+        (int) $_SESSION['user_id'];
+
 } elseif (isset($_SESSION['id'])) {
-    $customerId = (int) $_SESSION['id'];
+
+    $customerId =
+        (int) $_SESSION['id'];
+
 }
 
 
@@ -57,18 +68,22 @@ if ($customerId > 0) {
 
         $stmt->execute();
 
-        $result = $stmt->get_result();
+        $result =
+            $stmt->get_result();
 
-        $customer = $result->fetch_assoc();
+        $customer =
+            $result->fetch_assoc();
 
         $stmt->close();
+
     }
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| FALLBACK FROM SESSION DATA
+| SESSION FALLBACK
 |--------------------------------------------------------------------------
 */
 
@@ -102,7 +117,9 @@ if (!$customer) {
 
         'created_at' =>
             ''
+
     ];
+
 }
 
 
@@ -131,7 +148,8 @@ function accountH($value)
 $customerName =
     trim(
         $customer['name']
-        ?? 'Customer'
+        ??
+        'Customer'
     );
 
 
@@ -159,18 +177,24 @@ foreach (
 
     if ($part !== '') {
 
-        $initials .= strtoupper(
-            substr(
-                $part,
-                0,
-                1
-            )
-        );
+        $initials .=
+            strtoupper(
+                substr(
+                    $part,
+                    0,
+                    1
+                )
+            );
+
     }
+
 }
 
+
 if ($initials === '') {
+
     $initials = 'C';
+
 }
 
 
@@ -200,7 +224,9 @@ if (
                 'd M Y',
                 $date
             );
+
     }
+
 }
 
 
@@ -215,10 +241,12 @@ $openOrders = 0;
 $deliveredOrders = 0;
 $cancelledOrders = 0;
 
+
 if ($customerId > 0) {
 
     $stmt = $conn->prepare("
         SELECT
+
             COUNT(*) AS total_orders,
 
             SUM(
@@ -262,6 +290,7 @@ if ($customerId > 0) {
             ) AS cancelled_orders
 
         FROM orders
+
         WHERE user_id = ?
     ");
 
@@ -282,37 +311,45 @@ if ($customerId > 0) {
 
         $stmt->close();
 
+
         if ($stats) {
 
             $totalOrders =
                 (int)
                 (
                     $stats['total_orders']
-                    ?? 0
+                    ??
+                    0
                 );
 
             $openOrders =
                 (int)
                 (
                     $stats['open_orders']
-                    ?? 0
+                    ??
+                    0
                 );
 
             $deliveredOrders =
                 (int)
                 (
                     $stats['delivered_orders']
-                    ?? 0
+                    ??
+                    0
                 );
 
             $cancelledOrders =
                 (int)
                 (
                     $stats['cancelled_orders']
-                    ?? 0
+                    ??
+                    0
                 );
+
         }
+
     }
+
 }
 
 ?>
@@ -362,6 +399,7 @@ if ($customerId > 0) {
                 Geneva,
                 Verdana,
                 sans-serif;
+
         }
 
 
@@ -379,6 +417,7 @@ if ($customerId > 0) {
 
             padding:
                 0 20px 60px;
+
         }
 
 
@@ -391,6 +430,7 @@ if ($customerId > 0) {
         .account-heading {
 
             margin-bottom: 25px;
+
         }
 
 
@@ -398,11 +438,12 @@ if ($customerId > 0) {
 
             margin: 0;
 
-            color: #fff;
+            color: #ed0038;
 
             font-size: 32px;
 
             font-weight: 800;
+
         }
 
 
@@ -411,15 +452,16 @@ if ($customerId > 0) {
             margin:
                 7px 0 0;
 
-            color: #fff;
+            color: #ed0038;
 
             font-size: 14px;
+
         }
 
 
         /*
         |--------------------------------------------------------------------------
-        | PROFILE CARD
+        | PROFILE
         |--------------------------------------------------------------------------
         */
 
@@ -449,6 +491,7 @@ if ($customerId > 0) {
             box-shadow:
                 0 8px 25px
                 rgba(0,0,0,.06);
+
         }
 
 
@@ -475,6 +518,7 @@ if ($customerId > 0) {
             font-size: 27px;
 
             font-weight: 800;
+
         }
 
 
@@ -487,6 +531,7 @@ if ($customerId > 0) {
             font-size: 24px;
 
             font-weight: 800;
+
         }
 
 
@@ -498,6 +543,7 @@ if ($customerId > 0) {
             color: #777;
 
             font-size: 13px;
+
         }
 
 
@@ -523,6 +569,7 @@ if ($customerId > 0) {
             font-size: 10px;
 
             font-weight: 750;
+
         }
 
 
@@ -537,11 +584,12 @@ if ($customerId > 0) {
             display: grid;
 
             grid-template-columns:
-                repeat(4,1fr);
+                repeat(4, 1fr);
 
             gap: 15px;
 
             margin-bottom: 20px;
+
         }
 
 
@@ -565,6 +613,7 @@ if ($customerId > 0) {
             box-shadow:
                 0 7px 22px
                 rgba(0,0,0,.04);
+
         }
 
 
@@ -589,6 +638,7 @@ if ($customerId > 0) {
             border-radius: 11px;
 
             font-size: 17px;
+
         }
 
 
@@ -599,6 +649,7 @@ if ($customerId > 0) {
             font-size: 20px;
 
             font-weight: 800;
+
         }
 
 
@@ -609,6 +660,7 @@ if ($customerId > 0) {
             color: #888;
 
             font-size: 10px;
+
         }
 
 
@@ -626,6 +678,7 @@ if ($customerId > 0) {
                 1fr 1fr;
 
             gap: 20px;
+
         }
 
 
@@ -649,6 +702,7 @@ if ($customerId > 0) {
             box-shadow:
                 0 8px 25px
                 rgba(0,0,0,.05);
+
         }
 
 
@@ -665,6 +719,7 @@ if ($customerId > 0) {
 
             border-bottom:
                 1px solid #eee;
+
         }
 
 
@@ -687,6 +742,7 @@ if ($customerId > 0) {
             border-radius: 9px;
 
             font-size: 14px;
+
         }
 
 
@@ -699,6 +755,7 @@ if ($customerId > 0) {
             font-size: 16px;
 
             font-weight: 800;
+
         }
 
 
@@ -712,6 +769,7 @@ if ($customerId > 0) {
 
             padding:
                 5px 20px 15px;
+
         }
 
 
@@ -730,12 +788,14 @@ if ($customerId > 0) {
 
             border-bottom:
                 1px solid #f0f0f0;
+
         }
 
 
         .info-row:last-child {
 
             border-bottom: 0;
+
         }
 
 
@@ -744,6 +804,7 @@ if ($customerId > 0) {
             color: #888;
 
             font-size: 11px;
+
         }
 
 
@@ -760,6 +821,7 @@ if ($customerId > 0) {
             text-align: right;
 
             word-break: break-word;
+
         }
 
 
@@ -773,6 +835,7 @@ if ($customerId > 0) {
 
             padding:
                 15px 20px 20px;
+
         }
 
 
@@ -802,12 +865,14 @@ if ($customerId > 0) {
             text-decoration: none;
 
             transition: .2s;
+
         }
 
 
         .action:last-child {
 
             margin-bottom: 0;
+
         }
 
 
@@ -818,6 +883,7 @@ if ($customerId > 0) {
             color: #ed0038;
 
             border-color: #ffd0da;
+
         }
 
 
@@ -842,12 +908,14 @@ if ($customerId > 0) {
             border-radius: 9px;
 
             font-size: 14px;
+
         }
 
 
         .action-content {
 
             flex: 1;
+
         }
 
 
@@ -860,6 +928,7 @@ if ($customerId > 0) {
             font-size: 13px;
 
             font-weight: 750;
+
         }
 
 
@@ -872,6 +941,7 @@ if ($customerId > 0) {
             color: #888;
 
             font-size: 10px;
+
         }
 
 
@@ -880,6 +950,34 @@ if ($customerId > 0) {
             color: #aaa;
 
             font-size: 11px;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | MY ADDRESS
+        |--------------------------------------------------------------------------
+        */
+
+        .address-action {
+
+            border-color: #f4d0d9;
+
+            background:
+                linear-gradient(
+                    90deg,
+                    #fff8fa,
+                    #fafafa
+                );
+
+        }
+
+
+        .address-action .action-icon {
+
+            background: #fff1f5;
+
         }
 
 
@@ -892,6 +990,7 @@ if ($customerId > 0) {
         .logout-action {
 
             color: #d32b3b;
+
         }
 
 
@@ -900,6 +999,7 @@ if ($customerId > 0) {
             color: #d32b3b;
 
             background: #fff0f1;
+
         }
 
 
@@ -910,6 +1010,7 @@ if ($customerId > 0) {
             background: #fff0f1;
 
             border-color: #ffd4d8;
+
         }
 
 
@@ -925,7 +1026,9 @@ if ($customerId > 0) {
 
                 grid-template-columns:
                     repeat(2,1fr);
+
             }
+
         }
 
 
@@ -937,18 +1040,21 @@ if ($customerId > 0) {
 
                 padding:
                     0 12px 40px;
+
             }
 
 
             .account-grid {
 
                 grid-template-columns: 1fr;
+
             }
 
 
             .profile-card {
 
                 padding: 20px;
+
             }
 
 
@@ -959,13 +1065,16 @@ if ($customerId > 0) {
                 height: 70px;
 
                 font-size: 23px;
+
             }
 
 
             .profile-info h2 {
 
                 font-size: 20px;
+
             }
+
         }
 
 
@@ -974,12 +1083,14 @@ if ($customerId > 0) {
             .account-heading h1 {
 
                 font-size: 27px;
+
             }
 
 
             .account-stats {
 
                 gap: 10px;
+
             }
 
 
@@ -988,6 +1099,7 @@ if ($customerId > 0) {
                 padding: 12px;
 
                 gap: 8px;
+
             }
 
 
@@ -996,34 +1108,42 @@ if ($customerId > 0) {
                 width: 37px;
 
                 height: 37px;
+
             }
 
 
             .stat-number {
 
                 font-size: 17px;
+
             }
 
 
             .stat-label {
 
                 font-size: 9px;
+
             }
 
 
             .profile-card {
 
-                align-items: flex-start;
+                align-items:
+                    flex-start;
+
             }
 
 
             .info-row {
 
-                align-items: flex-start;
+                align-items:
+                    flex-start;
 
-                flex-direction: column;
+                flex-direction:
+                    column;
 
                 gap: 5px;
+
             }
 
 
@@ -1032,7 +1152,9 @@ if ($customerId > 0) {
                 max-width: 100%;
 
                 text-align: left;
+
             }
+
         }
 
     </style>
@@ -1041,20 +1163,6 @@ if ($customerId > 0) {
 
 
 <body>
-
-
-<!--
-|--------------------------------------------------------------------------
-| CUSTOMER HEADER
-|--------------------------------------------------------------------------
-|
-| Already loaded above:
-|
-| includes/customer-header.php
-|
-| Do NOT create another custom header here.
-|--------------------------------------------------------------------------
--->
 
 
 <main class="account-container">
@@ -1077,20 +1185,20 @@ if ($customerId > 0) {
     </div>
 
 
-
     <!-- =====================================================
          PROFILE
     ====================================================== -->
 
     <div class="profile-card">
 
-
         <div class="profile-avatar">
 
             <?php
+
             echo accountH(
                 $initials
             );
+
             ?>
 
         </div>
@@ -1101,9 +1209,11 @@ if ($customerId > 0) {
             <h2>
 
                 <?php
+
                 echo accountH(
                     $customerName
                 );
+
                 ?>
 
             </h2>
@@ -1112,10 +1222,12 @@ if ($customerId > 0) {
             <p>
 
                 <?php
+
                 echo accountH(
                     $customer['email']
                     ?? ''
                 );
+
                 ?>
 
             </p>
@@ -1130,18 +1242,18 @@ if ($customerId > 0) {
                 Member since
 
                 <?php
+
                 echo accountH(
                     $memberSince
                 );
+
                 ?>
 
             </div>
 
         </div>
 
-
     </div>
-
 
 
     <!-- =====================================================
@@ -1150,6 +1262,8 @@ if ($customerId > 0) {
 
     <div class="account-stats">
 
+
+        <!-- TOTAL ORDERS -->
 
         <div class="stat-card">
 
@@ -1181,6 +1295,7 @@ if ($customerId > 0) {
         </div>
 
 
+        <!-- OPEN ORDERS -->
 
         <div class="stat-card">
 
@@ -1212,6 +1327,7 @@ if ($customerId > 0) {
         </div>
 
 
+        <!-- DELIVERED -->
 
         <div class="stat-card">
 
@@ -1243,6 +1359,7 @@ if ($customerId > 0) {
         </div>
 
 
+        <!-- CANCELLED -->
 
         <div class="stat-card">
 
@@ -1275,7 +1392,6 @@ if ($customerId > 0) {
 
 
     </div>
-
 
 
     <!-- =====================================================
@@ -1313,6 +1429,8 @@ if ($customerId > 0) {
             <div class="information">
 
 
+                <!-- FULL NAME -->
+
                 <div class="info-row">
 
                     <div class="info-label">
@@ -1323,9 +1441,11 @@ if ($customerId > 0) {
                     <div class="info-value">
 
                         <?php
+
                         echo accountH(
                             $customerName
                         );
+
                         ?>
 
                     </div>
@@ -1333,6 +1453,7 @@ if ($customerId > 0) {
                 </div>
 
 
+                <!-- EMAIL -->
 
                 <div class="info-row">
 
@@ -1344,10 +1465,13 @@ if ($customerId > 0) {
                     <div class="info-value">
 
                         <?php
+
                         echo accountH(
                             $customer['email']
-                            ?? 'Not provided'
+                            ??
+                            'Not provided'
                         );
+
                         ?>
 
                     </div>
@@ -1355,6 +1479,7 @@ if ($customerId > 0) {
                 </div>
 
 
+                <!-- PHONE -->
 
                 <div class="info-row">
 
@@ -1366,10 +1491,13 @@ if ($customerId > 0) {
                     <div class="info-value">
 
                         <?php
+
                         echo accountH(
                             $customer['phone']
-                            ?? 'Not provided'
+                            ??
+                            'Not provided'
                         );
+
                         ?>
 
                     </div>
@@ -1377,6 +1505,7 @@ if ($customerId > 0) {
                 </div>
 
 
+                <!-- CUSTOMER ID -->
 
                 <div class="info-row">
 
@@ -1390,8 +1519,10 @@ if ($customerId > 0) {
                         #
 
                         <?php
+
                         echo (int)
                             $customer['id'];
+
                         ?>
 
                     </div>
@@ -1399,6 +1530,7 @@ if ($customerId > 0) {
                 </div>
 
 
+                <!-- MEMBER SINCE -->
 
                 <div class="info-row">
 
@@ -1410,9 +1542,11 @@ if ($customerId > 0) {
                     <div class="info-value">
 
                         <?php
+
                         echo accountH(
                             $memberSince
                         );
+
                         ?>
 
                     </div>
@@ -1422,9 +1556,7 @@ if ($customerId > 0) {
 
             </div>
 
-
         </section>
-
 
 
         <!-- =================================================
@@ -1455,7 +1587,9 @@ if ($customerId > 0) {
             <div class="actions">
 
 
-                <!-- MY ORDERS -->
+                <!-- =================================================
+                     MY ORDERS
+                ================================================== -->
 
                 <a
                     href="my_orders.php"
@@ -1495,18 +1629,23 @@ if ($customerId > 0) {
                 </a>
 
 
-
-                <!-- RESTAURANTS -->
+                <!-- =================================================
+                     MY ADDRESS
+                     REPLACES RESTAURANTS + DEALS
+                ================================================== -->
 
                 <a
-                    href="restaurants.php"
-                    class="action"
+                    href="manage-addresses.php"
+                    class="
+                        action
+                        address-action
+                    "
                 >
 
                     <div class="action-icon">
 
                         <i
-                            class="fas fa-store"
+                            class="fas fa-location-dot"
                         ></i>
 
                     </div>
@@ -1515,11 +1654,11 @@ if ($customerId > 0) {
                     <div class="action-content">
 
                         <span class="action-title">
-                            Restaurants
+                            My Address
                         </span>
 
                         <span class="action-description">
-                            Browse approved restaurants
+                            Add, edit and manage your delivery addresses
                         </span>
 
                     </div>
@@ -1536,49 +1675,9 @@ if ($customerId > 0) {
                 </a>
 
 
-
-                <!-- DEALS -->
-
-                <a
-                    href="deals.php"
-                    class="action"
-                >
-
-                    <div class="action-icon">
-
-                        <i
-                            class="fas fa-tags"
-                        ></i>
-
-                    </div>
-
-
-                    <div class="action-content">
-
-                        <span class="action-title">
-                            Deals
-                        </span>
-
-                        <span class="action-description">
-                            View available restaurant deals
-                        </span>
-
-                    </div>
-
-
-                    <i
-                        class="
-                            fas
-                            fa-chevron-right
-                            action-arrow
-                        "
-                    ></i>
-
-                </a>
-
-
-
-                <!-- CART -->
+                <!-- =================================================
+                     MY CART
+                ================================================== -->
 
                 <a
                     href="cart.php"
@@ -1618,8 +1717,9 @@ if ($customerId > 0) {
                 </a>
 
 
-
-                <!-- PAYMENT -->
+                <!-- =================================================
+                     PAYMENTS
+                ================================================== -->
 
                 <a
                     href="checkout.php"
@@ -1659,8 +1759,9 @@ if ($customerId > 0) {
                 </a>
 
 
-
-                <!-- LOGOUT -->
+                <!-- =================================================
+                     LOGOUT
+                ================================================== -->
 
                 <a
                     href="logout.php"
@@ -1707,7 +1808,6 @@ if ($customerId > 0) {
 
 
             </div>
-
 
         </section>
 
