@@ -1,9 +1,18 @@
 <?php
-
 /*
 |--------------------------------------------------------------------------
-| Humsafar Food Delivery
-| Restaurant Owner - Menu Management
+| HUMSAFAR FOOD DELIVERY
+| RESTAURANT OWNER - MENU MANAGEMENT
+|--------------------------------------------------------------------------
+|
+| Important:
+| Categories are loaded from the database `categories` table.
+| This removes the old hard-coded category list.
+|
+| Images:
+| Restaurant/menu images are stored in:
+| assets/images/restaurants/
+|
 |--------------------------------------------------------------------------
 */
 
@@ -16,10 +25,13 @@ if (session_status() === PHP_SESSION_NONE) {
 
 
 /* =========================================================
-   DATABASE CHECK
+   DATABASE
 ========================================================= */
 
-if (!isset($conn) || !($conn instanceof mysqli)) {
+if (
+    !isset($conn) ||
+    !($conn instanceof mysqli)
+) {
     die('Database connection is not available.');
 }
 
@@ -28,13 +40,17 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
    HELPER
 ========================================================= */
 
-function e($value)
-{
-    return htmlspecialchars(
-        (string)$value,
-        ENT_QUOTES,
-        'UTF-8'
-    );
+if (!function_exists('e')) {
+
+    function e($value)
+    {
+        return htmlspecialchars(
+            (string)$value,
+            ENT_QUOTES,
+            'UTF-8'
+        );
+    }
+
 }
 
 
@@ -48,23 +64,33 @@ $ownerId = 0;
 
 /*
 |--------------------------------------------------------------------------
-| Find owner by session ID
+| Find owner by possible session IDs
 |--------------------------------------------------------------------------
 */
 
 $possibleIds = [
+
     $_SESSION['restaurant_owner_id'] ?? 0,
     $_SESSION['restaurant_user_id'] ?? 0,
     $_SESSION['owner_id'] ?? 0
+
 ];
 
-foreach ($possibleIds as $id) {
 
-    $id = (int)$id;
+foreach (
+    $possibleIds
+    as $possibleId
+) {
 
-    if ($id <= 0) {
+    $possibleId =
+        (int)$possibleId;
+
+    if (
+        $possibleId <= 0
+    ) {
         continue;
     }
+
 
     $stmt = $conn->prepare("
         SELECT
@@ -79,27 +105,44 @@ foreach ($possibleIds as $id) {
         LIMIT 1
     ");
 
+
     if (!$stmt) {
         continue;
     }
 
-    $stmt->bind_param("i", $id);
 
-    if ($stmt->execute()) {
+    $stmt->bind_param(
+        "i",
+        $possibleId
+    );
 
-        $result = $stmt->get_result();
+
+    if (
+        $stmt->execute()
+    ) {
+
+        $result =
+            $stmt->get_result();
 
         if ($result) {
-            $owner = $result->fetch_assoc();
+
+            $owner =
+                $result->fetch_assoc();
         }
     }
 
+
     $stmt->close();
 
+
     if ($owner) {
-        $ownerId = (int)$owner['id'];
+
+        $ownerId =
+            (int)$owner['id'];
+
         break;
     }
+
 }
 
 
@@ -112,13 +155,18 @@ foreach ($possibleIds as $id) {
 if (!$owner) {
 
     $ownerEmail =
-        $_SESSION['restaurant_owner_email']
-        ?? $_SESSION['email']
-        ?? '';
+        trim(
+            (string)(
+                $_SESSION['restaurant_owner_email']
+                ?? $_SESSION['email']
+                ?? ''
+            )
+        );
 
-    $ownerEmail = trim($ownerEmail);
 
-    if ($ownerEmail !== '') {
+    if (
+        $ownerEmail !== ''
+    ) {
 
         $stmt = $conn->prepare("
             SELECT
@@ -133,6 +181,7 @@ if (!$owner) {
             LIMIT 1
         ");
 
+
         if ($stmt) {
 
             $stmt->bind_param(
@@ -140,33 +189,39 @@ if (!$owner) {
                 $ownerEmail
             );
 
-            if ($stmt->execute()) {
 
-                $result = $stmt->get_result();
+            if (
+                $stmt->execute()
+            ) {
+
+                $result =
+                    $stmt->get_result();
 
                 if ($result) {
-                    $owner = $result->fetch_assoc();
+
+                    $owner =
+                        $result->fetch_assoc();
                 }
             }
 
+
             $stmt->close();
         }
-
-        if ($owner) {
-            $ownerId = (int)$owner['id'];
-        }
     }
+
 }
 
 
-/* =========================================================
-   OWNER NOT FOUND
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| No owner
+|--------------------------------------------------------------------------
+*/
 
 if (!$owner) {
 
     header(
-        "Location: restaurant-owner-login.php"
+        'Location: restaurant-owner-login.php'
     );
 
     exit;
@@ -177,37 +232,57 @@ if (!$owner) {
    OWNER DATA
 ========================================================= */
 
+$ownerId =
+    (int)$owner['id'];
+
+
 $ownerName =
     trim(
-        $owner['full_name'] ?? ''
-    );
-
-$ownerEmail =
-    trim(
-        $owner['email'] ?? ''
-    );
-
-$ownerRestaurantName =
-    trim(
-        $owner['restaurant_name'] ?? ''
-    );
-
-$ownerStatus =
-    strtolower(
-        trim(
-            $owner['status'] ?? 'pending'
+        (string)(
+            $owner['full_name']
+            ?? ''
         )
     );
 
 
-$isApproved = in_array(
-    $ownerStatus,
-    [
-        'approved',
-        'active'
-    ],
-    true
-);
+$ownerEmail =
+    trim(
+        (string)(
+            $owner['email']
+            ?? ''
+        )
+    );
+
+
+$ownerRestaurantName =
+    trim(
+        (string)(
+            $owner['restaurant_name']
+            ?? ''
+        )
+    );
+
+
+$ownerStatus =
+    strtolower(
+        trim(
+            (string)(
+                $owner['status']
+                ?? 'pending'
+            )
+        )
+    );
+
+
+$isApproved =
+    in_array(
+        $ownerStatus,
+        [
+            'approved',
+            'active'
+        ],
+        true
+    );
 
 
 /* =========================================================
@@ -226,13 +301,19 @@ $restaurantId = 0;
 ========================================================= */
 
 $imageDirectory =
-    __DIR__ . '/../assets/images/restaurants/';
+    __DIR__ .
+    '/../assets/images/restaurants/';
+
 
 $imageUrl =
     '../assets/images/restaurants/';
 
 
-if (!is_dir($imageDirectory)) {
+if (
+    !is_dir(
+        $imageDirectory
+    )
+) {
 
     @mkdir(
         $imageDirectory,
@@ -243,19 +324,23 @@ if (!is_dir($imageDirectory)) {
 
 
 /* =========================================================
-   CHECK RESTAURANTS OWNER_ID COLUMN
+   RESTAURANT OWNER_ID COLUMN CHECK
 ========================================================= */
 
 $hasOwnerId = false;
 
-$columnResult = $conn->query(
-    "SHOW COLUMNS FROM restaurants LIKE 'owner_id'"
-);
+
+$ownerColumnResult =
+    $conn->query(
+        "SHOW COLUMNS FROM restaurants LIKE 'owner_id'"
+    );
+
 
 if (
-    $columnResult &&
-    $columnResult->num_rows > 0
+    $ownerColumnResult &&
+    $ownerColumnResult->num_rows > 0
 ) {
+
     $hasOwnerId = true;
 }
 
@@ -265,6 +350,7 @@ if (
 ========================================================= */
 
 if ($isApproved) {
+
 
     /*
     |--------------------------------------------------------------------------
@@ -281,6 +367,7 @@ if ($isApproved) {
             LIMIT 1
         ");
 
+
         if ($stmt) {
 
             $stmt->bind_param(
@@ -288,15 +375,21 @@ if ($isApproved) {
                 $ownerId
             );
 
-            if ($stmt->execute()) {
 
-                $result = $stmt->get_result();
+            if (
+                $stmt->execute()
+            ) {
+
+                $result =
+                    $stmt->get_result();
 
                 if ($result) {
+
                     $restaurant =
                         $result->fetch_assoc();
                 }
             }
+
 
             $stmt->close();
         }
@@ -321,6 +414,7 @@ if ($isApproved) {
             LIMIT 1
         ");
 
+
         if ($stmt) {
 
             $stmt->bind_param(
@@ -328,15 +422,21 @@ if ($isApproved) {
                 $ownerRestaurantName
             );
 
-            if ($stmt->execute()) {
 
-                $result = $stmt->get_result();
+            if (
+                $stmt->execute()
+            ) {
+
+                $result =
+                    $stmt->get_result();
 
                 if ($result) {
+
                     $restaurant =
                         $result->fetch_assoc();
                 }
             }
+
 
             $stmt->close();
         }
@@ -348,64 +448,329 @@ if ($isApproved) {
         $restaurantId =
             (int)$restaurant['id'];
     }
+
 }
 
 
 /* =========================================================
-   ADMIN PERCENTAGE
+   ADMIN MARKUP
 ========================================================= */
+
+$adminPercentage = 0.00;
+
 
 /*
 |--------------------------------------------------------------------------
-| IMPORTANT
-|--------------------------------------------------------------------------
-| We look for admin percentage in restaurants table.
-|
-| Recommended column:
-|
-| admin_percentage
-|
+| First use global app_settings percentage
 |--------------------------------------------------------------------------
 */
 
-$adminPercentage = 0;
-
-$hasAdminPercentage = false;
-
-$percentageColumn =
+$settingsTable =
     $conn->query(
-        "SHOW COLUMNS FROM restaurants LIKE 'admin_percentage'"
+        "SHOW TABLES LIKE 'app_settings'"
     );
 
+
 if (
-    $percentageColumn &&
-    $percentageColumn->num_rows > 0
+    $settingsTable &&
+    $settingsTable->num_rows > 0
 ) {
 
-    $hasAdminPercentage = true;
+    $stmt = $conn->prepare("
+        SELECT
+            setting_value
+        FROM app_settings
+        WHERE setting_key =
+              'platform_markup_percent'
+        LIMIT 1
+    ");
+
+
+    if ($stmt) {
+
+        $stmt->execute();
+
+        $setting =
+            $stmt
+                ->get_result()
+                ->fetch_assoc();
+
+        $stmt->close();
+
+
+        if ($setting) {
+
+            $adminPercentage =
+                max(
+                    0,
+                    (float)$setting['setting_value']
+                );
+        }
+    }
 }
 
 
+/*
+|--------------------------------------------------------------------------
+| Fallback: restaurants.admin_percentage
+|--------------------------------------------------------------------------
+*/
+
 if (
-    $restaurant &&
-    $hasAdminPercentage
+    $adminPercentage <= 0 &&
+    $restaurant
 ) {
 
-    $adminPercentage =
-        (float)(
-            $restaurant['admin_percentage']
-            ?? 0
+    $percentageColumn =
+        $conn->query(
+            "SHOW COLUMNS FROM restaurants LIKE 'admin_percentage'"
+        );
+
+
+    if (
+        $percentageColumn &&
+        $percentageColumn->num_rows > 0
+    ) {
+
+        $adminPercentage =
+            max(
+                0,
+                (float)(
+                    $restaurant['admin_percentage']
+                    ?? 0
+                )
+            );
+    }
+}
+
+
+/* =========================================================
+   MENU_ITEMS COLUMN CHECK
+========================================================= */
+
+$menuColumns = [];
+
+$columnsResult =
+    $conn->query(
+        "SHOW COLUMNS FROM menu_items"
+    );
+
+
+if ($columnsResult) {
+
+    while (
+        $column =
+        $columnsResult->fetch_assoc()
+    ) {
+
+        $menuColumns[] =
+            $column['Field'];
+    }
+}
+
+
+$hasCategoryId =
+    in_array(
+        'category_id',
+        $menuColumns,
+        true
+    );
+
+
+$hasCategory =
+    in_array(
+        'category',
+        $menuColumns,
+        true
+    );
+
+
+$hasImage =
+    in_array(
+        'image',
+        $menuColumns,
+        true
+    );
+
+
+$hasDescription =
+    in_array(
+        'description',
+        $menuColumns,
+        true
+    );
+
+
+$hasStatus =
+    in_array(
+        'status',
+        $menuColumns,
+        true
+    );
+
+
+$hasPrice =
+    in_array(
+        'price',
+        $menuColumns,
+        true
+    );
+
+
+$hasRestaurantId =
+    in_array(
+        'restaurant_id',
+        $menuColumns,
+        true
+    );
+
+
+$hasName =
+    in_array(
+        'name',
+        $menuColumns,
+        true
+    );
+
+
+/* =========================================================
+   DATABASE CATEGORIES
+========================================================= */
+
+$categories = [];
+
+
+$categoryResult =
+    $conn->query("
+        SELECT
+            id,
+            name,
+            image
+        FROM categories
+        WHERE status = 1
+        ORDER BY id ASC
+    ");
+
+
+if ($categoryResult) {
+
+    while (
+        $category =
+        $categoryResult->fetch_assoc()
+    ) {
+
+        $categories[] =
+            $category;
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Category helper map
+|--------------------------------------------------------------------------
+*/
+
+$categoryMap = [];
+
+foreach (
+    $categories
+    as $category
+) {
+
+    $categoryMap[
+        (int)$category['id']
+    ] =
+        $category['name'];
+}
+
+
+/* =========================================================
+   UTILITY
+========================================================= */
+
+function calculateCustomerPrice(
+    $ownerPrice,
+    $percentage
+) {
+
+    $ownerPrice =
+        (float)$ownerPrice;
+
+    $percentage =
+        (float)$percentage;
+
+    return
+        $ownerPrice +
+        (
+            $ownerPrice *
+            ($percentage / 100)
         );
 }
 
 
+/*
+|--------------------------------------------------------------------------
+| Save category IDs where available.
+|--------------------------------------------------------------------------
+*/
+
+function getCategoryIdByName(
+    mysqli $conn,
+    string $categoryName
+) {
+
+    $stmt = $conn->prepare("
+        SELECT
+            id
+        FROM categories
+        WHERE LOWER(TRIM(name))
+              =
+              LOWER(TRIM(?))
+          AND status = 1
+        LIMIT 1
+    ");
+
+
+    if (!$stmt) {
+        return 0;
+    }
+
+
+    $stmt->bind_param(
+        "s",
+        $categoryName
+    );
+
+
+    $stmt->execute();
+
+
+    $row =
+        $stmt
+            ->get_result()
+            ->fetch_assoc();
+
+
+    $stmt->close();
+
+
+    return
+        $row
+            ? (int)$row['id']
+            : 0;
+}
+
+
 /* =========================================================
-   RESTAURANT REQUIRED
+   ADD MENU ITEM
 ========================================================= */
 
 if (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['add_item'])
 ) {
+
 
     if (!$isApproved) {
 
@@ -415,289 +780,389 @@ if (
     } elseif (!$restaurant) {
 
         $errorMessage =
-            'Restaurant record not found. Please create your restaurant first.';
-    }
-}
-
-
-/* =========================================================
-   CREATE MENU ITEM
-========================================================= */
-
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST' &&
-    isset($_POST['add_item']) &&
-    $isApproved &&
-    $restaurant
-) {
-
-    $itemName =
-        trim(
-            $_POST['item_name']
-            ?? ''
-        );
-
-    $description =
-        trim(
-            $_POST['description']
-            ?? ''
-        );
-
-    $category =
-        trim(
-            $_POST['category']
-            ?? ''
-        );
-
-    $ownerPrice =
-        $_POST['owner_price']
-        ?? '';
-
-    $available =
-        isset($_POST['available'])
-            ? 1
-            : 0;
-
-
-    /* -----------------------------------------
-       VALIDATION
-    ----------------------------------------- */
-
-    if ($itemName === '') {
-
-        $errorMessage =
-            'Please enter item name.';
-
-    } elseif ($category === '') {
-
-        $errorMessage =
-            'Please select a category.';
-
-    } elseif (
-        $ownerPrice === '' ||
-        !is_numeric($ownerPrice) ||
-        (float)$ownerPrice <= 0
-    ) {
-
-        $errorMessage =
-            'Please enter a valid owner price.';
+            'Restaurant record not found.';
 
     } else {
 
+
+        $itemName =
+            trim(
+                (string)(
+                    $_POST['item_name']
+                    ?? ''
+                )
+            );
+
+
+        $description =
+            trim(
+                (string)(
+                    $_POST['description']
+                    ?? ''
+                )
+            );
+
+
+        $selectedCategoryId =
+            (int)(
+                $_POST['category_id']
+                ?? 0
+            );
+
+
+        $selectedCategory =
+            trim(
+                (string)(
+                    $_POST['category']
+                    ?? ''
+                )
+            );
+
+
         $ownerPrice =
-            (float)$ownerPrice;
+            $_POST['owner_price']
+            ?? '';
 
 
-        /* -----------------------------------------
-           IMAGE
-        ----------------------------------------- */
+        $available =
+            isset(
+                $_POST['available']
+            )
+                ? 1
+                : 0;
 
-        $itemImage = '';
+
+        /*
+        |--------------------------------------------------------------------------
+        | If category_id was selected, get official category name
+        |--------------------------------------------------------------------------
+        */
 
         if (
-            isset($_FILES['item_image']) &&
-            $_FILES['item_image']['error']
-            !== UPLOAD_ERR_NO_FILE
+            $selectedCategoryId > 0 &&
+            isset(
+                $categoryMap[
+                    $selectedCategoryId
+                ]
+            )
         ) {
 
-            if (
-                $_FILES['item_image']['error']
-                !== UPLOAD_ERR_OK
-            ) {
-
-                $errorMessage =
-                    'Item image upload failed.';
-
-            } elseif (
-                $_FILES['item_image']['size']
-                > 5 * 1024 * 1024
-            ) {
-
-                $errorMessage =
-                    'Item image must be less than 5 MB.';
-
-            } else {
-
-                $extension =
-                    strtolower(
-                        pathinfo(
-                            $_FILES['item_image']['name'],
-                            PATHINFO_EXTENSION
-                        )
-                    );
-
-                $allowed = [
-                    'jpg',
-                    'jpeg',
-                    'png',
-                    'webp'
+            $selectedCategory =
+                $categoryMap[
+                    $selectedCategoryId
                 ];
-
-
-                if (
-                    !in_array(
-                        $extension,
-                        $allowed,
-                        true
-                    )
-                ) {
-
-                    $errorMessage =
-                        'Only JPG, JPEG, PNG and WEBP images are allowed.';
-
-                } else {
-
-                    $imageInfo =
-                        @getimagesize(
-                            $_FILES['item_image']['tmp_name']
-                        );
-
-                    if ($imageInfo === false) {
-
-                        $errorMessage =
-                            'Selected file is not a valid image.';
-
-                    } else {
-
-                        $itemImage =
-                            'item_' .
-                            $restaurantId .
-                            '_' .
-                            date('YmdHis') .
-                            '_' .
-                            mt_rand(
-                                1000,
-                                999999
-                            ) .
-                            '.' .
-                            $extension;
-
-
-                        $destination =
-                            $imageDirectory .
-                            $itemImage;
-
-
-                        if (
-                            !move_uploaded_file(
-                                $_FILES['item_image']['tmp_name'],
-                                $destination
-                            )
-                        ) {
-
-                            $errorMessage =
-                                'Unable to save item image.';
-                        }
-                    }
-                }
-            }
         }
 
 
-        /* -----------------------------------------
-           INSERT
-        ----------------------------------------- */
+        /*
+        |--------------------------------------------------------------------------
+        | Validation
+        |--------------------------------------------------------------------------
+        */
 
-        if ($errorMessage === '') {
+        if (
+            $itemName === ''
+        ) {
+
+            $errorMessage =
+                'Please enter item name.';
+
+        } elseif (
+            $selectedCategoryId <= 0 ||
+            $selectedCategory === ''
+        ) {
+
+            $errorMessage =
+                'Please select a valid category.';
+
+        } elseif (
+            $ownerPrice === '' ||
+            !is_numeric($ownerPrice) ||
+            (float)$ownerPrice <= 0
+        ) {
+
+            $errorMessage =
+                'Please enter a valid owner price.';
+
+        } elseif (
+            !$hasRestaurantId ||
+            !$hasName ||
+            !$hasPrice ||
+            !$hasCategory
+        ) {
+
+            $errorMessage =
+                'Required menu_items columns are missing.';
+
+        } else {
+
+
+            $ownerPrice =
+                (float)$ownerPrice;
+
 
             /*
             |--------------------------------------------------------------------------
-            | Check menu_items columns
+            | IMAGE
             |--------------------------------------------------------------------------
             */
 
-            $menuColumns = [];
+            $itemImage = '';
 
-            $columnsResult =
-                $conn->query(
-                    "SHOW COLUMNS FROM menu_items"
-                );
 
-            if ($columnsResult) {
+            if (
+                isset(
+                    $_FILES['item_image']
+                ) &&
+                $_FILES['item_image']['error']
+                !== UPLOAD_ERR_NO_FILE
+            ) {
 
-                while (
-                    $column =
-                    $columnsResult->fetch_assoc()
+
+                if (
+                    $_FILES['item_image']['error']
+                    !== UPLOAD_ERR_OK
                 ) {
 
-                    $menuColumns[] =
-                        $column['Field'];
+                    $errorMessage =
+                        'Item image upload failed.';
+
+                } elseif (
+                    $_FILES['item_image']['size']
+                    > 5 * 1024 * 1024
+                ) {
+
+                    $errorMessage =
+                        'Item image must be less than 5 MB.';
+
+                } else {
+
+
+                    $extension =
+                        strtolower(
+                            pathinfo(
+                                $_FILES['item_image']['name'],
+                                PATHINFO_EXTENSION
+                            )
+                        );
+
+
+                    $allowedExtensions = [
+
+                        'jpg',
+                        'jpeg',
+                        'png',
+                        'webp'
+
+                    ];
+
+
+                    if (
+                        !in_array(
+                            $extension,
+                            $allowedExtensions,
+                            true
+                        )
+                    ) {
+
+                        $errorMessage =
+                            'Only JPG, JPEG, PNG and WEBP images are allowed.';
+
+                    } else {
+
+
+                        $imageInfo =
+                            @getimagesize(
+                                $_FILES['item_image']['tmp_name']
+                            );
+
+
+                        if (
+                            $imageInfo === false
+                        ) {
+
+                            $errorMessage =
+                                'Selected file is not a valid image.';
+
+                        } else {
+
+
+                            $itemImage =
+
+                                'item_' .
+                                $restaurantId .
+                                '_' .
+                                date('YmdHis') .
+                                '_' .
+                                mt_rand(
+                                    1000,
+                                    999999
+                                ) .
+                                '.' .
+                                $extension;
+
+
+                            $destination =
+                                $imageDirectory .
+                                $itemImage;
+
+
+                            if (
+                                !move_uploaded_file(
+                                    $_FILES['item_image']['tmp_name'],
+                                    $destination
+                                )
+                            ) {
+
+                                $errorMessage =
+                                    'Unable to save item image.';
+
+                            }
+
+                        }
+
+                    }
+
                 }
+
             }
 
 
             /*
             |--------------------------------------------------------------------------
-            | Normal schema
+            | INSERT
             |--------------------------------------------------------------------------
             */
 
             if (
-                in_array(
-                    'restaurant_id',
-                    $menuColumns,
-                    true
-                ) &&
-                in_array(
-                    'name',
-                    $menuColumns,
-                    true
-                ) &&
-                in_array(
-                    'price',
-                    $menuColumns,
-                    true
-                )
+                $errorMessage === ''
             ) {
+
 
                 /*
                 |--------------------------------------------------------------------------
-                | Insert basic fields first
+                | If category_id exists, save both:
+                | category_id
+                | category
                 |--------------------------------------------------------------------------
                 */
 
-                $stmt = $conn->prepare("
-                    INSERT INTO menu_items
-                    (
-                        restaurant_id,
-                        name,
-                        description,
-                        price,
-                        image,
-                        category,
-                        status
-                    )
-                    VALUES
-                    (
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?,
-                        ?
-                    )
-                ");
+                if (
+                    $hasCategoryId
+                ) {
 
 
-                if (!$stmt) {
+                    $stmt = $conn->prepare("
+                        INSERT INTO menu_items
+                        (
+                            restaurant_id,
+                            name,
+                            description,
+                            price,
+                            image,
+                            category,
+                            category_id,
+                            status
+                        )
+                        VALUES
+                        (
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?
+                        )
+                    ");
 
-                    $errorMessage =
-                        'Database error: ' .
-                        $conn->error;
+
+                    if ($stmt) {
+
+                        $stmt->bind_param(
+                            "issdssii",
+                            $restaurantId,
+                            $itemName,
+                            $description,
+                            $ownerPrice,
+                            $itemImage,
+                            $selectedCategory,
+                            $selectedCategoryId,
+                            $available
+                        );
+
+
+                    } else {
+
+                        $errorMessage =
+                            'Database error: ' .
+                            $conn->error;
+
+                    }
 
                 } else {
 
-                    $stmt->bind_param(
-                        "issdssi",
-                        $restaurantId,
-                        $itemName,
-                        $description,
-                        $ownerPrice,
-                        $itemImage,
-                        $category,
-                        $available
-                    );
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Backward-compatible insert
+                    |--------------------------------------------------------------------------
+                    */
+
+                    $stmt = $conn->prepare("
+                        INSERT INTO menu_items
+                        (
+                            restaurant_id,
+                            name,
+                            description,
+                            price,
+                            image,
+                            category,
+                            status
+                        )
+                        VALUES
+                        (
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?
+                        )
+                    ");
+
+
+                    if ($stmt) {
+
+                        $stmt->bind_param(
+                            "issdssi",
+                            $restaurantId,
+                            $itemName,
+                            $description,
+                            $ownerPrice,
+                            $itemImage,
+                            $selectedCategory,
+                            $available
+                        );
+
+
+                    } else {
+
+                        $errorMessage =
+                            'Database error: ' .
+                            $conn->error;
+
+                    }
+
+                }
+
+
+                if (
+                    $errorMessage === '' &&
+                    $stmt
+                ) {
 
 
                     if (
@@ -712,18 +1177,49 @@ if (
                         $errorMessage =
                             'Unable to add menu item: ' .
                             $stmt->error;
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Remove uploaded image if insert failed
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if (
+                            $itemImage !== ''
+                        ) {
+
+                            $failedImage =
+                                $imageDirectory .
+                                basename(
+                                    $itemImage
+                                );
+
+
+                            if (
+                                is_file(
+                                    $failedImage
+                                )
+                            ) {
+
+                                @unlink(
+                                    $failedImage
+                                );
+                            }
+                        }
+
                     }
+
 
                     $stmt->close();
                 }
 
-            } else {
-
-                $errorMessage =
-                    'Your menu_items table does not have the required columns.';
             }
+
         }
+
     }
+
 }
 
 
@@ -733,275 +1229,607 @@ if (
 
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST' &&
-    isset($_POST['edit_item']) &&
-    $isApproved &&
-    $restaurant
+    isset($_POST['edit_item'])
 ) {
 
-    $itemId =
-        (int)(
-            $_POST['item_id']
-            ?? 0
-        );
 
-    $itemName =
-        trim(
-            $_POST['item_name']
-            ?? ''
-        );
-
-    $description =
-        trim(
-            $_POST['description']
-            ?? ''
-        );
-
-    $category =
-        trim(
-            $_POST['category']
-            ?? ''
-        );
-
-    $ownerPrice =
-        $_POST['owner_price']
-        ?? '';
-
-    $available =
-        isset($_POST['available'])
-            ? 1
-            : 0;
-
-
-    if ($itemId <= 0) {
+    if (!$isApproved) {
 
         $errorMessage =
-            'Invalid menu item.';
+            'Your account must be approved before managing menu items.';
 
-    } elseif ($itemName === '') {
-
-        $errorMessage =
-            'Please enter item name.';
-
-    } elseif ($category === '') {
+    } elseif (!$restaurant) {
 
         $errorMessage =
-            'Please select category.';
-
-    } elseif (
-        !is_numeric($ownerPrice) ||
-        (float)$ownerPrice <= 0
-    ) {
-
-        $errorMessage =
-            'Please enter a valid owner price.';
+            'Restaurant record not found.';
 
     } else {
 
-        $ownerPrice =
-            (float)$ownerPrice;
 
-
-        /*
-        |--------------------------------------------------------------------------
-        | Get old image
-        |--------------------------------------------------------------------------
-        */
-
-        $oldImage = '';
-
-        $stmt =
-            $conn->prepare("
-                SELECT image
-                FROM menu_items
-                WHERE id = ?
-                AND restaurant_id = ?
-                LIMIT 1
-            ");
-
-        if ($stmt) {
-
-            $stmt->bind_param(
-                "ii",
-                $itemId,
-                $restaurantId
+        $itemId =
+            (int)(
+                $_POST['item_id']
+                ?? 0
             );
 
-            if ($stmt->execute()) {
 
-                $result =
-                    $stmt->get_result();
+        $itemName =
+            trim(
+                (string)(
+                    $_POST['item_name']
+                    ?? ''
+                )
+            );
 
-                if ($result) {
 
-                    $oldItem =
-                        $result->fetch_assoc();
+        $description =
+            trim(
+                (string)(
+                    $_POST['description']
+                    ?? ''
+                )
+            );
 
-                    if ($oldItem) {
 
-                        $oldImage =
-                            $oldItem['image']
-                            ?? '';
-                    }
-                }
-            }
+        $selectedCategoryId =
+            (int)(
+                $_POST['category_id']
+                ?? 0
+            );
 
-            $stmt->close();
+
+        $selectedCategory =
+            trim(
+                (string)(
+                    $_POST['category']
+                    ?? ''
+                )
+            );
+
+
+        $ownerPrice =
+            $_POST['owner_price']
+            ?? '';
+
+
+        $available =
+            isset(
+                $_POST['available']
+            )
+                ? 1
+                : 0;
+
+
+        if (
+            $selectedCategoryId > 0 &&
+            isset(
+                $categoryMap[
+                    $selectedCategoryId
+                ]
+            )
+        ) {
+
+            $selectedCategory =
+                $categoryMap[
+                    $selectedCategoryId
+                ];
         }
 
 
         /*
         |--------------------------------------------------------------------------
-        | New image
+        | VALIDATION
         |--------------------------------------------------------------------------
         */
 
-        $itemImage =
-            $oldImage;
-
-        $newImageUploaded =
-            false;
-
-
         if (
-            isset($_FILES['item_image']) &&
-            $_FILES['item_image']['error']
-            !== UPLOAD_ERR_NO_FILE
+            $itemId <= 0
         ) {
 
-            if (
-                $_FILES['item_image']['error']
-                !== UPLOAD_ERR_OK
-            ) {
+            $errorMessage =
+                'Invalid menu item.';
 
-                $errorMessage =
-                    'Item image upload failed.';
+        } elseif (
+            $itemName === ''
+        ) {
 
-            } elseif (
-                $_FILES['item_image']['size']
-                > 5 * 1024 * 1024
-            ) {
+            $errorMessage =
+                'Please enter item name.';
 
-                $errorMessage =
-                    'Item image must be less than 5 MB.';
+        } elseif (
+            $selectedCategoryId <= 0 ||
+            $selectedCategory === ''
+        ) {
 
-            } else {
+            $errorMessage =
+                'Please select a valid category.';
 
-                $extension =
-                    strtolower(
-                        pathinfo(
-                            $_FILES['item_image']['name'],
-                            PATHINFO_EXTENSION
-                        )
-                    );
+        } elseif (
+            !is_numeric($ownerPrice) ||
+            (float)$ownerPrice <= 0
+        ) {
 
-                $allowed = [
-                    'jpg',
-                    'jpeg',
-                    'png',
-                    'webp'
-                ];
+            $errorMessage =
+                'Please enter a valid owner price.';
+
+        } else {
 
 
-                if (
-                    !in_array(
-                        $extension,
-                        $allowed,
-                        true
-                    )
-                ) {
+            $ownerPrice =
+                (float)$ownerPrice;
 
-                    $errorMessage =
-                        'Invalid image format.';
+
+            /*
+            |--------------------------------------------------------------------------
+            | GET OLD ITEM / IMAGE
+            |--------------------------------------------------------------------------
+            */
+
+            $oldImage = '';
+
+
+            $stmt =
+                $conn->prepare("
+                    SELECT
+                        image,
+                        category,
+                        category_id
+                    FROM menu_items
+                    WHERE id = ?
+                      AND restaurant_id = ?
+                    LIMIT 1
+                ");
+
+
+            if ($stmt) {
+
+                $stmt->bind_param(
+                    "ii",
+                    $itemId,
+                    $restaurantId
+                );
+
+
+                $stmt->execute();
+
+
+                $oldItem =
+                    $stmt
+                        ->get_result()
+                        ->fetch_assoc();
+
+
+                $stmt->close();
+
+
+                if ($oldItem) {
+
+                    $oldImage =
+                        (string)(
+                            $oldItem['image']
+                            ?? ''
+                        );
 
                 } else {
 
-                    $imageInfo =
-                        @getimagesize(
-                            $_FILES['item_image']['tmp_name']
+                    $errorMessage =
+                        'Menu item not found.';
+                }
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | IMAGE
+            |--------------------------------------------------------------------------
+            */
+
+            $itemImage =
+                $oldImage;
+
+            $newImageUploaded =
+                false;
+
+
+            if (
+                $errorMessage === '' &&
+                isset(
+                    $_FILES['item_image']
+                ) &&
+                $_FILES['item_image']['error']
+                !== UPLOAD_ERR_NO_FILE
+            ) {
+
+
+                if (
+                    $_FILES['item_image']['error']
+                    !== UPLOAD_ERR_OK
+                ) {
+
+                    $errorMessage =
+                        'Item image upload failed.';
+
+                } elseif (
+                    $_FILES['item_image']['size']
+                    > 5 * 1024 * 1024
+                ) {
+
+                    $errorMessage =
+                        'Item image must be less than 5 MB.';
+
+                } else {
+
+
+                    $extension =
+                        strtolower(
+                            pathinfo(
+                                $_FILES['item_image']['name'],
+                                PATHINFO_EXTENSION
+                            )
                         );
 
-                    if ($imageInfo === false) {
+
+                    $allowedExtensions = [
+
+                        'jpg',
+                        'jpeg',
+                        'png',
+                        'webp'
+
+                    ];
+
+
+                    if (
+                        !in_array(
+                            $extension,
+                            $allowedExtensions,
+                            true
+                        )
+                    ) {
 
                         $errorMessage =
-                            'Selected file is not a valid image.';
+                            'Invalid image format.';
 
                     } else {
 
-                        $itemImage =
-                            'item_' .
-                            $restaurantId .
-                            '_' .
-                            date('YmdHis') .
-                            '_' .
-                            mt_rand(
-                                1000,
-                                999999
-                            ) .
-                            '.' .
-                            $extension;
+
+                        $imageInfo =
+                            @getimagesize(
+                                $_FILES['item_image']['tmp_name']
+                            );
 
 
                         if (
-                            move_uploaded_file(
-                                $_FILES['item_image']['tmp_name'],
-                                $imageDirectory .
+                            $imageInfo === false
+                        ) {
+
+                            $errorMessage =
+                                'Selected file is not a valid image.';
+
+                        } else {
+
+
+                            $itemImage =
+
+                                'item_' .
+                                $restaurantId .
+                                '_' .
+                                date('YmdHis') .
+                                '_' .
+                                mt_rand(
+                                    1000,
+                                    999999
+                                ) .
+                                '.' .
+                                $extension;
+
+
+                            if (
+                                move_uploaded_file(
+                                    $_FILES['item_image']['tmp_name'],
+                                    $imageDirectory .
+                                    $itemImage
+                                )
+                            ) {
+
+                                $newImageUploaded =
+                                    true;
+
+                            } else {
+
+                                $errorMessage =
+                                    'Unable to save new image.';
+
+                            }
+
+                        }
+
+                    }
+
+                }
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | UPDATE
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $errorMessage === ''
+            ) {
+
+
+                if (
+                    $hasCategoryId
+                ) {
+
+
+                    $stmt = $conn->prepare("
+                        UPDATE menu_items
+                        SET
+                            name = ?,
+                            description = ?,
+                            price = ?,
+                            image = ?,
+                            category = ?,
+                            category_id = ?,
+                            status = ?
+                        WHERE id = ?
+                          AND restaurant_id = ?
+                        LIMIT 1
+                    ");
+
+
+                    if ($stmt) {
+
+                        $stmt->bind_param(
+                            "ssdssiiii",
+                            $itemName,
+                            $description,
+                            $ownerPrice,
+                            $itemImage,
+                            $selectedCategory,
+                            $selectedCategoryId,
+                            $available,
+                            $itemId,
+                            $restaurantId
+                        );
+                    }
+
+                } else {
+
+
+                    $stmt = $conn->prepare("
+                        UPDATE menu_items
+                        SET
+                            name = ?,
+                            description = ?,
+                            price = ?,
+                            image = ?,
+                            category = ?,
+                            status = ?
+                        WHERE id = ?
+                          AND restaurant_id = ?
+                        LIMIT 1
+                    ");
+
+
+                    if ($stmt) {
+
+                        $stmt->bind_param(
+                            "ssdssiii",
+                            $itemName,
+                            $description,
+                            $ownerPrice,
+                            $itemImage,
+                            $selectedCategory,
+                            $available,
+                            $itemId,
+                            $restaurantId
+                        );
+                    }
+
+                }
+
+
+                if (
+                    $errorMessage === '' &&
+                    $stmt
+                ) {
+
+
+                    if (
+                        $stmt->execute()
+                    ) {
+
+                        $successMessage =
+                            'Menu item updated successfully.';
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Delete old image
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if (
+                            $newImageUploaded &&
+                            $oldImage !== '' &&
+                            basename(
+                                $oldImage
+                            ) !== basename(
                                 $itemImage
                             )
                         ) {
 
-                            $newImageUploaded =
-                                true;
+                            $oldPath =
+                                $imageDirectory .
+                                basename(
+                                    $oldImage
+                                );
 
-                        } else {
 
-                            $errorMessage =
-                                'Unable to save new image.';
+                            if (
+                                is_file(
+                                    $oldPath
+                                )
+                            ) {
+
+                                @unlink(
+                                    $oldPath
+                                );
+                            }
+
                         }
+
+                    } else {
+
+                        $errorMessage =
+                            'Unable to update menu item: ' .
+                            $stmt->error;
+
+
+                        /*
+                        |--------------------------------------------------------------------------
+                        | Remove new image if update failed
+                        |--------------------------------------------------------------------------
+                        */
+
+                        if (
+                            $newImageUploaded
+                        ) {
+
+                            $newPath =
+                                $imageDirectory .
+                                basename(
+                                    $itemImage
+                                );
+
+
+                            if (
+                                is_file(
+                                    $newPath
+                                )
+                            ) {
+
+                                @unlink(
+                                    $newPath
+                                );
+                            }
+
+                        }
+
                     }
+
+
+                    $stmt->close();
+
                 }
+
             }
+
         }
 
+    }
 
-        /*
-        |--------------------------------------------------------------------------
-        | UPDATE
-        |--------------------------------------------------------------------------
-        */
-
-        if ($errorMessage === '') {
-
-            $stmt = $conn->prepare("
-                UPDATE menu_items
-                SET
-                    name = ?,
-                    description = ?,
-                    price = ?,
-                    image = ?,
-                    category = ?,
-                    status = ?
-                WHERE id = ?
-                AND restaurant_id = ?
-                LIMIT 1
-            ");
+}
 
 
-            if (!$stmt) {
+/* =========================================================
+   DELETE MENU ITEM
+========================================================= */
 
-                $errorMessage =
-                    'Database error: ' .
-                    $conn->error;
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['delete_item'])
+) {
 
-            } else {
+
+    if (
+        !$isApproved ||
+        !$restaurant
+    ) {
+
+        $errorMessage =
+            'You are not allowed to delete menu items.';
+
+    } else {
+
+
+        $itemId =
+            (int)(
+                $_POST['item_id']
+                ?? 0
+            );
+
+
+        if (
+            $itemId > 0
+        ) {
+
+
+            $oldImage = '';
+
+
+            $stmt =
+                $conn->prepare("
+                    SELECT image
+                    FROM menu_items
+                    WHERE id = ?
+                      AND restaurant_id = ?
+                    LIMIT 1
+                ");
+
+
+            if ($stmt) {
 
                 $stmt->bind_param(
-                    "ssdssiii",
-                    $itemName,
-                    $description,
-                    $ownerPrice,
-                    $itemImage,
-                    $category,
-                    $available,
+                    "ii",
+                    $itemId,
+                    $restaurantId
+                );
+
+
+                $stmt->execute();
+
+
+                $item =
+                    $stmt
+                        ->get_result()
+                        ->fetch_assoc();
+
+
+                $stmt->close();
+
+
+                if ($item) {
+
+                    $oldImage =
+                        (string)(
+                            $item['image']
+                            ?? ''
+                        );
+                }
+            }
+
+
+            $stmt =
+                $conn->prepare("
+                    DELETE FROM menu_items
+                    WHERE id = ?
+                      AND restaurant_id = ?
+                    LIMIT 1
+                ");
+
+
+            if ($stmt) {
+
+                $stmt->bind_param(
+                    "ii",
                     $itemId,
                     $restaurantId
                 );
@@ -1012,35 +1840,28 @@ if (
                 ) {
 
                     $successMessage =
-                        'Menu item updated successfully.';
+                        'Menu item deleted successfully.';
 
-
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Remove old image
-                    |--------------------------------------------------------------------------
-                    */
 
                     if (
-                        $newImageUploaded &&
-                        $oldImage !== '' &&
-                        $oldImage !== $itemImage
+                        $oldImage !== ''
                     ) {
 
-                        $oldImagePath =
+                        $oldPath =
                             $imageDirectory .
                             basename(
                                 $oldImage
                             );
 
+
                         if (
                             is_file(
-                                $oldImagePath
+                                $oldPath
                             )
                         ) {
 
                             @unlink(
-                                $oldImagePath
+                                $oldPath
                             );
                         }
                     }
@@ -1048,145 +1869,18 @@ if (
                 } else {
 
                     $errorMessage =
-                        'Unable to update menu item: ' .
-                        $stmt->error;
+                        'Unable to delete menu item.';
                 }
+
 
                 $stmt->close();
+
             }
+
         }
+
     }
-}
 
-
-/* =========================================================
-   DELETE MENU ITEM
-========================================================= */
-
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST' &&
-    isset($_POST['delete_item']) &&
-    $isApproved &&
-    $restaurant
-) {
-
-    $itemId =
-        (int)(
-            $_POST['item_id']
-            ?? 0
-        );
-
-
-    if ($itemId > 0) {
-
-        /*
-        |--------------------------------------------------------------------------
-        | Get image
-        |--------------------------------------------------------------------------
-        */
-
-        $oldImage = '';
-
-        $stmt =
-            $conn->prepare("
-                SELECT image
-                FROM menu_items
-                WHERE id = ?
-                AND restaurant_id = ?
-                LIMIT 1
-            ");
-
-        if ($stmt) {
-
-            $stmt->bind_param(
-                "ii",
-                $itemId,
-                $restaurantId
-            );
-
-            if ($stmt->execute()) {
-
-                $result =
-                    $stmt->get_result();
-
-                if ($result) {
-
-                    $row =
-                        $result->fetch_assoc();
-
-                    if ($row) {
-                        $oldImage =
-                            $row['image']
-                            ?? '';
-                    }
-                }
-            }
-
-            $stmt->close();
-        }
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Delete
-        |--------------------------------------------------------------------------
-        */
-
-        $stmt =
-            $conn->prepare("
-                DELETE FROM menu_items
-                WHERE id = ?
-                AND restaurant_id = ?
-                LIMIT 1
-            ");
-
-        if ($stmt) {
-
-            $stmt->bind_param(
-                "ii",
-                $itemId,
-                $restaurantId
-            );
-
-            if (
-                $stmt->execute()
-            ) {
-
-                $successMessage =
-                    'Menu item deleted successfully.';
-
-
-                if (
-                    $oldImage !== ''
-                ) {
-
-                    $oldImagePath =
-                        $imageDirectory .
-                        basename(
-                            $oldImage
-                        );
-
-                    if (
-                        is_file(
-                            $oldImagePath
-                        )
-                    ) {
-
-                        @unlink(
-                            $oldImagePath
-                        );
-                    }
-                }
-
-            } else {
-
-                $errorMessage =
-                    'Unable to delete menu item.';
-            }
-
-            $stmt->close();
-        }
-    }
 }
 
 
@@ -1196,68 +1890,84 @@ if (
 
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST' &&
-    isset($_POST['toggle_item']) &&
-    $isApproved &&
-    $restaurant
+    isset($_POST['toggle_item'])
 ) {
 
-    $itemId =
-        (int)(
-            $_POST['item_id']
-            ?? 0
-        );
+
+    if (
+        !$isApproved ||
+        !$restaurant
+    ) {
+
+        $errorMessage =
+            'You are not allowed to change item availability.';
+
+    } else {
 
 
-    $newStatus =
-        (int)(
-            $_POST['new_status']
-            ?? 0
-        );
-
-    $newStatus =
-        $newStatus
-            ? 1
-            : 0;
-
-
-    if ($itemId > 0) {
-
-        $stmt =
-            $conn->prepare("
-                UPDATE menu_items
-                SET status = ?
-                WHERE id = ?
-                AND restaurant_id = ?
-                LIMIT 1
-            ");
-
-        if ($stmt) {
-
-            $stmt->bind_param(
-                "iii",
-                $newStatus,
-                $itemId,
-                $restaurantId
+        $itemId =
+            (int)(
+                $_POST['item_id']
+                ?? 0
             );
 
-            if (
-                $stmt->execute()
-            ) {
 
-                $successMessage =
-                    $newStatus
-                    ? 'Item is now available.'
-                    : 'Item is now unavailable.';
+        $newStatus =
+            !empty(
+                $_POST['new_status']
+            )
+                ? 1
+                : 0;
 
-            } else {
 
-                $errorMessage =
-                    'Unable to change item availability.';
+        if (
+            $itemId > 0
+        ) {
+
+
+            $stmt =
+                $conn->prepare("
+                    UPDATE menu_items
+                    SET status = ?
+                    WHERE id = ?
+                      AND restaurant_id = ?
+                    LIMIT 1
+                ");
+
+
+            if ($stmt) {
+
+                $stmt->bind_param(
+                    "iii",
+                    $newStatus,
+                    $itemId,
+                    $restaurantId
+                );
+
+
+                if (
+                    $stmt->execute()
+                ) {
+
+                    $successMessage =
+                        $newStatus
+                            ? 'Item is now available.'
+                            : 'Item is now unavailable.';
+
+                } else {
+
+                    $errorMessage =
+                        'Unable to change item availability.';
+                }
+
+
+                $stmt->close();
             }
 
-            $stmt->close();
         }
+
     }
+
 }
 
 
@@ -1267,25 +1977,63 @@ if (
 
 $menuItems = [];
 
+
 if (
     $isApproved &&
     $restaurantId > 0
 ) {
 
+
+    $selectFields = [
+
+        'id',
+        'name',
+        'price',
+        'status'
+
+    ];
+
+
+    if ($hasDescription) {
+        $selectFields[] =
+            'description';
+    }
+
+
+    if ($hasImage) {
+        $selectFields[] =
+            'image';
+    }
+
+
+    if ($hasCategory) {
+        $selectFields[] =
+            'category';
+    }
+
+
+    if ($hasCategoryId) {
+        $selectFields[] =
+            'category_id';
+    }
+
+
+    $selectSql =
+        implode(
+            ', ',
+            $selectFields
+        );
+
+
     $stmt =
         $conn->prepare("
             SELECT
-                id,
-                name,
-                description,
-                price,
-                image,
-                category,
-                status
+                {$selectSql}
             FROM menu_items
             WHERE restaurant_id = ?
             ORDER BY id DESC
         ");
+
 
     if ($stmt) {
 
@@ -1294,47 +2042,103 @@ if (
             $restaurantId
         );
 
-        if ($stmt->execute()) {
 
-            $result =
-                $stmt->get_result();
+        $stmt->execute();
 
-            if ($result) {
 
-                while (
-                    $row =
-                    $result->fetch_assoc()
-                ) {
+        $result =
+            $stmt->get_result();
 
-                    $menuItems[] =
-                        $row;
-                }
-            }
+
+        while (
+            $row =
+            $result->fetch_assoc()
+        ) {
+
+            $menuItems[] =
+                $row;
         }
+
 
         $stmt->close();
     }
+
 }
 
 
 /* =========================================================
-   CATEGORY LIST
+   MENU CATEGORY GROUPS
 ========================================================= */
 
-$categories = [
-    'Fast Food',
-    'Pizza',
-    'Burgers',
-    'BBQ',
-    'Biryani',
-    'Rice',
-    'Chinese',
-    'Desi',
-    'Drinks',
-    'Desserts',
-    'Deals',
-    'Other'
-];
+$groupedMenu = [];
+
+
+foreach (
+    $menuItems
+    as $menuItem
+) {
+
+    $categoryName =
+        trim(
+            (string)(
+                $menuItem['category']
+                ?? ''
+            )
+        );
+
+
+    $categoryId =
+        (int)(
+            $menuItem['category_id']
+            ?? 0
+        );
+
+
+    if (
+        $categoryId > 0 &&
+        isset(
+            $categoryMap[
+                $categoryId
+            ]
+        )
+    ) {
+
+        $categoryName =
+            $categoryMap[
+                $categoryId
+            ];
+    }
+
+
+    if (
+        $categoryName === ''
+    ) {
+
+        $categoryName =
+            'Other';
+    }
+
+
+    if (
+        !isset(
+            $groupedMenu[
+                $categoryName
+            ]
+        )
+    ) {
+
+        $groupedMenu[
+            $categoryName
+        ] = [];
+    }
+
+
+    $groupedMenu[
+        $categoryName
+    ][] =
+        $menuItem;
+
+}
 
 
 /* =========================================================
@@ -1354,7 +2158,6 @@ $initial =
 
 
 ?>
-
 <!DOCTYPE html>
 
 <html lang="en">
@@ -1363,10 +2166,12 @@ $initial =
 
 <meta charset="UTF-8">
 
+
 <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
 >
+
 
 <title>
     Menu Management | Humsafar
@@ -1390,9 +2195,13 @@ $initial =
 }
 
 body {
+
     margin: 0;
+
     background: #f5f6fa;
+
     color: #191919;
+
     font-family:
         "Segoe UI",
         Arial,
@@ -1404,79 +2213,145 @@ a {
 }
 
 
-
 /* =========================================================
    MAIN
 ========================================================= */
 
 .main {
+
     margin-left: 230px;
+
     min-height: 100vh;
 }
 
+
 .topbar {
+
     height: 65px;
-    padding: 0 28px;
-    background: #fff;
-    border-bottom: 1px solid #e8e8eb;
+
+    padding:
+        0 28px;
+
+    background: #ffffff;
+
+    border-bottom:
+        1px solid #e8e8eb;
+
     display: flex;
+
     align-items: center;
-    justify-content: space-between;
+
+    justify-content:
+        space-between;
 }
 
+
 .topbar small {
+
     display: block;
-    font-size: 7px;
+
+    font-size: 8px;
+
     color: #a0a2a9;
+
     letter-spacing: 1.5px;
+
     font-weight: 900;
 }
 
+
 .topbar strong {
+
     display: block;
+
     margin-top: 4px;
+
     font-size: 15px;
 }
 
+
 .topbar-right {
+
     display: flex;
+
     align-items: center;
+
     gap: 13px;
 }
 
+
 .bell {
+
     width: 35px;
+
     height: 35px;
-    border: 1px solid #e4e5e8;
+
+    border:
+        1px solid #e4e5e8;
+
     border-radius: 9px;
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     color: #555;
+
     font-size: 12px;
 }
 
+
 .top-user {
+
     display: flex;
+
     align-items: center;
+
     gap: 8px;
 }
 
-.top-user .avatar {
-    width: 31px;
-    height: 31px;
-    font-size: 10px;
+
+.top-avatar {
+
+    width: 32px;
+
+    height: 32px;
+
+    border-radius: 50%;
+
+    background: #ed0038;
+
+    color: #ffffff;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 11px;
+
+    font-weight: 900;
 }
+
 
 .top-user-text strong {
-    font-size: 10px;
+
+    font-size: 11px;
 }
 
+
 .top-user-text span {
+
     display: block;
+
     margin-top: 2px;
+
     color: #999;
-    font-size: 7px;
+
+    font-size: 8px;
 }
 
 
@@ -1485,29 +2360,47 @@ a {
 ========================================================= */
 
 .content {
-    padding: 32px 28px 55px;
+
+    padding:
+        32px 28px 55px;
+
     max-width: 1450px;
 }
 
+
 .heading {
+
     margin-bottom: 22px;
 }
 
+
 .eyebrow {
+
     color: #ed0038;
-    font-size: 8px;
+
+    font-size: 9px;
+
     font-weight: 900;
+
     letter-spacing: 1.5px;
 }
 
+
 .heading h1 {
-    margin: 7px 0 5px;
+
+    margin:
+        7px 0 5px;
+
     font-size: 28px;
 }
 
+
 .heading p {
+
     margin: 0;
+
     color: #888b93;
+
     font-size: 12px;
 }
 
@@ -1517,22 +2410,38 @@ a {
 ========================================================= */
 
 .alert {
-    padding: 13px 16px;
+
+    padding:
+        13px 16px;
+
     margin-bottom: 20px;
+
     border-radius: 10px;
+
     font-size: 11px;
+
     font-weight: 700;
 }
 
+
 .alert.success {
+
     background: #eaf8ef;
-    border: 1px solid #c9ead4;
+
+    border:
+        1px solid #c9ead4;
+
     color: #17743d;
 }
 
+
 .alert.error {
+
     background: #fff0f3;
-    border: 1px solid #ffd0d9;
+
+    border:
+        1px solid #ffd0d9;
+
     color: #b4233c;
 }
 
@@ -1542,96 +2451,67 @@ a {
 ========================================================= */
 
 .lock-card {
-    padding: 55px 25px;
-    background: #fff;
-    border: 1px solid #e8e9ed;
+
+    padding:
+        60px 25px;
+
+    background: #ffffff;
+
+    border:
+        1px solid #e8e9ed;
+
     border-radius: 18px;
+
     text-align: center;
 }
 
+
 .lock-icon {
+
     width: 70px;
+
     height: 70px;
-    margin: 0 auto 18px;
-    border-radius: 50%;
+
+    margin:
+        0 auto 18px;
+
     background: #fff0f4;
+
     color: #ed0038;
+
+    border-radius: 50%;
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
-    font-size: 26px;
+
+    font-size: 25px;
 }
+
 
 .lock-card h2 {
-    margin: 0 0 8px;
-    font-size: 21px;
+
+    margin:
+        0 0 8px;
+
+    font-size: 20px;
 }
+
 
 .lock-card p {
-    max-width: 570px;
-    margin: auto;
-    color: #858890;
-    font-size: 12px;
-    line-height: 1.7;
-}
 
-.pending {
-    display: inline-flex;
-    margin-top: 18px;
-    padding: 8px 14px;
-    border-radius: 20px;
-    background: #fff6df;
-    color: #966300;
-    font-size: 9px;
-    font-weight: 900;
-}
+    max-width: 500px;
 
+    margin:
+        0 auto;
 
-/* =========================================================
-   PRICE INFORMATION
-========================================================= */
+    color: #888;
 
-.price-info {
-    display: grid;
-    grid-template-columns:
-        1fr 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 22px;
-}
+    font-size: 11px;
 
-.price-box {
-    padding: 17px;
-    background: #fff;
-    border: 1px solid #e7e8ec;
-    border-radius: 13px;
-}
-
-.price-box i {
-    color: #ed0038;
-    font-size: 15px;
-}
-
-.price-box small {
-    display: block;
-    margin-top: 8px;
-    color: #92959d;
-    font-size: 8px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-}
-
-.price-box strong {
-    display: block;
-    margin-top: 4px;
-    font-size: 17px;
-}
-
-.price-box p {
-    margin: 5px 0 0;
-    color: #9a9ca4;
-    font-size: 9px;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
 
@@ -1640,108 +2520,282 @@ a {
 ========================================================= */
 
 .card {
-    background: #fff;
-    border: 1px solid #e7e8ec;
-    border-radius: 18px;
+
+    background: #ffffff;
+
+    border:
+        1px solid #e8e8eb;
+
+    border-radius: 14px;
+
+    margin-bottom: 20px;
+
     overflow: hidden;
-    margin-bottom: 22px;
 }
+
 
 .card-header {
-    padding: 20px 22px;
-    border-bottom: 1px solid #eeeeef;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 15px;
+
+    padding:
+        17px 20px;
+
+    border-bottom:
+        1px solid #eeeeef;
 }
+
 
 .card-header h2 {
-    margin: 0 0 4px;
-    font-size: 17px;
+
+    margin: 0;
+
+    font-size: 16px;
 }
+
 
 .card-header p {
-    margin: 0;
-    color: #91949c;
-    font-size: 10px;
-}
 
-.card-body {
-    padding: 23px 22px;
+    margin:
+        5px 0 0;
+
+    color: #91949b;
+
+    font-size: 10px;
 }
 
 
 /* =========================================================
-   FORM
+   ADD FORM
 ========================================================= */
 
+.form-body {
+
+    padding: 20px;
+}
+
+
 .form-grid {
+
     display: grid;
+
     grid-template-columns:
         repeat(2, minmax(0,1fr));
-    gap: 17px;
+
+    gap: 15px;
 }
 
-.full {
-    grid-column: 1 / -1;
-}
 
 .form-group {
-    display: flex;
-    flex-direction: column;
+
+    min-width: 0;
 }
 
-.form-group label {
-    margin-bottom: 7px;
-    font-size: 11px;
-    font-weight: 800;
-    color: #44464d;
+
+.form-group.full {
+
+    grid-column:
+        1 / -1;
 }
+
+
+.form-group label {
+
+    display: block;
+
+    margin-bottom: 7px;
+
+    color: #444;
+
+    font-size: 10px;
+
+    font-weight: 800;
+}
+
 
 .input,
 .select,
 .textarea,
 .file {
+
     width: 100%;
-    border: 1px solid #dedfe4;
-    border-radius: 9px;
+
+    border:
+        1px solid #dedfe3;
+
+    border-radius: 8px;
+
+    background: #ffffff;
+
     outline: none;
-    background: #fff;
+
     font-family: inherit;
-    font-size: 12px;
+
+    font-size: 11px;
 }
+
 
 .input,
 .select {
-    height: 44px;
-    padding: 0 13px;
+
+    height: 42px;
+
+    padding:
+        0 12px;
 }
 
+
 .textarea {
+
     min-height: 90px;
-    padding: 12px 13px;
+
+    padding:
+        11px 12px;
+
     resize: vertical;
 }
 
-.file {
-    padding: 11px;
-}
 
 .input:focus,
 .select:focus,
-.textarea:focus,
-.file:focus {
-    border-color: #ed0038;
+.textarea:focus {
+
+    border-color:
+        #ed0038;
+
     box-shadow:
-        0 0 0 3px rgba(237,0,56,.07);
+        0 0 0 3px
+        rgba(237,0,56,.07);
 }
 
+
+.file {
+
+    padding: 9px;
+
+    background: #fafafa;
+}
+
+
 .help {
-    margin-top: 7px;
-    color: #989ba3;
-    font-size: 9px;
+
+    margin-top: 6px;
+
+    color: #999;
+
+    font-size: 8px;
+
     line-height: 1.5;
+}
+
+
+/* =========================================================
+   CATEGORY SELECT
+========================================================= */
+
+.category-select-wrap {
+
+    position: relative;
+}
+
+
+.category-select-info {
+
+    margin-top: 6px;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    color: #8b8e96;
+
+    font-size: 8px;
+}
+
+
+.category-select-info i {
+
+    color: #ed0038;
+}
+
+
+/* =========================================================
+   PRICE BOX
+========================================================= */
+
+.price-info {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr;
+
+    gap: 12px;
+
+    margin-top: 15px;
+}
+
+
+.price-box {
+
+    padding: 13px;
+
+    background: #fafbfc;
+
+    border:
+        1px solid #eeeeef;
+
+    border-radius: 9px;
+}
+
+
+.price-box.customer {
+
+    background: #fff3f6;
+
+    border-color:
+        #f3ccd8;
+}
+
+
+.price-label {
+
+    color: #999;
+
+    font-size: 8px;
+
+    font-weight: 800;
+
+    text-transform: uppercase;
+}
+
+
+.price-value {
+
+    margin-top: 5px;
+
+    color: #333;
+
+    font-size: 17px;
+
+    font-weight: 900;
+}
+
+
+.price-box.customer
+.price-value {
+
+    color: #ed0038;
+}
+
+
+.price-note {
+
+    margin-top: 5px;
+
+    color: #999;
+
+    font-size: 8px;
 }
 
 
@@ -1750,20 +2804,46 @@ a {
 ========================================================= */
 
 .checkbox-row {
+
     display: flex;
+
     align-items: center;
-    gap: 9px;
-    padding-top: 28px;
+
+    gap: 8px;
+
+    margin-top: 15px;
+
+    padding:
+        11px 12px;
+
+    background: #fafbfc;
+
+    border:
+        1px solid #eeeeef;
+
+    border-radius: 8px;
 }
 
+
 .checkbox-row input {
-    width: 17px;
-    height: 17px;
+
+    width: 15px;
+
+    height: 15px;
+
     accent-color: #ed0038;
 }
 
+
 .checkbox-row label {
+
     margin: 0;
+
+    color: #444;
+
+    font-size: 10px;
+
+    font-weight: 700;
 }
 
 
@@ -1772,55 +2852,94 @@ a {
 ========================================================= */
 
 .actions {
-    margin-top: 22px;
-    padding-top: 19px;
-    border-top: 1px solid #eeeeef;
+
+    margin-top: 18px;
+
     display: flex;
+
     justify-content: flex-end;
-    gap: 9px;
+
+    gap: 8px;
 }
+
 
 .btn {
-    min-height: 42px;
-    padding: 0 18px;
+
+    min-height: 38px;
+
+    padding:
+        0 15px;
+
     border: 0;
-    border-radius: 9px;
+
+    border-radius: 8px;
+
     display: inline-flex;
+
     align-items: center;
+
     justify-content: center;
-    gap: 8px;
+
+    gap: 7px;
+
     cursor: pointer;
+
     font-family: inherit;
+
     font-size: 10px;
-    font-weight: 900;
+
+    font-weight: 800;
+
+    text-decoration: none;
 }
+
 
 .btn-primary {
-    color: #fff;
-    background:
-        linear-gradient(
-            135deg,
-            #ed0038,
-            #f34c82
-        );
-    box-shadow:
-        0 7px 18px rgba(237,0,56,.18);
+
+    background: #ed0038;
+
+    color: #ffffff;
 }
 
+
+.btn-primary:hover {
+
+    background: #d90035;
+}
+
+
 .btn-light {
+
     background: #f3f4f6;
+
     color: #555;
 }
 
+
 .btn-danger {
+
     background: #fff0f2;
+
     color: #d42343;
 }
 
+
 .btn-small {
+
     min-height: 34px;
-    padding: 0 12px;
+
+    padding:
+        0 11px;
+
     font-size: 9px;
+}
+
+
+.btn-success {
+
+    background: #e9f8ef;
+
+    color: #187641;
 }
 
 
@@ -1829,18 +2948,96 @@ a {
 ========================================================= */
 
 .menu-header {
+
     display: flex;
+
     align-items: center;
+
     justify-content: space-between;
+
     gap: 15px;
 }
 
+
 .item-count {
-    padding: 7px 11px;
+
+    padding:
+        7px 11px;
+
     border-radius: 20px;
+
     background: #fff0f4;
+
     color: #ed0038;
+
     font-size: 9px;
+
+    font-weight: 900;
+}
+
+
+/* =========================================================
+   CATEGORY GROUP
+========================================================= */
+
+.menu-category-group {
+
+    border-top:
+        1px solid #eeeeef;
+}
+
+
+.menu-category-group:first-child {
+
+    border-top: 0;
+}
+
+
+.menu-category-title {
+
+    padding:
+        15px 20px;
+
+    background: #fafbfc;
+
+    border-bottom:
+        1px solid #eeeeef;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 10px;
+}
+
+
+.menu-category-title h3 {
+
+    margin: 0;
+
+    color: #333;
+
+    font-size: 13px;
+
+    font-weight: 900;
+}
+
+
+.menu-category-title span {
+
+    padding:
+        5px 9px;
+
+    border-radius: 20px;
+
+    background: #fff0f4;
+
+    color: #ed0038;
+
+    font-size: 8px;
+
     font-weight: 900;
 }
 
@@ -1850,137 +3047,254 @@ a {
 ========================================================= */
 
 .menu-grid {
+
+    padding: 17px;
+
     display: grid;
+
     grid-template-columns:
         repeat(3, minmax(0,1fr));
+
     gap: 17px;
 }
 
+
 .menu-item {
+
     overflow: hidden;
-    border: 1px solid #e8e8eb;
+
+    border:
+        1px solid #e8e8eb;
+
     border-radius: 14px;
-    background: #fff;
+
+    background: #ffffff;
+
     transition: .2s ease;
 }
 
+
 .menu-item:hover {
-    transform: translateY(-2px);
+
+    transform:
+        translateY(-2px);
+
     box-shadow:
-        0 10px 30px rgba(20,20,20,.07);
+        0 10px 30px
+        rgba(20,20,20,.07);
 }
 
+
+/* =========================================================
+   ITEM IMAGE
+========================================================= */
+
 .item-image {
+
     position: relative;
+
     height: 170px;
+
     background: #fff0f4;
+
     overflow: hidden;
 }
 
+
 .item-image img {
+
     width: 100%;
+
     height: 100%;
+
     object-fit: cover;
 }
 
+
 .no-image {
+
     width: 100%;
+
     height: 100%;
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     color: #ed0038;
+
     font-size: 35px;
 }
 
+
 .availability {
+
     position: absolute;
+
     top: 10px;
+
     right: 10px;
-    padding: 6px 9px;
+
+    padding:
+        6px 9px;
+
     border-radius: 20px;
+
     font-size: 8px;
+
     font-weight: 900;
-    background: #fff;
+
+    background: #ffffff;
 }
 
+
 .available {
+
     color: #187641;
 }
 
+
 .unavailable {
+
     color: #a13b3b;
 }
 
+
+/* =========================================================
+   ITEM BODY
+========================================================= */
+
 .item-body {
+
     padding: 15px;
 }
 
+
 .item-category {
+
     color: #ed0038;
+
     font-size: 8px;
+
     font-weight: 900;
+
     letter-spacing: .6px;
+
     text-transform: uppercase;
 }
 
+
 .item-name {
-    margin: 6px 0 5px;
+
+    margin:
+        6px 0 5px;
+
     font-size: 15px;
+
     font-weight: 900;
 }
 
+
 .item-description {
-    height: 32px;
+
+    min-height: 34px;
+
+    max-height: 34px;
+
     overflow: hidden;
+
     color: #8d9098;
+
     font-size: 9px;
+
     line-height: 1.55;
 }
 
+
+/* =========================================================
+   PRICES
+========================================================= */
+
 .prices {
+
     margin-top: 14px;
+
     padding-top: 12px;
-    border-top: 1px solid #eeeeef;
+
+    border-top:
+        1px solid #eeeeef;
 }
 
+
 .price-row {
+
     display: flex;
-    justify-content: space-between;
+
+    justify-content:
+        space-between;
+
     align-items: center;
+
+    gap: 10px;
+
     margin-bottom: 7px;
 }
 
+
 .price-row span {
+
     color: #999ca4;
+
     font-size: 8px;
+
     font-weight: 700;
 }
 
+
 .price-row strong {
+
     font-size: 11px;
 }
 
+
 .owner-price {
+
     color: #555;
 }
 
+
 .customer-price {
+
     color: #ed0038;
+
     font-size: 16px !important;
 }
 
+
+/* =========================================================
+   ACTIONS
+========================================================= */
+
 .item-actions {
+
     margin-top: 13px;
+
     display: flex;
+
     gap: 7px;
 }
 
+
 .item-actions form {
+
     flex: 1;
 }
 
+
 .item-actions .btn {
+
     width: 100%;
 }
 
@@ -1990,31 +3304,54 @@ a {
 ========================================================= */
 
 .empty {
-    padding: 60px 20px;
+
+    padding:
+        60px 20px;
+
     text-align: center;
 }
 
+
 .empty-icon {
+
     width: 70px;
+
     height: 70px;
-    margin: auto;
+
+    margin:
+        auto;
+
     border-radius: 50%;
+
     background: #fff0f4;
+
     color: #ed0038;
+
     display: flex;
+
     align-items: center;
+
     justify-content: center;
+
     font-size: 25px;
 }
 
+
 .empty h3 {
-    margin: 17px 0 7px;
+
+    margin:
+        17px 0 7px;
+
     font-size: 17px;
 }
 
+
 .empty p {
+
     margin: 0;
+
     color: #92959d;
+
     font-size: 10px;
 }
 
@@ -2024,53 +3361,90 @@ a {
 ========================================================= */
 
 .modal {
+
     position: fixed;
+
     inset: 0;
+
     z-index: 500;
+
     display: none;
+
     align-items: center;
+
     justify-content: center;
+
     padding: 20px;
+
     background:
         rgba(0,0,0,.55);
 }
 
+
 .modal.show {
+
     display: flex;
 }
 
+
 .modal-box {
+
     width: 100%;
+
     max-width: 650px;
+
     max-height: 90vh;
+
     overflow-y: auto;
-    background: #fff;
+
+    background: #ffffff;
+
     border-radius: 17px;
 }
 
+
 .modal-header {
-    padding: 19px 22px;
-    border-bottom: 1px solid #eee;
+
+    padding:
+        19px 22px;
+
+    border-bottom:
+        1px solid #eeeeee;
+
     display: flex;
+
     align-items: center;
+
     justify-content: space-between;
 }
 
+
 .modal-header h2 {
+
     margin: 0;
+
     font-size: 17px;
 }
 
+
 .close {
+
     width: 33px;
+
     height: 33px;
+
     border: 0;
+
     border-radius: 8px;
+
     background: #f3f4f6;
+
     cursor: pointer;
 }
 
+
 .modal-body {
+
     padding: 22px;
 }
 
@@ -2082,78 +3456,190 @@ a {
 @media (max-width: 1100px) {
 
     .menu-grid {
+
         grid-template-columns:
             repeat(2, minmax(0,1fr));
     }
 
-    .price-info {
-        grid-template-columns:
-            1fr 1fr;
-    }
 }
 
 
 @media (max-width: 900px) {
 
     .sidebar {
+
         width: 70px;
     }
 
-    .brand {
-        justify-content: center;
-        padding: 0;
-    }
 
     .brand-text,
     .nav-title,
     .nav a span,
     .sidebar-owner-info {
+
         display: none;
     }
 
-    .nav a {
+
+    .brand {
+
         justify-content: center;
+
         padding: 0;
     }
 
+
+    .nav a {
+
+        justify-content: center;
+
+        padding: 0;
+    }
+
+
     .main {
+
         margin-left: 70px;
     }
+
 }
 
 
 @media (max-width: 700px) {
 
     .content {
-        padding: 23px 14px 40px;
+
+        padding:
+            23px 14px 40px;
     }
 
+
     .form-grid,
-    .menu-grid,
-    .price-info {
+    .price-info,
+    .menu-grid {
+
         grid-template-columns: 1fr;
     }
 
-    .full {
-        grid-column: auto;
+
+    .form-group.full {
+
+        grid-column:
+            auto;
     }
 
-    .card-header {
-        align-items: flex-start;
+
+    .topbar {
+
+        padding:
+            0 14px;
+    }
+
+
+    .topbar small {
+
+        display: none;
+    }
+
+
+    .topbar strong {
+
+        font-size: 12px;
+    }
+
+
+    .top-user-text {
+
+        display: none;
+    }
+
+
+    .menu-grid {
+
+        padding: 12px;
+    }
+
+
+    .restaurant-info-box {
+
+        grid-template-columns: 1fr;
+    }
+
+}
+
+
+@media (max-width: 480px) {
+
+    .main {
+
+        margin-left: 0;
+    }
+
+
+    .sidebar {
+
+        display: none;
+    }
+
+
+    .content {
+
+        padding:
+            18px 10px 30px;
+    }
+
+
+    .heading h1 {
+
+        font-size: 23px;
+    }
+
+
+    .heading p {
+
+        font-size: 10px;
+    }
+
+
+    .card-header,
+    .form-body {
+
+        padding:
+            14px;
+    }
+
+
+    .menu-grid {
+
+        padding: 9px;
+
+        gap: 10px;
+    }
+
+
+    .item-image {
+
+        height: 150px;
+    }
+
+
+    .item-actions {
+
         flex-direction: column;
     }
+
 
     .actions {
+
         flex-direction: column;
     }
 
-    .btn {
+
+    .actions .btn {
+
         width: 100%;
     }
 
-    .top-user-text {
-        display: none;
-    }
 }
 
 </style>
@@ -2164,521 +3650,535 @@ a {
 <body>
 
 
-<?php include __DIR__ . '/restaurant-sidebar.php'; ?>
+<!-- =========================================================
+     EXISTING RESTAURANT SIDEBAR
+========================================================= -->
 
-<!-- =====================================================
+<?php
+
+$sidebarFile =
+    __DIR__ .
+    '/restaurant-sidebar.php';
+
+
+if (
+    file_exists(
+        $sidebarFile
+    )
+) {
+
+    include $sidebarFile;
+
+}
+
+?>
+
+
+<!-- =========================================================
      MAIN
-====================================================== -->
+========================================================= -->
 
 <main class="main">
 
 
-<header class="topbar">
+    <!-- TOP BAR -->
+
+    <header class="topbar">
 
 
-    <div>
+        <div>
 
-        <small>
-            RESTAURANT PARTNER PORTAL
-        </small>
-
-        <strong>
-            Menu Management
-        </strong>
-
-    </div>
+            <small>
+                RESTAURANT PARTNER PORTAL
+            </small>
 
 
-    <div class="topbar-right">
-
-        <div class="bell">
-            <i class="far fa-bell"></i>
-        </div>
-
-
-        <div class="top-user">
-
-            <div class="avatar">
-                <?php
-                echo e($initial);
-                ?>
-            </div>
-
-            <div class="top-user-text">
-
-                <strong>
-                    <?php
-                    echo e($ownerName);
-                    ?>
-                </strong>
-
-                <span>
-                    Restaurant Owner
-                </span>
-
-            </div>
+            <strong>
+                Menu Management
+            </strong>
 
         </div>
 
-    </div>
+
+        <div class="topbar-right">
 
 
-</header>
+            <div class="bell">
 
-
-<section class="content">
-
-
-    <!-- =================================================
-         HEADING
-    ================================================== -->
-
-    <div class="heading">
-
-        <div class="eyebrow">
-            MENU MANAGEMENT
-        </div>
-
-        <h1>
-            Manage Your Menu
-        </h1>
-
-        <p>
-            Add, edit and manage the items customers see on Humsafar.
-        </p>
-
-    </div>
-
-
-    <!-- =================================================
-         ALERTS
-    ================================================== -->
-
-    <?php if ($successMessage !== '') { ?>
-
-        <div class="alert success">
-
-            <i class="fas fa-circle-check"></i>
-
-            &nbsp;
-
-            <?php
-            echo e(
-                $successMessage
-            );
-            ?>
-
-        </div>
-
-    <?php } ?>
-
-
-    <?php if ($errorMessage !== '') { ?>
-
-        <div class="alert error">
-
-            <i class="fas fa-circle-exclamation"></i>
-
-            &nbsp;
-
-            <?php
-            echo e(
-                $errorMessage
-            );
-            ?>
-
-        </div>
-
-    <?php } ?>
-
-
-    <!-- =================================================
-         PENDING
-    ================================================== -->
-
-    <?php if (!$isApproved) { ?>
-
-
-        <div class="lock-card">
-
-            <div class="lock-icon">
-
-                <i class="fas fa-lock"></i>
+                <i class="far fa-bell"></i>
 
             </div>
 
 
-            <h2>
-                Menu Management Locked
-            </h2>
+            <div class="top-user">
+
+
+                <div class="top-avatar">
+
+                    <?= e(
+                        $initial
+                    ) ?>
+
+                </div>
+
+
+                <div
+                    class="top-user-text"
+                >
+
+                    <strong>
+
+                        <?= e(
+                            $ownerName !== ''
+                                ? $ownerName
+                                : 'Restaurant Owner'
+                        ) ?>
+
+                    </strong>
+
+
+                    <span>
+                        Restaurant Owner
+                    </span>
+
+                </div>
+
+
+            </div>
+
+
+        </div>
+
+    </header>
+
+
+
+    <!-- CONTENT -->
+
+    <div class="content">
+
+
+        <!-- HEADING -->
+
+        <section class="heading">
+
+
+            <div class="eyebrow">
+                RESTAURANT MENU
+            </div>
+
+
+            <h1>
+                Manage Your Menu
+            </h1>
 
 
             <p>
 
-                Your restaurant owner account is currently
-                waiting for admin approval. Once your account
-                is approved, you will be able to add and manage
-                your restaurant menu.
+                Add, edit, organize and control
+                the availability of your restaurant menu items.
 
             </p>
 
+        </section>
 
-            <div class="pending">
 
-                <i class="fas fa-clock"></i>
+
+        <!-- MESSAGES -->
+
+        <?php if (
+            $successMessage !== ''
+        ): ?>
+
+            <div class="alert success">
+
+                <i
+                    class="fas fa-circle-check"
+                ></i>
 
                 &nbsp;
 
-                <?php
-                echo e(
-                    strtoupper(
-                        $ownerStatus
-                    )
-                );
-                ?>
+                <?= e(
+                    $successMessage
+                ) ?>
 
             </div>
 
-        </div>
+        <?php endif; ?>
 
 
-    <?php } elseif (!$restaurant) { ?>
+        <?php if (
+            $errorMessage !== ''
+        ): ?>
 
+            <div class="alert error">
 
-        <!-- =================================================
-             RESTAURANT NOT CREATED
-        ================================================== -->
+                <i
+                    class="fas fa-circle-exclamation"
+                ></i>
 
-        <div class="lock-card">
+                &nbsp;
 
-            <div class="lock-icon">
-
-                <i class="fas fa-store"></i>
-
-            </div>
-
-
-            <h2>
-                Create Your Restaurant First
-            </h2>
-
-
-            <p>
-
-                Your owner account has been approved, but your
-                restaurant profile has not been created yet.
-                Create your restaurant before adding menu items.
-
-            </p>
-
-
-            <div style="margin-top:20px;">
-
-                <a
-                    href="restaurant-owner-manage.php"
-                    class="btn btn-primary"
-                >
-
-                    <i class="fas fa-store"></i>
-
-                    Manage Restaurant
-
-                </a>
+                <?= e(
+                    $errorMessage
+                ) ?>
 
             </div>
 
-        </div>
+        <?php endif; ?>
 
 
-    <?php } else { ?>
+
+        <?php if (!$isApproved): ?>
 
 
-        <!-- =================================================
-             PRICE SYSTEM
-        ================================================== -->
+            <!-- LOCKED -->
 
-        <div class="price-info">
+            <div class="lock-card">
 
 
-            <div class="price-box">
+                <div class="lock-icon">
 
-                <i class="fas fa-tag"></i>
+                    <i
+                        class="fas fa-lock"
+                    ></i>
 
-                <small>
-                    Your Price
-                </small>
+                </div>
 
-                <strong>
-                    Owner Set Price
-                </strong>
+
+                <h2>
+                    Menu Management Locked
+                </h2>
+
 
                 <p>
-                    You decide the base price of every menu item.
+
+                    Your restaurant owner account
+                    must be approved by the administrator
+                    before you can manage menu items.
+
                 </p>
+
 
             </div>
 
 
-            <div class="price-box">
+        <?php elseif (!$restaurant): ?>
 
-                <i class="fas fa-percent"></i>
 
-                <small>
-                    Admin Percentage
-                </small>
+            <!-- RESTAURANT MISSING -->
 
-                <strong>
+            <div class="lock-card">
 
-                    <?php
-                    echo number_format(
-                        $adminPercentage,
-                        2
-                    );
-                    ?>%
 
-                </strong>
+                <div class="lock-icon">
+
+                    <i
+                        class="fas fa-store-slash"
+                    ></i>
+
+                </div>
+
+
+                <h2>
+                    Restaurant Not Found
+                </h2>
+
 
                 <p>
-                    Set by Humsafar Admin for your restaurant.
+
+                    Your owner account is approved,
+                    but no restaurant record was found
+                    for this account.
+
                 </p>
+
 
             </div>
 
 
-            <div class="price-box">
-
-                <i class="fas fa-store"></i>
-
-                <small>
-                    Customer Price
-                </small>
-
-                <strong>
-                    Automatically Calculated
-                </strong>
-
-                <p>
-                    Customer sees your price + admin percentage.
-                </p>
-
-            </div>
+        <?php else: ?>
 
 
-        </div>
+            <!-- =================================================
+                 ADD ITEM
+            ================================================== -->
+
+            <section class="card">
 
 
-        <!-- =================================================
-             ADD ITEM
-        ================================================== -->
+                <div class="card-header">
 
-        <div class="card">
-
-
-            <div class="card-header">
-
-                <div>
 
                     <h2>
                         Add New Menu Item
                     </h2>
 
+
                     <p>
-                        Add a food item that customers can order.
+
+                        Add food, sides, extras or any
+                        other item from your approved categories.
+
                     </p>
+
 
                 </div>
 
 
-                <span class="item-count">
-
-                    <i class="fas fa-percent"></i>
-
-                    Admin:
-                    <?php
-                    echo number_format(
-                        $adminPercentage,
-                        2
-                    );
-                    ?>%
-
-                </span>
-
-            </div>
+                <div class="form-body">
 
 
-            <div class="card-body">
+                    <form
+                        method="POST"
+                        enctype="multipart/form-data"
+                    >
 
 
-                <form
-                    method="POST"
-                    enctype="multipart/form-data"
-                >
+                        <div class="form-grid">
 
 
-                    <div class="form-grid">
+                            <!-- ITEM NAME -->
+
+                            <div class="form-group">
 
 
-                        <!-- ITEM NAME -->
+                                <label>
+                                    Item Name *
+                                </label>
 
-                        <div class="form-group">
 
-                            <label>
-                                Item Name *
-                            </label>
+                                <input
+                                    type="text"
+                                    name="item_name"
+                                    class="input"
+                                    placeholder="e.g. Chicken Biryani"
+                                    required
+                                >
 
-                            <input
-                                type="text"
-                                name="item_name"
-                                class="input"
-                                placeholder="Chicken Biryani"
-                                required
+
+                            </div>
+
+
+
+                            <!-- CATEGORY -->
+
+                            <div
+                                class="form-group"
                             >
 
-                        </div>
+
+                                <label>
+                                    Category *
+                                </label>
 
 
-                        <!-- CATEGORY -->
+                                <div
+                                    class="category-select-wrap"
+                                >
 
-                        <div class="form-group">
 
-                            <label>
-                                Category *
-                            </label>
-
-                            <select
-                                name="category"
-                                class="select"
-                                required
-                            >
-
-                                <option value="">
-                                    Select Category
-                                </option>
-
-                                <?php foreach (
-                                    $categories
-                                    as $category
-                                ) { ?>
-
-                                    <option
-                                        value="<?php
-                                        echo e(
-                                            $category
-                                        );
-                                        ?>"
+                                    <select
+                                        name="category_id"
+                                        id="newCategoryId"
+                                        class="select"
+                                        required
                                     >
 
-                                        <?php
-                                        echo e(
-                                            $category
-                                        );
-                                        ?>
 
-                                    </option>
-
-                                <?php } ?>
-
-                            </select>
-
-                        </div>
+                                        <option value="">
+                                            Select Category
+                                        </option>
 
 
-                        <!-- OWNER PRICE -->
+                                        <?php foreach (
+                                            $categories
+                                            as $category
+                                        ): ?>
 
-                        <div class="form-group">
 
-                            <label>
-                                Your Price (Rs.) *
-                            </label>
+                                            <option
+                                                value="<?= (int)$category['id'] ?>"
+                                            >
 
-                            <input
-                                type="number"
-                                name="owner_price"
-                                class="input"
-                                min="1"
-                                step="0.01"
-                                placeholder="500"
-                                required
-                                id="newOwnerPrice"
-                            >
+                                                <?= e(
+                                                    $category['name']
+                                                ) ?>
 
-                            <div class="help">
+                                            </option>
 
-                                This is your base price.
-                                Admin percentage will be added automatically.
+
+                                        <?php endforeach; ?>
+
+
+                                    </select>
+
+
+                                    <input
+                                        type="hidden"
+                                        name="category"
+                                        id="newCategoryName"
+                                        value=""
+                                    >
+
+
+                                </div>
+
+
+                                <div
+                                    class="category-select-info"
+                                >
+
+                                    <i
+                                        class="fas fa-database"
+                                    ></i>
+
+                                    Categories are managed from the database.
+
+                                </div>
+
 
                             </div>
 
-                        </div>
 
 
-                        <!-- LIVE CUSTOMER PRICE -->
+                            <!-- OWNER PRICE -->
 
-                        <div class="form-group">
-
-                            <label>
-                                Customer Price
-                            </label>
-
-                            <input
-                                type="text"
-                                class="input"
-                                id="newCustomerPrice"
-                                value="Rs. 0"
-                                readonly
+                            <div
+                                class="form-group"
                             >
 
-                            <div class="help">
 
-                                This is the estimated price customers will see.
+                                <label>
+                                    Your Price (Rs.) *
+                                </label>
+
+
+                                <input
+                                    type="number"
+                                    name="owner_price"
+                                    id="newOwnerPrice"
+                                    class="input"
+                                    min="1"
+                                    step="0.01"
+                                    placeholder="500"
+                                    required
+                                >
+
+
+                                <div class="help">
+
+                                    This is your base restaurant price.
+                                    Admin markup:
+                                    <?= number_format(
+                                        $adminPercentage,
+                                        2
+                                    ) ?>%
+
+                                </div>
+
 
                             </div>
 
-                        </div>
 
 
-                        <!-- DESCRIPTION -->
+                            <!-- CUSTOMER PRICE -->
 
-                        <div class="form-group full">
-
-                            <label>
-                                Description
-                            </label>
-
-                            <textarea
-                                name="description"
-                                class="textarea"
-                                placeholder="Describe this item..."
-                            ></textarea>
-
-                        </div>
-
-
-                        <!-- IMAGE -->
-
-                        <div class="form-group">
-
-                            <label>
-                                Item Image
-                            </label>
-
-                            <input
-                                type="file"
-                                name="item_image"
-                                class="file"
-                                accept=".jpg,.jpeg,.png,.webp"
+                            <div
+                                class="form-group"
                             >
 
-                            <div class="help">
-                                Maximum 5 MB.
+
+                                <label>
+                                    Customer Price
+                                </label>
+
+
+                                <input
+                                    type="text"
+                                    id="newCustomerPrice"
+                                    class="input"
+                                    value="Rs. 0"
+                                    readonly
+                                >
+
+
+                                <div class="help">
+
+                                    Estimated customer selling price
+                                    after admin markup.
+
+                                </div>
+
+
                             </div>
+
+
+
+                            <!-- DESCRIPTION -->
+
+                            <div
+                                class="form-group full"
+                            >
+
+
+                                <label>
+                                    Description
+                                </label>
+
+
+                                <textarea
+                                    name="description"
+                                    class="textarea"
+                                    placeholder="Describe this item..."
+                                ></textarea>
+
+
+                            </div>
+
+
+
+                            <!-- IMAGE -->
+
+                            <div
+                                class="form-group"
+                            >
+
+
+                                <label>
+                                    Item Image
+                                </label>
+
+
+                                <input
+                                    type="file"
+                                    name="item_image"
+                                    class="file"
+                                    accept=".jpg,.jpeg,.png,.webp"
+                                >
+
+
+                                <div class="help">
+
+                                    Maximum 5 MB.
+                                    Image will be saved in
+                                    assets/images/restaurants/
+
+                                </div>
+
+
+                            </div>
+
 
                         </div>
 
 
-                        <!-- AVAILABLE -->
 
-                        <div class="checkbox-row">
+                        <!-- AVAILABILITY -->
+
+                        <div
+                            class="checkbox-row"
+                        >
 
                             <input
                                 type="checkbox"
@@ -2688,7 +4188,10 @@ a {
                                 checked
                             >
 
-                            <label for="available">
+
+                            <label
+                                for="available"
+                            >
 
                                 Item is available
 
@@ -2697,85 +4200,107 @@ a {
                         </div>
 
 
-                    </div>
 
+                        <!-- SUBMIT -->
 
-                    <div class="actions">
-
-                        <button
-                            type="submit"
-                            name="add_item"
-                            value="1"
-                            class="btn btn-primary"
+                        <div
+                            class="actions"
                         >
 
-                            <i class="fas fa-plus"></i>
 
-                            Add Menu Item
+                            <button
+                                type="submit"
+                                name="add_item"
+                                value="1"
+                                class="btn btn-primary"
+                            >
 
-                        </button>
+                                <i
+                                    class="fas fa-plus"
+                                ></i>
+
+                                Add Menu Item
+
+                            </button>
+
+
+                        </div>
+
+
+                    </form>
+
+                </div>
+
+            </section>
+
+
+
+            <!-- =================================================
+                 MENU ITEMS
+            ================================================== -->
+
+            <section class="card">
+
+
+                <div class="card-header">
+
+
+                    <div
+                        class="menu-header"
+                    >
+
+
+                        <div>
+
+                            <h2>
+                                Your Menu Items
+                            </h2>
+
+
+                            <p>
+
+                                These items will appear
+                                on your restaurant page for customers.
+
+                            </p>
+
+                        </div>
+
+
+                        <span
+                            class="item-count"
+                        >
+
+                            <?= count(
+                                $menuItems
+                            ) ?>
+
+                            Items
+
+                        </span>
+
 
                     </div>
-
-
-                </form>
-
-            </div>
-
-        </div>
-
-
-        <!-- =================================================
-             MENU ITEMS
-        ================================================== -->
-
-        <div class="card">
-
-
-            <div class="card-header">
-
-                <div>
-
-                    <h2>
-                        Your Menu Items
-                    </h2>
-
-                    <p>
-                        These items will appear on your restaurant
-                        page for customers.
-                    </p>
 
                 </div>
 
 
-                <span class="item-count">
-
-                    <?php
-                    echo count(
-                        $menuItems
-                    );
-                    ?>
-
-                    Items
-
-                </span>
-
-            </div>
-
-
-            <div class="card-body">
-
 
                 <?php if (
                     empty($menuItems)
-                ) { ?>
+                ): ?>
 
 
                     <div class="empty">
 
-                        <div class="empty-icon">
 
-                            <i class="fas fa-utensils"></i>
+                        <div
+                            class="empty-icon"
+                        >
+
+                            <i
+                                class="fas fa-utensils"
+                            ></i>
 
                         </div>
 
@@ -2786,429 +4311,577 @@ a {
 
 
                         <p>
-                            Add your first menu item using the form above.
+
+                            Add your first menu item
+                            using the form above.
+
                         </p>
+
 
                     </div>
 
 
-                <?php } else { ?>
+                <?php else: ?>
 
 
-                    <div class="menu-grid">
+                    <?php foreach (
+                        $groupedMenu
+                        as $categoryName =>
+                        $items
+                    ): ?>
 
 
-                        <?php foreach (
-                            $menuItems
-                            as $item
-                        ) {
+                        <div
+                            class="menu-category-group"
+                        >
 
 
-                            $itemId =
-                                (int)(
-                                    $item['id']
-                                    ?? 0
-                                );
-
-                            $itemName =
-                                $item['name']
-                                ?? '';
-
-                            $itemDescription =
-                                $item['description']
-                                ?? '';
-
-                            $itemCategory =
-                                $item['category']
-                                ?? 'Other';
-
-                            $itemImage =
-                                $item['image']
-                                ?? '';
-
-                            $itemStatus =
-                                (int)(
-                                    $item['status']
-                                    ?? 0
-                                );
-
-                            $ownerItemPrice =
-                                (float)(
-                                    $item['price']
-                                    ?? 0
-                                );
+                            <div
+                                class="menu-category-title"
+                            >
 
 
-                            /*
-                            |--------------------------------------------------------------------------
-                            | CUSTOMER PRICE
-                            |--------------------------------------------------------------------------
-                            */
+                                <h3>
 
-                            $customerPrice =
-                                $ownerItemPrice +
-                                (
-                                    $ownerItemPrice *
-                                    $adminPercentage /
-                                    100
-                                );
-
-                        ?>
-
-
-                            <div class="menu-item">
-
-
-                                <div class="item-image">
-
-
-                                    <?php if (
-                                        $itemImage !== ''
-                                    ) { ?>
-
-                                        <img
-                                            src="<?php
-                                            echo e(
-                                                $imageUrl .
-                                                $itemImage
-                                            );
-                                            ?>"
-                                            alt="<?php
-                                            echo e(
-                                                $itemName
-                                            );
-                                            ?>"
-                                        >
-
-                                    <?php } else { ?>
-
-                                        <div class="no-image">
-
-                                            <i
-                                                class="fas fa-utensils"
-                                            ></i>
-
-                                        </div>
-
-                                    <?php } ?>
-
-
-                                    <span
-                                        class="
-                                            availability
-                                            <?php
-                                            echo $itemStatus
-                                                ? 'available'
-                                                : 'unavailable';
-                                            ?>
+                                    <i
+                                        class="fas fa-tag"
+                                        style="
+                                            color:#ed0038;
+                                            margin-right:7px;
                                         "
-                                    >
+                                    ></i>
 
-                                        <i
-                                            class="
-                                                fas
-                                                <?php
-                                                echo $itemStatus
-                                                    ? 'fa-circle-check'
-                                                    : 'fa-circle-xmark';
-                                                ?>
-                                            "
-                                        ></i>
+                                    <?= e(
+                                        $categoryName
+                                    ) ?>
 
-                                        &nbsp;
+                                </h3>
 
-                                        <?php
-                                        echo $itemStatus
-                                            ? 'Available'
-                                            : 'Unavailable';
-                                        ?>
 
-                                    </span>
+                                <span>
 
+                                    <?= count(
+                                        $items
+                                    ) ?>
 
-                                </div>
+                                    Items
 
-
-                                <div class="item-body">
-
-
-                                    <div class="item-category">
-
-                                        <?php
-                                        echo e(
-                                            $itemCategory
-                                        );
-                                        ?>
-
-                                    </div>
-
-
-                                    <div class="item-name">
-
-                                        <?php
-                                        echo e(
-                                            $itemName
-                                        );
-                                        ?>
-
-                                    </div>
-
-
-                                    <div class="item-description">
-
-                                        <?php
-                                        echo e(
-                                            $itemDescription
-                                        );
-                                        ?>
-
-                                    </div>
-
-
-                                    <div class="prices">
-
-
-                                        <div class="price-row">
-
-                                            <span>
-                                                Your Price
-                                            </span>
-
-                                            <strong
-                                                class="owner-price"
-                                            >
-
-                                                Rs.
-                                                <?php
-                                                echo number_format(
-                                                    $ownerItemPrice,
-                                                    2
-                                                );
-                                                ?>
-
-                                            </strong>
-
-                                        </div>
-
-
-                                        <div class="price-row">
-
-                                            <span>
-
-                                                Customer Price
-                                                (+<?php
-                                                echo number_format(
-                                                    $adminPercentage,
-                                                    2
-                                                );
-                                                ?>%)
-
-                                            </span>
-
-                                            <strong
-                                                class="customer-price"
-                                            >
-
-                                                Rs.
-                                                <?php
-                                                echo number_format(
-                                                    $customerPrice,
-                                                    2
-                                                );
-                                                ?>
-
-                                            </strong>
-
-                                        </div>
-
-
-                                    </div>
-
-
-                                    <!-- ACTIONS -->
-
-                                    <div class="item-actions">
-
-
-                                        <button
-                                            type="button"
-                                            class="btn btn-light btn-small"
-                                            onclick="openEditModal(
-                                                <?php
-                                                echo (int)$itemId;
-                                                ?>,
-                                                <?php
-                                                echo htmlspecialchars(
-                                                    json_encode(
-                                                        $itemName
-                                                    ),
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                );
-                                                ?>,
-                                                <?php
-                                                echo htmlspecialchars(
-                                                    json_encode(
-                                                        $itemDescription
-                                                    ),
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                );
-                                                ?>,
-                                                <?php
-                                                echo htmlspecialchars(
-                                                    json_encode(
-                                                        $itemCategory
-                                                    ),
-                                                    ENT_QUOTES,
-                                                    'UTF-8'
-                                                );
-                                                ?>,
-                                                <?php
-                                                echo $ownerItemPrice;
-                                                ?>,
-                                                <?php
-                                                echo $itemStatus;
-                                                ?>
-                                            )"
-                                        >
-
-                                            <i
-                                                class="fas fa-pen"
-                                            ></i>
-
-                                            Edit
-
-                                        </button>
-
-
-                                        <form
-                                            method="POST"
-                                            onsubmit="
-                                                return confirm(
-                                                    'Are you sure you want to delete this item?'
-                                                );
-                                            "
-                                        >
-
-                                            <input
-                                                type="hidden"
-                                                name="item_id"
-                                                value="<?php
-                                                echo $itemId;
-                                                ?>"
-                                            >
-
-                                            <button
-                                                type="submit"
-                                                name="delete_item"
-                                                value="1"
-                                                class="btn btn-danger btn-small"
-                                            >
-
-                                                <i
-                                                    class="fas fa-trash"
-                                                ></i>
-
-                                                Delete
-
-                                            </button>
-
-                                        </form>
-
-
-                                    </div>
-
-
-                                    <form
-                                        method="POST"
-                                        style="margin-top:7px;"
-                                    >
-
-                                        <input
-                                            type="hidden"
-                                            name="item_id"
-                                            value="<?php
-                                            echo $itemId;
-                                            ?>"
-                                        >
-
-                                        <input
-                                            type="hidden"
-                                            name="new_status"
-                                            value="<?php
-                                            echo $itemStatus
-                                                ? 0
-                                                : 1;
-                                            ?>"
-                                        >
-
-                                        <button
-                                            type="submit"
-                                            name="toggle_item"
-                                            value="1"
-                                            class="btn btn-light btn-small"
-                                            style="width:100%;"
-                                        >
-
-                                            <i
-                                                class="
-                                                    fas
-                                                    <?php
-                                                    echo $itemStatus
-                                                        ? 'fa-eye-slash'
-                                                        : 'fa-eye';
-                                                    ?>
-                                                "
-                                            ></i>
-
-                                            <?php
-                                            echo $itemStatus
-                                                ? 'Mark Unavailable'
-                                                : 'Mark Available';
-                                            ?>
-
-                                        </button>
-
-                                    </form>
-
-
-                                </div>
+                                </span>
 
 
                             </div>
 
 
-                        <?php } ?>
+
+                            <div
+                                class="menu-grid"
+                            >
 
 
-                    </div>
+                                <?php foreach (
+                                    $items
+                                    as $item
+                                ): ?>
 
 
-                <?php } ?>
+                                    <?php
+
+                                    $itemId =
+                                        (int)(
+                                            $item['id']
+                                            ?? 0
+                                        );
 
 
-            </div>
+                                    $itemName =
+                                        (string)(
+                                            $item['name']
+                                            ?? ''
+                                        );
 
 
-        </div>
+                                    $itemDescription =
+                                        (string)(
+                                            $item['description']
+                                            ?? ''
+                                        );
 
 
-    <?php } ?>
+                                    $itemPrice =
+                                        (float)(
+                                            $item['price']
+                                            ?? 0
+                                        );
 
 
-</section>
+                                    $itemImage =
+                                        trim(
+                                            (string)(
+                                                $item['image']
+                                                ?? ''
+                                            )
+                                        );
+
+
+                                    $itemStatus =
+                                        !empty(
+                                            $item['status']
+                                        );
+
+
+                                    $itemCategoryId =
+                                        (int)(
+                                            $item['category_id']
+                                            ?? 0
+                                        );
+
+
+                                    $customerPrice =
+                                        calculateCustomerPrice(
+                                            $itemPrice,
+                                            $adminPercentage
+                                        );
+
+
+                                    /*
+                                    |--------------------------------------------------------------------------
+                                    | Normalize image URL
+                                    |--------------------------------------------------------------------------
+                                    */
+
+                                    $itemImageUrl = '';
+
+
+                                    if (
+                                        $itemImage !== ''
+                                    ) {
+
+                                        if (
+                                            preg_match(
+                                                '/^(https?:\/\/|data:)/i',
+                                                $itemImage
+                                            )
+                                        ) {
+
+                                            $itemImageUrl =
+                                                $itemImage;
+
+                                        } else {
+
+                                            $itemImageUrl =
+                                                $imageUrl .
+                                                basename(
+                                                    $itemImage
+                                                );
+
+                                        }
+
+                                    }
+
+                                    ?>
+
+
+                                    <article
+                                        class="menu-item"
+                                    >
+
+
+                                        <!-- IMAGE -->
+
+                                        <div
+                                            class="item-image"
+                                        >
+
+
+                                            <?php if (
+                                                $itemImageUrl !== ''
+                                            ): ?>
+
+
+                                                <img
+                                                    src="<?= e(
+                                                        $itemImageUrl
+                                                    ) ?>"
+                                                    alt="<?= e(
+                                                        $itemName
+                                                    ) ?>"
+                                                    onerror="
+                                                        this.style.display='none';
+                                                        this.nextElementSibling.style.display='flex';
+                                                    "
+                                                >
+
+
+                                                <div
+                                                    class="no-image"
+                                                    style="display:none;"
+                                                >
+
+                                                    <i
+                                                        class="fas fa-utensils"
+                                                    ></i>
+
+                                                </div>
+
+
+                                            <?php else: ?>
+
+
+                                                <div
+                                                    class="no-image"
+                                                >
+
+                                                    <i
+                                                        class="fas fa-utensils"
+                                                    ></i>
+
+                                                </div>
+
+
+                                            <?php endif; ?>
+
+
+                                            <span
+                                                class="
+                                                    availability
+                                                    <?= $itemStatus
+                                                        ? 'available'
+                                                        : 'unavailable' ?>"
+                                            >
+
+                                                <i
+                                                    class="fas
+                                                    <?= $itemStatus
+                                                        ? 'fa-circle-check'
+                                                        : 'fa-circle-xmark' ?>"
+                                                ></i>
+
+
+                                                <?= $itemStatus
+                                                    ? 'Available'
+                                                    : 'Unavailable' ?>
+
+                                            </span>
+
+
+                                        </div>
+
+
+
+                                        <!-- BODY -->
+
+                                        <div
+                                            class="item-body"
+                                        >
+
+
+                                            <div
+                                                class="item-category"
+                                            >
+
+                                                <?= e(
+                                                    $categoryName
+                                                ) ?>
+
+                                            </div>
+
+
+                                            <div
+                                                class="item-name"
+                                            >
+
+                                                <?= e(
+                                                    $itemName
+                                                ) ?>
+
+                                            </div>
+
+
+                                            <div
+                                                class="item-description"
+                                            >
+
+                                                <?= e(
+                                                    $itemDescription !== ''
+                                                        ? $itemDescription
+                                                        : 'No description added.'
+                                                ) ?>
+
+                                            </div>
+
+
+
+                                            <!-- PRICES -->
+
+                                            <div
+                                                class="prices"
+                                            >
+
+
+                                                <div
+                                                    class="price-row"
+                                                >
+
+                                                    <span>
+                                                        Your Price
+                                                    </span>
+
+
+                                                    <strong
+                                                        class="owner-price"
+                                                    >
+
+                                                        Rs.
+
+                                                        <?= number_format(
+                                                            $itemPrice,
+                                                            2
+                                                        ) ?>
+
+                                                    </strong>
+
+                                                </div>
+
+
+                                                <div
+                                                    class="price-row"
+                                                >
+
+                                                    <span>
+                                                        Admin Markup
+                                                    </span>
+
+
+                                                    <strong>
+
+                                                        <?= number_format(
+                                                            $adminPercentage,
+                                                            2
+                                                        ) ?>%
+
+                                                    </strong>
+
+                                                </div>
+
+
+                                                <div
+                                                    class="price-row"
+                                                >
+
+                                                    <span>
+                                                        Customer Price
+                                                    </span>
+
+
+                                                    <strong
+                                                        class="customer-price"
+                                                    >
+
+                                                        Rs.
+
+                                                        <?= number_format(
+                                                            $customerPrice,
+                                                            2
+                                                        ) ?>
+
+                                                    </strong>
+
+                                                </div>
+
+
+                                            </div>
+
+
+
+                                            <!-- ACTIONS -->
+
+                                            <div
+                                                class="item-actions"
+                                            >
+
+
+                                                <!-- EDIT -->
+
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-light btn-small"
+                                                    onclick='openEditModal(
+                                                        <?= json_encode(
+                                                            [
+                                                                "id" =>
+                                                                    $itemId,
+                                                                "name" =>
+                                                                    $itemName,
+                                                                "description" =>
+                                                                    $itemDescription,
+                                                                "category_id" =>
+                                                                    $itemCategoryId,
+                                                                "category" =>
+                                                                    $categoryName,
+                                                                "price" =>
+                                                                    $itemPrice,
+                                                                "status" =>
+                                                                    $itemStatus
+                                                                    ? 1
+                                                                    : 0,
+                                                                "image" =>
+                                                                    $itemImageUrl
+                                                            ],
+                                                            JSON_HEX_TAG |
+                                                            JSON_HEX_APOS |
+                                                            JSON_HEX_AMP |
+                                                            JSON_HEX_QUOT
+                                                        ) ?>
+                                                    )'
+                                                >
+
+                                                    <i
+                                                        class="fas fa-pen"
+                                                    ></i>
+
+                                                    Edit
+
+                                                </button>
+
+
+
+                                                <!-- DELETE -->
+
+                                                <form
+                                                    method="POST"
+                                                    onsubmit="
+                                                        return confirm(
+                                                            'Are you sure you want to delete this menu item?'
+                                                        );
+                                                    "
+                                                >
+
+                                                    <input
+                                                        type="hidden"
+                                                        name="item_id"
+                                                        value="<?= $itemId ?>"
+                                                    >
+
+
+                                                    <button
+                                                        type="submit"
+                                                        name="delete_item"
+                                                        value="1"
+                                                        class="btn btn-danger btn-small"
+                                                    >
+
+                                                        <i
+                                                            class="fas fa-trash"
+                                                        ></i>
+
+                                                        Delete
+
+                                                    </button>
+
+                                                </form>
+
+
+                                            </div>
+
+
+
+                                            <!-- AVAILABLE -->
+
+                                            <form
+                                                method="POST"
+                                                style="
+                                                    margin-top:7px;
+                                                "
+                                            >
+
+                                                <input
+                                                    type="hidden"
+                                                    name="item_id"
+                                                    value="<?= $itemId ?>"
+                                                >
+
+
+                                                <input
+                                                    type="hidden"
+                                                    name="new_status"
+                                                    value="<?= $itemStatus
+                                                        ? 0
+                                                        : 1 ?>"
+                                                >
+
+
+                                                <button
+                                                    type="submit"
+                                                    name="toggle_item"
+                                                    value="1"
+                                                    class="
+                                                        btn
+                                                        btn-light
+                                                        btn-small
+                                                    "
+                                                    style="
+                                                        width:100%;
+                                                    "
+                                                >
+
+                                                    <i
+                                                        class="
+                                                        fas
+                                                        <?= $itemStatus
+                                                            ? 'fa-eye-slash'
+                                                            : 'fa-eye' ?>
+                                                        "
+                                                    ></i>
+
+
+                                                    <?= $itemStatus
+                                                        ? 'Mark Unavailable'
+                                                        : 'Mark Available' ?>
+
+
+                                                </button>
+
+
+                                            </form>
+
+
+                                        </div>
+
+
+                                    </article>
+
+
+                                <?php endforeach; ?>
+
+
+                            </div>
+
+
+                        </div>
+
+
+                    <?php endforeach; ?>
+
+
+                <?php endif; ?>
+
+
+            </section>
+
+
+        <?php endif; ?>
+
+
+    </div>
 
 
 </main>
 
 
-</body>
 
-
-<!-- =====================================================
+<!-- =========================================================
      EDIT MODAL
-====================================================== -->
+========================================================= -->
 
 <div
     class="modal"
@@ -3216,10 +4889,15 @@ a {
 >
 
 
-    <div class="modal-box">
+    <div
+        class="modal-box"
+    >
 
 
-        <div class="modal-header">
+        <div
+            class="modal-header"
+        >
+
 
             <h2>
                 Edit Menu Item
@@ -3232,14 +4910,20 @@ a {
                 onclick="closeEditModal()"
             >
 
-                <i class="fas fa-times"></i>
+                <i
+                    class="fas fa-times"
+                ></i>
 
             </button>
+
 
         </div>
 
 
-        <div class="modal-body">
+
+        <div
+            class="modal-body"
+        >
 
 
             <form
@@ -3255,10 +4939,16 @@ a {
                 >
 
 
-                <div class="form-grid">
+                <div
+                    class="form-grid"
+                >
 
 
-                    <div class="form-group">
+                    <!-- NAME -->
+
+                    <div
+                        class="form-group"
+                    >
 
                         <label>
                             Item Name *
@@ -3275,52 +4965,72 @@ a {
                     </div>
 
 
-                    <div class="form-group">
+
+                    <!-- CATEGORY -->
+
+                    <div
+                        class="form-group"
+                    >
 
                         <label>
                             Category *
                         </label>
 
+
                         <select
-                            name="category"
-                            id="editCategory"
+                            name="category_id"
+                            id="editCategoryId"
                             class="select"
                             required
                         >
 
+
+                            <option value="">
+                                Select Category
+                            </option>
+
+
                             <?php foreach (
                                 $categories
                                 as $category
-                            ) { ?>
+                            ): ?>
 
                                 <option
-                                    value="<?php
-                                    echo e(
-                                        $category
-                                    );
-                                    ?>"
+                                    value="<?= (int)$category['id'] ?>"
                                 >
 
-                                    <?php
-                                    echo e(
-                                        $category
-                                    );
-                                    ?>
+                                    <?= e(
+                                        $category['name']
+                                    ) ?>
 
                                 </option>
 
-                            <?php } ?>
+                            <?php endforeach; ?>
+
 
                         </select>
+
+
+                        <input
+                            type="hidden"
+                            name="category"
+                            id="editCategoryName"
+                        >
 
                     </div>
 
 
-                    <div class="form-group">
+
+                    <!-- PRICE -->
+
+                    <div
+                        class="form-group"
+                    >
 
                         <label>
                             Your Price (Rs.) *
                         </label>
+
 
                         <input
                             type="number"
@@ -3332,14 +5042,33 @@ a {
                             required
                         >
 
+
+                        <div
+                            class="help"
+                        >
+
+                            Admin markup:
+                            <?= number_format(
+                                $adminPercentage,
+                                2
+                            ) ?>%
+
+                        </div>
+
                     </div>
 
 
-                    <div class="form-group">
+
+                    <!-- CUSTOMER PRICE -->
+
+                    <div
+                        class="form-group"
+                    >
 
                         <label>
                             Customer Price
                         </label>
+
 
                         <input
                             type="text"
@@ -3351,11 +5080,17 @@ a {
                     </div>
 
 
-                    <div class="form-group full">
+
+                    <!-- DESCRIPTION -->
+
+                    <div
+                        class="form-group full"
+                    >
 
                         <label>
                             Description
                         </label>
+
 
                         <textarea
                             name="description"
@@ -3366,11 +5101,17 @@ a {
                     </div>
 
 
-                    <div class="form-group">
+
+                    <!-- IMAGE -->
+
+                    <div
+                        class="form-group"
+                    >
 
                         <label>
                             Replace Image
                         </label>
+
 
                         <input
                             type="file"
@@ -3379,23 +5120,50 @@ a {
                             accept=".jpg,.jpeg,.png,.webp"
                         >
 
+
+                        <div
+                            class="help"
+                        >
+
+                            Leave empty to keep existing image.
+
+                        </div>
+
                     </div>
 
 
-                    <div class="checkbox-row">
 
-                        <input
-                            type="checkbox"
-                            name="available"
-                            id="editAvailable"
-                            value="1"
-                        >
+                    <!-- CURRENT IMAGE -->
 
-                        <label
-                            for="editAvailable"
-                        >
-                            Item is available
+                    <div
+                        class="form-group"
+                    >
+
+                        <label>
+                            Current Image
                         </label>
+
+
+                        <div
+                            id="editCurrentImage"
+                            style="
+                                height:130px;
+                                background:#fff0f4;
+                                border-radius:9px;
+                                overflow:hidden;
+                                display:flex;
+                                align-items:center;
+                                justify-content:center;
+                                color:#ed0038;
+                                font-size:25px;
+                            "
+                        >
+
+                            <i
+                                class="fas fa-image"
+                            ></i>
+
+                        </div>
 
                     </div>
 
@@ -3403,7 +5171,36 @@ a {
                 </div>
 
 
-                <div class="actions">
+
+                <!-- STATUS -->
+
+                <div
+                    class="checkbox-row"
+                >
+
+                    <input
+                        type="checkbox"
+                        name="available"
+                        id="editAvailable"
+                        value="1"
+                    >
+
+
+                    <label
+                        for="editAvailable"
+                    >
+
+                        Item is available
+
+                    </label>
+
+                </div>
+
+
+
+                <div
+                    class="actions"
+                >
 
                     <button
                         type="button"
@@ -3423,7 +5220,9 @@ a {
                         class="btn btn-primary"
                     >
 
-                        <i class="fas fa-save"></i>
+                        <i
+                            class="fas fa-save"
+                        ></i>
 
                         Save Changes
 
@@ -3434,62 +5233,67 @@ a {
 
             </form>
 
+
         </div>
 
 
     </div>
 
-
 </div>
+
 
 
 <script>
 
-/* =========================================================
-   ADMIN PERCENTAGE
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| ADMIN MARKUP
+|--------------------------------------------------------------------------
+*/
 
 const adminPercentage =
-    <?php
-    echo json_encode(
-        $adminPercentage
-    );
-    ?>;
+    <?= json_encode(
+        (float)$adminPercentage
+    ) ?>;
 
 
-/* =========================================================
-   PRICE CALCULATOR
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER PRICE
+|--------------------------------------------------------------------------
+*/
 
 function calculateCustomerPrice(
-    ownerPrice
+    price
 ) {
 
-    ownerPrice =
-        parseFloat(
-            ownerPrice
-        ) || 0;
+    const amount =
+        parseFloat(price) || 0;
 
-    const customerPrice =
-        ownerPrice +
+
+    return amount +
         (
-            ownerPrice *
-            adminPercentage /
-            100
+            amount *
+            (
+                adminPercentage /
+                100
+            )
         );
 
-    return customerPrice;
 }
 
 
-/* =========================================================
-   NEW ITEM LIVE PRICE
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| NEW ITEM LIVE PRICE
+|--------------------------------------------------------------------------
+*/
 
 const newOwnerPrice =
     document.getElementById(
         'newOwnerPrice'
     );
+
 
 const newCustomerPrice =
     document.getElementById(
@@ -3502,99 +5306,285 @@ if (
     newCustomerPrice
 ) {
 
+    function updateNewCustomerPrice() {
+
+        const finalPrice =
+            calculateCustomerPrice(
+                newOwnerPrice.value
+            );
+
+
+        newCustomerPrice.value =
+            'Rs. ' +
+            finalPrice.toFixed(2);
+
+    }
+
+
     newOwnerPrice.addEventListener(
         'input',
-        function () {
-
-            const price =
-                calculateCustomerPrice(
-                    this.value
-                );
-
-            newCustomerPrice.value =
-                'Rs. ' +
-                price.toFixed(2);
-
-        }
+        updateNewCustomerPrice
     );
+
+
+    updateNewCustomerPrice();
+
 }
 
 
-/* =========================================================
-   EDIT MODAL
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| NEW CATEGORY NAME
+|--------------------------------------------------------------------------
+*/
 
-const editModal =
+const newCategoryId =
     document.getElementById(
-        'editModal'
+        'newCategoryId'
     );
 
 
-function openEditModal(
-    id,
-    name,
-    description,
-    category,
-    price,
-    status
+const newCategoryName =
+    document.getElementById(
+        'newCategoryName'
+    );
+
+
+if (
+    newCategoryId &&
+    newCategoryName
 ) {
+
+    newCategoryId.addEventListener(
+        'change',
+        function () {
+
+            const selected =
+                newCategoryId.options[
+                    newCategoryId.selectedIndex
+                ];
+
+
+            newCategoryName.value =
+                selected
+                    ? selected.text.trim()
+                    : '';
+
+        }
+    );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EDIT MODAL
+|--------------------------------------------------------------------------
+*/
+
+function openEditModal(
+    item
+) {
+
+    const modal =
+        document.getElementById(
+            'editModal'
+        );
+
 
     document.getElementById(
         'editItemId'
-    ).value = id;
+    ).value =
+        item.id || '';
 
 
     document.getElementById(
         'editItemName'
-    ).value = name;
+    ).value =
+        item.name || '';
 
 
     document.getElementById(
         'editDescription'
-    ).value = description;
-
-
-    document.getElementById(
-        'editCategory'
-    ).value = category;
+    ).value =
+        item.description || '';
 
 
     document.getElementById(
         'editOwnerPrice'
-    ).value = price;
+    ).value =
+        item.price || '';
 
 
     document.getElementById(
         'editAvailable'
     ).checked =
-        parseInt(status) === 1;
+        parseInt(
+            item.status || 0
+        ) === 1;
 
 
-    updateEditPrice();
+    const categoryId =
+        document.getElementById(
+            'editCategoryId'
+        );
 
 
-    editModal.classList.add(
-        'show'
-    );
+    const categoryName =
+        document.getElementById(
+            'editCategoryName'
+        );
+
+
+    if (categoryId) {
+
+        categoryId.value =
+            item.category_id || '';
+
+    }
+
+
+    if (
+        categoryName
+    ) {
+
+        categoryName.value =
+            item.category || '';
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Customer Price
+    |--------------------------------------------------------------------------
+    */
+
+    const customerPrice =
+        calculateCustomerPrice(
+            item.price || 0
+        );
+
+
+    document.getElementById(
+        'editCustomerPrice'
+    ).value =
+        'Rs. ' +
+        customerPrice.toFixed(2);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Image
+    |--------------------------------------------------------------------------
+    */
+
+    const imageBox =
+        document.getElementById(
+            'editCurrentImage'
+        );
+
+
+    if (
+        imageBox &&
+        item.image
+    ) {
+
+        imageBox.innerHTML =
+
+            '<img ' +
+            'src="' +
+            escapeHtmlAttribute(
+                item.image
+            ) +
+            '" ' +
+            'style="' +
+            'width:100%;' +
+            'height:100%;' +
+            'object-fit:cover;" ' +
+            'alt="Current item image"' +
+            ' onerror="this.style.display=\'none\';' +
+            'this.parentNode.innerHTML=\'<i class=&quot;fas fa-image&quot;></i>\';">';
+
+    } else if (
+        imageBox
+    ) {
+
+        imageBox.innerHTML =
+            '<i class="fas fa-image"></i>';
+
+    }
+
+
+    if (modal) {
+
+        modal.classList.add(
+            'show'
+        );
+
+    }
+
 }
 
 
 function closeEditModal()
 {
-    editModal.classList.remove(
-        'show'
-    );
+
+    const modal =
+        document.getElementById(
+            'editModal'
+        );
+
+
+    if (modal) {
+
+        modal.classList.remove(
+            'show'
+        );
+
+    }
+
 }
 
 
-/* =========================================================
-   EDIT PRICE
-========================================================= */
+function escapeHtmlAttribute(
+    value
+) {
+
+    return String(
+        value || ''
+    )
+        .replace(
+            /&/g,
+            '&amp;'
+        )
+        .replace(
+            /"/g,
+            '&quot;'
+        )
+        .replace(
+            /</g,
+            '&lt;'
+        )
+        .replace(
+            />/g,
+            '&gt;'
+        );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EDIT PRICE LIVE
+|--------------------------------------------------------------------------
+*/
 
 const editOwnerPrice =
     document.getElementById(
         'editOwnerPrice'
     );
+
 
 const editCustomerPrice =
     document.getElementById(
@@ -3602,45 +5592,92 @@ const editCustomerPrice =
     );
 
 
-function updateEditPrice()
-{
-
-    if (
-        !editOwnerPrice ||
-        !editCustomerPrice
-    ) {
-        return;
-    }
-
-    const price =
-        calculateCustomerPrice(
-            editOwnerPrice.value
-        );
-
-    editCustomerPrice.value =
-        'Rs. ' +
-        price.toFixed(2);
-}
-
-
-if (editOwnerPrice) {
+if (
+    editOwnerPrice &&
+    editCustomerPrice
+) {
 
     editOwnerPrice.addEventListener(
         'input',
-        updateEditPrice
+        function () {
+
+            const price =
+                calculateCustomerPrice(
+                    editOwnerPrice.value
+                );
+
+
+            editCustomerPrice.value =
+                'Rs. ' +
+                price.toFixed(2);
+
+        }
     );
+
 }
 
 
-/* =========================================================
-   CLOSE MODAL ON BACKGROUND
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| EDIT CATEGORY NAME
+|--------------------------------------------------------------------------
+*/
+
+const editCategoryId =
+    document.getElementById(
+        'editCategoryId'
+    );
+
+
+const editCategoryName =
+    document.getElementById(
+        'editCategoryName'
+    );
+
+
+if (
+    editCategoryId &&
+    editCategoryName
+) {
+
+    editCategoryId.addEventListener(
+        'change',
+        function () {
+
+            const selected =
+                editCategoryId.options[
+                    editCategoryId.selectedIndex
+                ];
+
+
+            editCategoryName.value =
+                selected
+                    ? selected.text.trim()
+                    : '';
+
+        }
+    );
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Close modal on background click
+|--------------------------------------------------------------------------
+*/
+
+const editModal =
+    document.getElementById(
+        'editModal'
+    );
+
 
 if (editModal) {
 
     editModal.addEventListener(
         'click',
-        function(event) {
+        function (event) {
 
             if (
                 event.target ===
@@ -3653,9 +5690,35 @@ if (editModal) {
 
         }
     );
+
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| ESC KEY
+|--------------------------------------------------------------------------
+*/
+
+document.addEventListener(
+    'keydown',
+    function (event) {
+
+        if (
+            event.key ===
+            'Escape'
+        ) {
+
+            closeEditModal();
+
+        }
+
+    }
+);
 
 </script>
 
+
+</body>
 
 </html>
