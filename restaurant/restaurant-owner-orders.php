@@ -1,10 +1,15 @@
 <?php
-
-/* =========================================================
-   HUMSAFAR - RESTAURANT OWNER ORDER MANAGEMENT
-   File:
-   restaurant/restaurant-owner-manage-orders.php
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| HUMSAFAR - RESTAURANT OWNER ORDER MANAGEMENT
+| File:
+| restaurant/restaurant-owner-orders.php
+|
+| Auto Rider Assignment:
+| Restaurant accepts order -> preparing -> nearest available rider
+| is assigned immediately. Food preparation does not wait for "Ready".
+|--------------------------------------------------------------------------
+*/
 
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/session.php';
@@ -13,11 +18,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-
 /* =========================================================
    HELPER
 ========================================================= */
-
 function h($value)
 {
     return htmlspecialchars(
@@ -27,81 +30,43 @@ function h($value)
     );
 }
 
-
 /* =========================================================
    DATABASE CHECK
 ========================================================= */
-
 if (!isset($conn) || !($conn instanceof mysqli)) {
     die('Database connection is not available.');
 }
 
-
 /* =========================================================
    FIND OWNER
 ========================================================= */
-
 $owner = null;
-
 $ownerId = 0;
-
 $ownerEmail = '';
 
-
 if (!empty($_SESSION['restaurant_owner_id'])) {
-
     $ownerId = (int)$_SESSION['restaurant_owner_id'];
-
 }
 
-
-if (
-    $ownerId <= 0 &&
-    !empty($_SESSION['restaurant_user_id'])
-) {
-
+if ($ownerId <= 0 && !empty($_SESSION['restaurant_user_id'])) {
     $ownerId = (int)$_SESSION['restaurant_user_id'];
-
 }
 
-
-if (
-    $ownerId <= 0 &&
-    !empty($_SESSION['owner_id'])
-) {
-
+if ($ownerId <= 0 && !empty($_SESSION['owner_id'])) {
     $ownerId = (int)$_SESSION['owner_id'];
-
 }
-
 
 if (!empty($_SESSION['restaurant_owner_email'])) {
-
-    $ownerEmail =
-        trim(
-            (string)$_SESSION['restaurant_owner_email']
-        );
-
+    $ownerEmail = trim((string)$_SESSION['restaurant_owner_email']);
 }
 
-
-if (
-    $ownerEmail === '' &&
-    !empty($_SESSION['email'])
-) {
-
-    $ownerEmail =
-        trim(
-            (string)$_SESSION['email']
-        );
-
+if ($ownerEmail === '' && !empty($_SESSION['email'])) {
+    $ownerEmail = trim((string)$_SESSION['email']);
 }
-
 
 /* =========================================================
    OWNER BY ID
 ========================================================= */
-
 if ($ownerId > 0) {
 
     $stmt = $conn->prepare("
@@ -119,34 +84,19 @@ if ($ownerId > 0) {
 
     if ($stmt) {
 
-        $stmt->bind_param(
-            "i",
-            $ownerId
-        );
-
+        $stmt->bind_param("i", $ownerId);
         $stmt->execute();
 
-        $result =
-            $stmt->get_result();
-
-        $owner =
-            $result->fetch_assoc();
+        $owner = $stmt->get_result()->fetch_assoc();
 
         $stmt->close();
-
     }
-
 }
-
 
 /* =========================================================
    OWNER BY EMAIL
 ========================================================= */
-
-if (
-    !$owner &&
-    $ownerEmail !== ''
-) {
+if (!$owner && $ownerEmail !== '') {
 
     $stmt = $conn->prepare("
         SELECT
@@ -163,113 +113,73 @@ if (
 
     if ($stmt) {
 
-        $stmt->bind_param(
-            "s",
-            $ownerEmail
-        );
-
+        $stmt->bind_param("s", $ownerEmail);
         $stmt->execute();
 
-        $result =
-            $stmt->get_result();
-
-        $owner =
-            $result->fetch_assoc();
+        $owner = $stmt->get_result()->fetch_assoc();
 
         $stmt->close();
-
     }
-
 }
-
 
 /* =========================================================
    OWNER NOT FOUND
 ========================================================= */
-
 if (!$owner) {
-
-    header(
-        "Location: restaurant-owner-login.php"
-    );
-
+    header('Location: restaurant-owner-login.php');
     exit;
-
 }
-
 
 /* =========================================================
    OWNER DATA
 ========================================================= */
+$ownerId = (int)$owner['id'];
 
-$ownerId =
-    (int)$owner['id'];
+$ownerName = trim(
+    (string)$owner['full_name']
+);
 
-$ownerName =
+$restaurantName = trim(
+    (string)$owner['restaurant_name']
+);
+
+$ownerStatus = strtolower(
     trim(
-        (string)$owner['full_name']
-    );
-
-$restaurantName =
-    trim(
-        (string)$owner['restaurant_name']
-    );
-
-$ownerStatus =
-    strtolower(
-        trim(
-            (string)$owner['status']
-        )
-    );
-
+        (string)$owner['status']
+    )
+);
 
 /* =========================================================
    APPROVAL CHECK
-
-   approved OR active = allowed
 ========================================================= */
-
-$isApproved =
-    in_array(
-        $ownerStatus,
-        array(
-            'approved',
-            'active'
-        ),
-        true
-    );
-
+$isApproved = in_array(
+    $ownerStatus,
+    array(
+        'approved',
+        'active'
+    ),
+    true
+);
 
 if (!$isApproved) {
-
-    header(
-        "Location: restaurant-owner-dashboard.php"
-    );
-
+    header('Location: restaurant-owner-dashboard.php');
     exit;
-
 }
-
 
 /* =========================================================
    FIND RESTAURANT
+   Includes latitude/longitude added for rider matching.
 ========================================================= */
-
 $restaurant = null;
-
 $restaurantId = 0;
-
-
-/*
- * Existing project connects restaurant owner
- * to restaurant using restaurant name.
- */
 
 $stmt = $conn->prepare("
     SELECT
         id,
         name,
-        status
+        status,
+        latitude,
+        longitude
     FROM restaurants
     WHERE name = ?
     LIMIT 1
@@ -284,38 +194,469 @@ if ($stmt) {
 
     $stmt->execute();
 
-    $result =
-        $stmt->get_result();
-
     $restaurant =
-        $result->fetch_assoc();
+        $stmt->get_result()->fetch_assoc();
 
     $stmt->close();
-
 }
-
 
 if ($restaurant) {
-
-    $restaurantId =
-        (int)$restaurant['id'];
-
+    $restaurantId = (int)$restaurant['id'];
 }
-
 
 /* =========================================================
    MESSAGES
 ========================================================= */
-
 $successMessage = '';
-
 $errorMessage = '';
 
+/* =========================================================
+   AUTO FIND NEAREST RIDER
+========================================================= */
+function autoAssignNearestRider(
+    mysqli $conn,
+    int $orderId,
+    int $restaurantId,
+    string &$infoMessage,
+    string &$errorMessage
+): bool {
+
+    $infoMessage = '';
+    $errorMessage = '';
+
+    if ($orderId <= 0 || $restaurantId <= 0) {
+        $errorMessage = 'Invalid order or restaurant.';
+        return false;
+    }
+
+    /* ---------------------------------------------------------
+       Get restaurant coordinates
+    --------------------------------------------------------- */
+    $stmt = $conn->prepare("
+        SELECT
+            latitude,
+            longitude
+        FROM restaurants
+        WHERE id = ?
+        LIMIT 1
+    ");
+
+    if (!$stmt) {
+        $errorMessage = 'Could not prepare restaurant location query.';
+        return false;
+    }
+
+    $stmt->bind_param(
+        "i",
+        $restaurantId
+    );
+
+    $stmt->execute();
+
+    $restaurant =
+        $stmt->get_result()->fetch_assoc();
+
+    $stmt->close();
+
+    if (
+        !$restaurant ||
+        $restaurant['latitude'] === null ||
+        $restaurant['longitude'] === null ||
+        $restaurant['latitude'] === '' ||
+        $restaurant['longitude'] === ''
+    ) {
+
+        $errorMessage =
+            'Restaurant location is not set. Please add latitude and longitude first.';
+
+        return false;
+    }
+
+    $restaurantLat =
+        (float)$restaurant['latitude'];
+
+    $restaurantLng =
+        (float)$restaurant['longitude'];
+
+    /* ---------------------------------------------------------
+       Transaction
+    --------------------------------------------------------- */
+    $conn->begin_transaction();
+
+    try {
+
+        /* -----------------------------------------------------
+           Confirm order belongs to restaurant
+        ----------------------------------------------------- */
+        $stmt = $conn->prepare("
+            SELECT
+                id,
+                order_status,
+                delivery_fee,
+                total
+            FROM orders
+            WHERE id = ?
+              AND restaurant_id = ?
+            LIMIT 1
+            FOR UPDATE
+        ");
+
+        if (!$stmt) {
+            throw new Exception(
+                'Could not prepare order query.'
+            );
+        }
+
+        $stmt->bind_param(
+            "ii",
+            $orderId,
+            $restaurantId
+        );
+
+        $stmt->execute();
+
+        $order =
+            $stmt->get_result()->fetch_assoc();
+
+        $stmt->close();
+
+        if (!$order) {
+            throw new Exception(
+                'Order not found.'
+            );
+        }
+
+        /* -----------------------------------------------------
+           Do not create duplicate active assignment
+        ----------------------------------------------------- */
+        $stmt = $conn->prepare("
+            SELECT
+                id,
+                rider_id,
+                status
+            FROM rider_deliveries
+            WHERE order_id = ?
+              AND status IN (
+                  'assigned',
+                  'accepted',
+                  'picked_up',
+                  'on_the_way'
+              )
+            ORDER BY id DESC
+            LIMIT 1
+            FOR UPDATE
+        ");
+
+        if (!$stmt) {
+            throw new Exception(
+                'Could not check existing rider assignment.'
+            );
+        }
+
+        $stmt->bind_param(
+            "i",
+            $orderId
+        );
+
+        $stmt->execute();
+
+        $existingAssignment =
+            $stmt->get_result()->fetch_assoc();
+
+        $stmt->close();
+
+        if ($existingAssignment) {
+
+            $conn->commit();
+
+            $infoMessage =
+                'A rider is already assigned to this order.';
+
+            return true;
+        }
+
+        /* -----------------------------------------------------
+           Find nearest available rider
+           Requirements:
+           - active/approved account
+           - availability_status = available
+           - latest rider location
+           - no active delivery
+        ----------------------------------------------------- */
+        $sql = "
+            SELECT
+                r.id AS rider_id,
+                r.full_name,
+                r.phone,
+                rl.latitude AS rider_latitude,
+                rl.longitude AS rider_longitude,
+
+                (
+                    6371 * ACOS(
+                        LEAST(
+                            1,
+                            GREATEST(
+                                -1,
+                                COS(RADIANS(?))
+                                * COS(RADIANS(rl.latitude))
+                                * COS(
+                                    RADIANS(rl.longitude)
+                                    - RADIANS(?)
+                                )
+                                + SIN(RADIANS(?))
+                                * SIN(RADIANS(rl.latitude))
+                            )
+                        )
+                    )
+                ) AS distance_km
+
+            FROM riders r
+
+            INNER JOIN rider_locations rl
+                ON rl.id = (
+                    SELECT
+                        rl2.id
+                    FROM rider_locations rl2
+                    WHERE rl2.rider_id = r.id
+                    ORDER BY rl2.id DESC
+                    LIMIT 1
+                )
+
+            WHERE LOWER(
+                      TRIM(r.status)
+                  ) IN (
+                      'active',
+                      'approved'
+                  )
+
+              AND LOWER(
+                      TRIM(r.availability_status)
+                  ) = 'available'
+
+              AND rl.latitude IS NOT NULL
+              AND rl.longitude IS NOT NULL
+
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM rider_deliveries rd
+                    WHERE rd.rider_id = r.id
+                      AND rd.status IN (
+                          'assigned',
+                          'accepted',
+                          'picked_up',
+                          'on_the_way'
+                      )
+              )
+
+            ORDER BY
+                distance_km ASC,
+                r.id ASC
+
+            LIMIT 1
+
+            FOR UPDATE
+        ";
+
+        $stmt =
+            $conn->prepare($sql);
+
+        if (!$stmt) {
+            throw new Exception(
+                'Could not prepare rider matching query: ' .
+                $conn->error
+            );
+        }
+
+        $stmt->bind_param(
+            "ddd",
+            $restaurantLat,
+            $restaurantLng,
+            $restaurantLat
+        );
+
+        $stmt->execute();
+
+        $rider =
+            $stmt->get_result()->fetch_assoc();
+
+        $stmt->close();
+
+        /* -----------------------------------------------------
+           No rider available
+        ----------------------------------------------------- */
+        if (!$rider) {
+
+            $conn->commit();
+
+            $infoMessage =
+                'Order is preparing. No available rider was found right now.';
+
+            return false;
+        }
+
+        $riderId =
+            (int)$rider['rider_id'];
+
+        $deliveryFee =
+            isset($order['delivery_fee'])
+                ? (float)$order['delivery_fee']
+                : 0.00;
+
+        /*
+         * Initial earning rule:
+         * rider earning = delivery fee.
+         * We can change this later to a fixed/percentage rule.
+         */
+        $riderEarning =
+            $deliveryFee;
+
+        /* -----------------------------------------------------
+           Create rider delivery
+        ----------------------------------------------------- */
+        $stmt = $conn->prepare("
+            INSERT INTO rider_deliveries
+            (
+                rider_id,
+                order_id,
+                status,
+                delivery_fee,
+                rider_earning,
+                assigned_at
+            )
+            VALUES
+            (
+                ?,
+                ?,
+                'assigned',
+                ?,
+                ?,
+                NOW()
+            )
+        ");
+
+        if (!$stmt) {
+            throw new Exception(
+                'Could not prepare rider assignment.'
+            );
+        }
+
+        $stmt->bind_param(
+            "iidd",
+            $riderId,
+            $orderId,
+            $deliveryFee,
+            $riderEarning
+        );
+
+        if (!$stmt->execute()) {
+            throw new Exception(
+                'Could not create rider assignment: ' .
+                $stmt->error
+            );
+        }
+
+        $stmt->close();
+
+        /* -----------------------------------------------------
+           Mark rider busy
+        ----------------------------------------------------- */
+        $stmt = $conn->prepare("
+            UPDATE riders
+            SET availability_status = 'busy'
+            WHERE id = ?
+            LIMIT 1
+        ");
+
+        if (!$stmt) {
+            throw new Exception(
+                'Could not prepare rider availability update.'
+            );
+        }
+
+        $stmt->bind_param(
+            "i",
+            $riderId
+        );
+
+        if (!$stmt->execute()) {
+            throw new Exception(
+                'Could not mark rider busy: ' .
+                $stmt->error
+            );
+        }
+
+        $stmt->close();
+
+        /* -----------------------------------------------------
+           Mark order as rider_assigned
+        ----------------------------------------------------- */
+        $assignedStatus =
+            'rider_assigned';
+
+        $stmt = $conn->prepare("
+            UPDATE orders
+            SET order_status = ?
+            WHERE id = ?
+              AND restaurant_id = ?
+            LIMIT 1
+        ");
+
+        if (!$stmt) {
+            throw new Exception(
+                'Could not prepare order assignment update.'
+            );
+        }
+
+        $stmt->bind_param(
+            "sii",
+            $assignedStatus,
+            $orderId,
+            $restaurantId
+        );
+
+        if (!$stmt->execute()) {
+            throw new Exception(
+                'Could not update order status: ' .
+                $stmt->error
+            );
+        }
+
+        $stmt->close();
+
+        /* -----------------------------------------------------
+           Done
+        ----------------------------------------------------- */
+        $conn->commit();
+
+        $distance =
+            number_format(
+                (float)$rider['distance_km'],
+                2
+            );
+
+        $infoMessage =
+            'Order assigned to ' .
+            $rider['full_name'] .
+            ' (' .
+            $distance .
+            ' km from restaurant).';
+
+        return true;
+
+    } catch (Throwable $e) {
+
+        $conn->rollback();
+
+        $errorMessage =
+            $e->getMessage();
+
+        return false;
+    }
+}
 
 /* =========================================================
    UPDATE ORDER STATUS
 ========================================================= */
-
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST' &&
     isset($_POST['update_order_status'])
@@ -333,16 +674,19 @@ if (
             )
             : '';
 
-
-    $allowedStatuses = array(
-        'pending',
-        'confirmed',
-        'preparing',
-        'out_for_delivery',
-        'delivered',
-        'cancelled'
-    );
-
+    $allowedStatuses =
+        array(
+            'pending',
+            'confirmed',
+            'preparing',
+            'rider_assigned',
+            'ready_for_pickup',
+            'picked_up',
+            'out_for_delivery',
+            'on_the_way',
+            'delivered',
+            'cancelled'
+        );
 
     if ($orderId <= 0) {
 
@@ -368,19 +712,38 @@ if (
     } else {
 
         /*
-         * IMPORTANT:
-         * Restaurant owner can only update
-         * orders belonging to his restaurant.
+         * Our final workflow:
+         *
+         * Confirmed = restaurant accepted.
+         * We immediately move it to preparing and start rider search.
+         *
+         * Preparing selected manually = also start rider search.
          */
+        $shouldFindRider =
+            in_array(
+                $newStatus,
+                array(
+                    'confirmed',
+                    'preparing'
+                ),
+                true
+            );
+
+        /*
+         * "confirmed" is treated as "Accepted + Preparing".
+         */
+        $statusToSave =
+            $newStatus === 'confirmed'
+                ? 'preparing'
+                : $newStatus;
 
         $stmt = $conn->prepare("
             UPDATE orders
             SET order_status = ?
             WHERE id = ?
-            AND restaurant_id = ?
+              AND restaurant_id = ?
             LIMIT 1
         ");
-
 
         if (!$stmt) {
 
@@ -392,63 +755,86 @@ if (
 
             $stmt->bind_param(
                 "sii",
-                $newStatus,
+                $statusToSave,
                 $orderId,
                 $restaurantId
             );
 
-
             if ($stmt->execute()) {
 
-                if ($stmt->affected_rows > 0) {
+                $stmt->close();
 
-                    $successMessage =
-                        'Order status updated successfully.';
+                /*
+                 * Start automatic rider matching immediately.
+                 */
+                if ($shouldFindRider) {
+
+                    $assignmentInfo =
+                        '';
+
+                    $assignmentError =
+                        '';
+
+                    $assigned =
+                        autoAssignNearestRider(
+                            $conn,
+                            $orderId,
+                            $restaurantId,
+                            $assignmentInfo,
+                            $assignmentError
+                        );
+
+                    if ($assigned) {
+
+                        $successMessage =
+                            'Order accepted and rider assigned. ' .
+                            $assignmentInfo;
+
+                    } elseif (
+                        $assignmentError !== ''
+                    ) {
+
+                        $successMessage =
+                            'Order accepted and is preparing.';
+
+                        $errorMessage =
+                            'Rider assignment failed: ' .
+                            $assignmentError;
+
+                    } else {
+
+                        $successMessage =
+                            'Order accepted and is preparing. ' .
+                            $assignmentInfo;
+                    }
 
                 } else {
 
                     $successMessage =
-                        'Order status is already ' .
-                        ucwords(
-                            str_replace(
-                                '_',
-                                ' ',
-                                $newStatus
-                            )
-                        ) .
-                        '.';
-
+                        'Order status updated successfully.';
                 }
 
             } else {
 
                 $errorMessage =
-                    'Could not update order status.';
+                    'Could not update order status: ' .
+                    $stmt->error;
 
+                $stmt->close();
             }
-
-
-            $stmt->close();
-
         }
-
     }
-
 }
 
-
 /* =========================================================
-   GET ORDERS
+   GET RESTAURANT ORDERS
 ========================================================= */
-
 $orders = array();
-
 
 if ($restaurantId > 0) {
 
     $stmt = $conn->prepare("
         SELECT
-
             o.id,
             o.order_number,
             o.user_id,
@@ -477,7 +863,6 @@ if ($restaurantId > 0) {
         ORDER BY o.id DESC
     ");
 
-
     if ($stmt) {
 
         $stmt->bind_param(
@@ -490,31 +875,23 @@ if ($restaurantId > 0) {
         $result =
             $stmt->get_result();
 
-
         while (
             $row =
-                $result->fetch_assoc()
+            $result->fetch_assoc()
         ) {
 
             $orders[] =
                 $row;
-
         }
 
-
         $stmt->close();
-
     }
-
 }
-
 
 /* =========================================================
    GET ORDER ITEMS
 ========================================================= */
-
 $orderItems = array();
-
 
 foreach ($orders as $order) {
 
@@ -523,7 +900,6 @@ foreach ($orders as $order) {
 
     $orderItems[$orderId] =
         array();
-
 
     $stmt = $conn->prepare("
         SELECT
@@ -537,7 +913,6 @@ foreach ($orders as $order) {
         ORDER BY id ASC
     ");
 
-
     if ($stmt) {
 
         $stmt->bind_param(
@@ -550,31 +925,23 @@ foreach ($orders as $order) {
         $result =
             $stmt->get_result();
 
-
         while (
             $item =
-                $result->fetch_assoc()
+            $result->fetch_assoc()
         ) {
 
             $orderItems[$orderId][] =
                 $item;
-
         }
 
-
         $stmt->close();
-
     }
-
 }
-
 
 /* =========================================================
    GET CUSTOMER ADDRESSES
 ========================================================= */
-
 $orderAddresses = array();
-
 
 foreach ($orders as $order) {
 
@@ -584,15 +951,12 @@ foreach ($orders as $order) {
     $addressId =
         (int)$order['address_id'];
 
-
     $orderAddresses[$orderId] =
         null;
-
 
     if ($addressId <= 0) {
         continue;
     }
-
 
     $stmt = $conn->prepare("
         SELECT
@@ -606,7 +970,6 @@ foreach ($orders as $order) {
         LIMIT 1
     ");
 
-
     if ($stmt) {
 
         $stmt->bind_param(
@@ -616,36 +979,24 @@ foreach ($orders as $order) {
 
         $stmt->execute();
 
-        $result =
-            $stmt->get_result();
-
         $orderAddresses[$orderId] =
-            $result->fetch_assoc();
+            $stmt->get_result()->fetch_assoc();
 
         $stmt->close();
-
     }
-
 }
-
 
 /* =========================================================
    STATISTICS
 ========================================================= */
-
 $totalOrders =
     count($orders);
 
 $pendingOrders = 0;
-
 $confirmedOrders = 0;
-
 $preparingOrders = 0;
-
 $deliveryOrders = 0;
-
 $completedOrders = 0;
-
 
 foreach ($orders as $order) {
 
@@ -655,48 +1006,71 @@ foreach ($orders as $order) {
                 (string)$order['order_status']
             )
         );
-
 
     if ($status === 'pending') {
 
         $pendingOrders++;
 
     } elseif (
-        $status === 'confirmed' ||
-        $status === 'accepted'
+        in_array(
+            $status,
+            array(
+                'confirmed',
+                'accepted'
+            ),
+            true
+        )
     ) {
 
         $confirmedOrders++;
 
-    } elseif ($status === 'preparing') {
+    } elseif (
+        in_array(
+            $status,
+            array(
+                'preparing',
+                'rider_assigned',
+                'ready_for_pickup'
+            ),
+            true
+        )
+    ) {
 
         $preparingOrders++;
 
     } elseif (
-        $status === 'out_for_delivery' ||
-        $status === 'on_the_way'
+        in_array(
+            $status,
+            array(
+                'out_for_delivery',
+                'on_the_way',
+                'picked_up'
+            ),
+            true
+        )
     ) {
 
         $deliveryOrders++;
 
     } elseif (
-        $status === 'delivered' ||
-        $status === 'completed'
+        in_array(
+            $status,
+            array(
+                'delivered',
+                'completed'
+            ),
+            true
+        )
     ) {
 
         $completedOrders++;
-
     }
-
 }
-
 
 /* =========================================================
    TOTAL SALES
 ========================================================= */
-
 $totalSales = 0;
-
 
 foreach ($orders as $order) {
 
@@ -706,7 +1080,6 @@ foreach ($orders as $order) {
                 (string)$order['order_status']
             )
         );
-
 
     if (
         $status !== 'cancelled' &&
@@ -715,48 +1088,35 @@ foreach ($orders as $order) {
 
         $totalSales +=
             (float)$order['total'];
-
     }
-
 }
-
 
 /* =========================================================
    STATUS FUNCTIONS
 ========================================================= */
-
 function orderStatusLabel($status)
 {
-
-    $status =
-        strtolower(
-            trim(
-                (string)$status
-            )
-        );
-
-
     return ucwords(
         str_replace(
             '_',
             ' ',
-            $status
+            strtolower(
+                trim(
+                    (string)$status
+                )
+            )
         )
     );
-
 }
-
 
 function orderStatusClass($status)
 {
-
     $status =
         strtolower(
             trim(
                 (string)$status
             )
         );
-
 
     switch ($status) {
 
@@ -768,10 +1128,13 @@ function orderStatusClass($status)
             return 'confirmed';
 
         case 'preparing':
+        case 'rider_assigned':
+        case 'ready_for_pickup':
             return 'preparing';
 
         case 'out_for_delivery':
         case 'on_the_way':
+        case 'picked_up':
             return 'delivery';
 
         case 'delivered':
@@ -784,16 +1147,8 @@ function orderStatusClass($status)
 
         default:
             return 'default';
-
     }
-
 }
-
-
-/* =========================================================
-   HTML
-========================================================= */
-
 ?>
 <!DOCTYPE html>
 
@@ -812,55 +1167,47 @@ function orderStatusClass($status)
     Manage Orders - Humsafar
 </title>
 
-
 <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
 >
 
-
 <style>
-
-/* =========================================================
-   RESET
-========================================================= */
 
 * {
     box-sizing: border-box;
 }
 
-
 body {
+
     margin: 0;
+
     background: #f5f6fa;
+
     color: #111827;
+
     font-family:
         Arial,
         Helvetica,
         sans-serif;
 }
 
-
-
-/* =========================================================
-   TOPBAR
-========================================================= */
-
 .topbar {
 
     position: fixed;
 
     left: 223px;
+
     right: 0;
+
     top: 0;
 
     height: 64px;
 
-    background: #ffffff;
+    background: #fff;
 
     border-bottom:
-        1px solid
-        #e5e7eb;
+        1px solid #e5e7eb;
 
     z-index: 90;
 
@@ -868,14 +1215,12 @@ body {
 
     align-items: center;
 
-    justify-content: space-between;
+    justify-content:
+        space-between;
 
     padding:
-        0
-        25px;
-
+        0 25px;
 }
-
 
 .portal-label {
 
@@ -887,10 +1232,9 @@ body {
 
     letter-spacing: 1.6px;
 
-    text-transform: uppercase;
-
+    text-transform:
+        uppercase;
 }
-
 
 .page-top-title {
 
@@ -899,9 +1243,7 @@ body {
     font-size: 14px;
 
     font-weight: 800;
-
 }
-
 
 .top-right {
 
@@ -910,18 +1252,16 @@ body {
     align-items: center;
 
     gap: 14px;
-
 }
-
 
 .notification {
 
     width: 34px;
+
     height: 34px;
 
     border:
-        1px solid
-        #e5e7eb;
+        1px solid #e5e7eb;
 
     border-radius: 8px;
 
@@ -932,13 +1272,12 @@ body {
     justify-content: center;
 
     color: #6b7280;
-
 }
-
 
 .top-avatar {
 
     width: 31px;
+
     height: 31px;
 
     background: #ffc400;
@@ -954,18 +1293,14 @@ body {
     font-size: 11px;
 
     font-weight: 800;
-
 }
-
 
 .top-user {
 
     font-size: 9px;
 
     font-weight: 800;
-
 }
-
 
 .top-role {
 
@@ -974,13 +1309,7 @@ body {
     color: #9ca3af;
 
     margin-top: 2px;
-
 }
-
-
-/* =========================================================
-   MAIN
-========================================================= */
 
 .main {
 
@@ -989,9 +1318,7 @@ body {
     padding-top: 64px;
 
     min-height: 100vh;
-
 }
-
 
 .content {
 
@@ -999,20 +1326,12 @@ body {
         31px
         27px
         60px;
-
 }
-
-
-/* =========================================================
-   PAGE HEADING
-========================================================= */
 
 .page-heading {
 
     margin-bottom: 22px;
-
 }
-
 
 .page-eyebrow {
 
@@ -1024,10 +1343,9 @@ body {
 
     letter-spacing: 1.5px;
 
-    text-transform: uppercase;
-
+    text-transform:
+        uppercase;
 }
-
 
 .page-heading h1 {
 
@@ -1039,9 +1357,7 @@ body {
     font-size: 27px;
 
     line-height: 1.1;
-
 }
-
 
 .page-heading p {
 
@@ -1050,13 +1366,7 @@ body {
     color: #8a94a6;
 
     font-size: 11px;
-
 }
-
-
-/* =========================================================
-   RESTAURANT CHIP
-========================================================= */
 
 .restaurant-chip {
 
@@ -1071,8 +1381,7 @@ body {
     color: #ef003c;
 
     padding:
-        7px
-        11px;
+        7px 11px;
 
     border-radius: 20px;
 
@@ -1081,13 +1390,7 @@ body {
     font-weight: 800;
 
     margin-top: 12px;
-
 }
-
-
-/* =========================================================
-   MESSAGES
-========================================================= */
 
 .message {
 
@@ -1102,31 +1405,21 @@ body {
     font-size: 11px;
 
     font-weight: 700;
-
 }
-
 
 .message.success {
 
     background: #eaf8ef;
 
     color: #17733e;
-
 }
-
 
 .message.error {
 
     background: #fff0f1;
 
     color: #c82333;
-
 }
-
-
-/* =========================================================
-   STATS
-========================================================= */
 
 .stats {
 
@@ -1138,28 +1431,24 @@ body {
     gap: 13px;
 
     margin-bottom: 25px;
-
 }
-
 
 .stat-card {
 
-    background: #ffffff;
+    background: #fff;
 
     border:
-        1px solid
-        #e3e6eb;
+        1px solid #e3e6eb;
 
     border-radius: 11px;
 
     padding: 17px;
-
 }
-
 
 .stat-icon {
 
     width: 34px;
+
     height: 34px;
 
     background: #fff0f4;
@@ -1177,18 +1466,14 @@ body {
     font-size: 12px;
 
     margin-bottom: 12px;
-
 }
-
 
 .stat-number {
 
     font-size: 22px;
 
     font-weight: 800;
-
 }
-
 
 .stat-label {
 
@@ -1197,13 +1482,7 @@ body {
     color: #9299a6;
 
     font-size: 9px;
-
 }
-
-
-/* =========================================================
-   ORDERS HEADER
-========================================================= */
 
 .section-header {
 
@@ -1211,21 +1490,18 @@ body {
 
     align-items: center;
 
-    justify-content: space-between;
+    justify-content:
+        space-between;
 
     margin-bottom: 12px;
-
 }
-
 
 .section-title {
 
     font-size: 14px;
 
     font-weight: 800;
-
 }
-
 
 .section-subtitle {
 
@@ -1234,9 +1510,7 @@ body {
     font-size: 9px;
 
     margin-top: 4px;
-
 }
-
 
 .order-count {
 
@@ -1245,61 +1519,48 @@ body {
     color: #ef003c;
 
     padding:
-        7px
-        11px;
+        7px 11px;
 
     border-radius: 20px;
 
     font-size: 9px;
 
     font-weight: 800;
-
 }
-
-
-/* =========================================================
-   ORDER CARD
-========================================================= */
 
 .order-card {
 
-    background: #ffffff;
+    background: #fff;
 
     border:
-        1px solid
-        #e2e5ea;
+        1px solid #e2e5ea;
 
     border-radius: 12px;
 
     margin-bottom: 16px;
 
     overflow: hidden;
-
 }
-
 
 .order-header {
 
     min-height: 67px;
 
     padding:
-        14px
-        17px;
+        14px 17px;
 
     border-bottom:
-        1px solid
-        #edf0f3;
+        1px solid #edf0f3;
 
     display: flex;
 
     align-items: center;
 
-    justify-content: space-between;
+    justify-content:
+        space-between;
 
     gap: 15px;
-
 }
-
 
 .order-left {
 
@@ -1308,13 +1569,12 @@ body {
     align-items: center;
 
     gap: 12px;
-
 }
-
 
 .order-icon {
 
     width: 38px;
+
     height: 38px;
 
     border-radius: 9px;
@@ -1328,18 +1588,14 @@ body {
     align-items: center;
 
     justify-content: center;
-
 }
-
 
 .order-number {
 
     font-size: 13px;
 
     font-weight: 800;
-
 }
-
 
 .order-date {
 
@@ -1348,148 +1604,120 @@ body {
     font-size: 8px;
 
     margin-top: 4px;
-
 }
-
-
-/* =========================================================
-   STATUS
-========================================================= */
 
 .status {
 
-    padding:
-        7px
-        11px;
+    display: inline-flex;
 
-    border-radius: 20px;
+    align-items: center;
+
+    gap: 5px;
+
+    padding:
+        7px 10px;
+
+    border-radius: 18px;
 
     font-size: 8px;
 
     font-weight: 800;
 
-    text-transform: uppercase;
-
+    text-transform:
+        uppercase;
 }
-
 
 .status.pending {
 
     background: #fff5dc;
 
-    color: #9a6700;
-
+    color: #9c7000;
 }
-
 
 .status.confirmed {
 
-    background: #e8f3ff;
+    background: #eaf4ff;
 
-    color: #1769aa;
-
+    color: #2671a8;
 }
-
 
 .status.preparing {
 
     background: #fff0df;
 
-    color: #a85d00;
-
+    color: #ac6200;
 }
-
 
 .status.delivery {
 
-    background: #f0eaff;
+    background: #f1ebff;
 
-    color: #6641a3;
-
+    color: #6742a4;
 }
-
 
 .status.delivered {
 
-    background: #e8f8ed;
+    background: #e7f8ed;
 
     color: #18733e;
-
 }
-
 
 .status.cancelled {
 
-    background: #fff0f0;
+    background: #fff0f1;
 
-    color: #c52323;
-
+    color: #c82333;
 }
-
 
 .status.default {
 
-    background: #eeeeee;
+    background: #f0f1f3;
 
-    color: #777777;
-
+    color: #6b7280;
 }
-
-
-/* =========================================================
-   ORDER BODY
-========================================================= */
 
 .order-body {
 
     padding: 17px;
-
 }
-
 
 .order-grid {
 
     display: grid;
 
     grid-template-columns:
-        1fr
-        1fr
-        1fr;
+        repeat(3, 1fr);
 
     gap: 12px;
 
-    margin-bottom: 16px;
-
+    margin-bottom: 14px;
 }
-
 
 .info-box {
 
-    background: #f8f9fb;
+    background: #fafbfc;
+
+    border:
+        1px solid #edf0f3;
 
     border-radius: 9px;
 
     padding: 13px;
-
 }
-
 
 .info-title {
 
-    color: #9aa1ad;
+    color: #9299a6;
 
     font-size: 8px;
 
     font-weight: 800;
 
-    text-transform: uppercase;
-
-    letter-spacing: .5px;
+    text-transform:
+        uppercase;
 
     margin-bottom: 7px;
-
 }
-
 
 .info-main {
 
@@ -1497,59 +1725,46 @@ body {
 
     font-weight: 800;
 
+    line-height: 1.4;
 }
-
 
 .info-small {
 
-    color: #7f8794;
+    color: #6b7280;
 
     font-size: 9px;
 
     line-height: 1.5;
 
     margin-top: 4px;
-
 }
-
-
-/* =========================================================
-   ITEMS
-========================================================= */
 
 .items-box {
 
     border:
-        1px solid
-        #edf0f3;
+        1px solid #edf0f3;
 
     border-radius: 9px;
 
     overflow: hidden;
 
-    margin-bottom: 15px;
-
+    margin-bottom: 14px;
 }
-
 
 .items-heading {
 
     padding:
-        10px
-        13px;
+        10px 13px;
 
     background: #fafbfc;
 
     border-bottom:
-        1px solid
-        #edf0f3;
+        1px solid #edf0f3;
 
     font-size: 9px;
 
     font-weight: 800;
-
 }
-
 
 .item-row {
 
@@ -1557,47 +1772,38 @@ body {
 
     align-items: center;
 
-    justify-content: space-between;
+    justify-content:
+        space-between;
 
-    gap: 10px;
+    gap: 12px;
 
     padding:
-        11px
-        13px;
+        11px 13px;
 
     border-bottom:
-        1px solid
-        #f0f1f3;
-
+        1px solid #edf0f3;
 }
-
 
 .item-row:last-child {
 
     border-bottom: 0;
-
 }
-
 
 .item-name {
 
     font-size: 10px;
 
     font-weight: 800;
-
 }
-
 
 .item-meta {
 
-    color: #9aa1ad;
+    color: #8a94a6;
 
     font-size: 8px;
 
     margin-top: 3px;
-
 }
-
 
 .item-price {
 
@@ -1608,63 +1814,49 @@ body {
     font-weight: 800;
 
     white-space: nowrap;
-
 }
-
-
-/* =========================================================
-   TOTAL
-========================================================= */
 
 .bottom-grid {
 
     display: grid;
 
     grid-template-columns:
-        1fr
-        300px;
+        1fr 1fr;
 
-    gap: 15px;
-
+    gap: 13px;
 }
-
 
 .customer-note {
 
     background: #fffaf0;
 
+    border:
+        1px solid #f4e5bc;
+
     border-radius: 9px;
 
     padding: 13px;
-
 }
-
 
 .customer-note-title {
 
-    color: #9a6700;
-
-    font-size: 8px;
+    font-size: 9px;
 
     font-weight: 800;
 
-    text-transform: uppercase;
+    color: #8d6900;
 
     margin-bottom: 6px;
-
 }
 
-
 .customer-note-text {
-
-    color: #6b7280;
 
     font-size: 9px;
 
     line-height: 1.5;
 
+    color: #6f5c2b;
 }
-
 
 .total-box {
 
@@ -1673,37 +1865,31 @@ body {
     border-radius: 9px;
 
     padding: 13px;
-
 }
-
 
 .total-row {
 
     display: flex;
 
-    justify-content: space-between;
+    justify-content:
+        space-between;
 
     padding: 5px 0;
 
     font-size: 9px;
 
     color: #697180;
-
 }
-
 
 .total-row strong {
 
     color: #111827;
-
 }
-
 
 .total-row.grand {
 
     border-top:
-        1px solid
-        #f0dbe2;
+        1px solid #f0dbe2;
 
     margin-top: 6px;
 
@@ -1714,20 +1900,12 @@ body {
     font-size: 13px;
 
     font-weight: 800;
-
 }
-
 
 .total-row.grand strong {
 
     color: #ef003c;
-
 }
-
-
-/* =========================================================
-   STATUS CONTROL
-========================================================= */
 
 .status-control {
 
@@ -1736,62 +1914,52 @@ body {
     padding-top: 15px;
 
     border-top:
-        1px solid
-        #edf0f3;
+        1px solid #edf0f3;
 
     display: flex;
 
     align-items: center;
 
-    justify-content: space-between;
+    justify-content:
+        space-between;
 
     gap: 12px;
-
 }
-
 
 .status-label {
 
     font-size: 9px;
 
     font-weight: 800;
-
 }
-
 
 .status-form {
 
     display: flex;
 
     gap: 8px;
-
 }
-
 
 .status-form select {
 
     height: 37px;
 
-    min-width: 180px;
+    min-width: 200px;
 
     border:
-        1px solid
-        #dfe3e8;
+        1px solid #dfe3e8;
 
     border-radius: 7px;
 
     padding:
-        0
-        10px;
+        0 10px;
 
-    background: #ffffff;
+    background: #fff;
 
     font-size: 9px;
 
     outline: none;
-
 }
-
 
 .update-btn {
 
@@ -1803,58 +1971,65 @@ body {
 
     background: #ef003c;
 
-    color: #ffffff;
+    color: #fff;
 
     padding:
-        0
-        15px;
+        0 15px;
 
     font-size: 9px;
 
     font-weight: 800;
 
     cursor: pointer;
-
 }
-
 
 .update-btn:hover {
 
     background: #d90035;
-
 }
 
+.auto-rider-note {
 
-/* =========================================================
-   EMPTY
-========================================================= */
+    margin-top: 12px;
+
+    padding:
+        10px 12px;
+
+    border-radius: 8px;
+
+    background: #f2ecff;
+
+    color: #6843a5;
+
+    font-size: 9px;
+
+    line-height: 1.5;
+
+    font-weight: 700;
+}
 
 .empty {
 
-    background: #ffffff;
+    background: #fff;
 
     border:
-        1px solid
-        #e3e6eb;
+        1px solid #e3e6eb;
 
     border-radius: 12px;
 
     padding: 70px 20px;
 
     text-align: center;
-
 }
-
 
 .empty-icon {
 
     width: 58px;
+
     height: 58px;
 
     margin:
-        0
-        auto
-        15px;
+        0 auto 15px;
 
     background: #fff0f4;
 
@@ -1869,21 +2044,15 @@ body {
     justify-content: center;
 
     font-size: 21px;
-
 }
-
 
 .empty h2 {
 
     margin:
-        0
-        0
-        7px;
+        0 0 7px;
 
     font-size: 17px;
-
 }
-
 
 .empty p {
 
@@ -1892,13 +2061,7 @@ body {
     color: #9ca3af;
 
     font-size: 10px;
-
 }
-
-
-/* =========================================================
-   RESPONSIVE
-========================================================= */
 
 @media (max-width: 1100px) {
 
@@ -1906,20 +2069,21 @@ body {
 
         grid-template-columns:
             repeat(3, 1fr);
-
     }
 
-}
+    .order-grid {
 
+        grid-template-columns:
+            repeat(2, 1fr);
+    }
+}
 
 @media (max-width: 850px) {
 
     .sidebar {
 
         width: 70px;
-
     }
-
 
     .brand-text,
     .brand-sub,
@@ -1928,66 +2092,44 @@ body {
     .sidebar-bottom .profile-info {
 
         display: none;
-
     }
-
 
     .brand {
 
         justify-content: center;
 
         padding: 10px;
-
     }
-
 
     .nav-item {
 
         justify-content: center;
 
-        padding: 14px 5px;
-
+        padding:
+            14px 5px;
     }
-
 
     .sidebar-bottom {
 
         justify-content: center;
-
     }
-
 
     .topbar {
 
         left: 70px;
-
     }
-
 
     .main {
 
         margin-left: 70px;
-
     }
-
-
-    .order-grid {
-
-        grid-template-columns:
-            1fr 1fr;
-
-    }
-
 
     .bottom-grid {
 
         grid-template-columns:
             1fr;
-
     }
-
 }
-
 
 @media (max-width: 650px) {
 
@@ -1995,86 +2137,83 @@ body {
 
         grid-template-columns:
             1fr 1fr;
-
     }
-
 
     .content {
 
         padding:
             20px 14px 50px;
-
     }
-
 
     .order-header {
 
-        align-items: flex-start;
+        align-items:
+            flex-start;
 
-        flex-direction: column;
-
+        flex-direction:
+            column;
     }
-
 
     .order-grid {
 
         grid-template-columns:
             1fr;
-
     }
-
 
     .status-control {
 
         align-items:
             flex-start;
 
-        flex-direction: column;
-
+        flex-direction:
+            column;
     }
-
 
     .status-form {
 
         width: 100%;
-
     }
-
 
     .status-form select {
 
         flex: 1;
 
         min-width: 0;
-
     }
-
 
     .update-btn {
 
         padding:
-            0
-            12px;
-
+            0 12px;
     }
 
+    .top-user,
+    .top-role {
+
+        display: none;
+    }
 }
 
 </style>
 
 </head>
 
-
 <body>
 
-<?php include __DIR__ . '/restaurant-sidebar.php'; ?>
+<?php
+/*
+|--------------------------------------------------------------------------
+| EXISTING RESTAURANT SIDEBAR
+|--------------------------------------------------------------------------
+*/
+include __DIR__ . '/restaurant-sidebar.php';
+?>
 
 <!-- ======================================================
      TOPBAR
 ====================================================== -->
 
 <header class="topbar">
-
 
     <div>
 
@@ -2088,15 +2227,11 @@ body {
 
     </div>
 
-
     <div class="top-right">
 
         <div class="notification">
-
             <i class="far fa-bell"></i>
-
         </div>
-
 
         <div class="top-avatar">
 
@@ -2113,7 +2248,6 @@ body {
             ) ?>
 
         </div>
-
 
         <div>
 
@@ -2135,9 +2269,7 @@ body {
 
     </div>
 
-
 </header>
-
 
 <!-- ======================================================
      MAIN
@@ -2145,9 +2277,7 @@ body {
 
 <main class="main">
 
-
 <div class="content">
-
 
     <!-- PAGE HEADING -->
 
@@ -2157,16 +2287,13 @@ body {
             ORDER MANAGEMENT
         </div>
 
-
         <h1>
             Manage Orders
         </h1>
 
-
         <p>
             View customer orders, order details and update order status.
         </p>
-
 
         <div class="restaurant-chip">
 
@@ -2219,7 +2346,6 @@ body {
 
     <?php if (!$restaurant): ?>
 
-
         <div class="empty">
 
             <div class="empty-icon">
@@ -2228,45 +2354,33 @@ body {
 
             </div>
 
-
             <h2>
                 Restaurant Record Not Found
             </h2>
 
-
             <p>
-
-                Your owner account is approved, but
-                no restaurant is linked with this account.
-
+                Your owner account is approved, but no restaurant
+                is linked with this account.
             </p>
 
         </div>
 
-
     <?php else: ?>
 
 
-        <!-- ==================================================
-             STATISTICS
-        =================================================== -->
+        <!-- STATISTICS -->
 
         <section class="stats">
-
 
             <div class="stat-card">
 
                 <div class="stat-icon">
-
                     <i class="fas fa-receipt"></i>
-
                 </div>
-
 
                 <div class="stat-number">
                     <?= $totalOrders ?>
                 </div>
-
 
                 <div class="stat-label">
                     Total Orders
@@ -2278,16 +2392,12 @@ body {
             <div class="stat-card">
 
                 <div class="stat-icon">
-
                     <i class="fas fa-clock"></i>
-
                 </div>
-
 
                 <div class="stat-number">
                     <?= $pendingOrders ?>
                 </div>
-
 
                 <div class="stat-label">
                     Pending Orders
@@ -2299,16 +2409,12 @@ body {
             <div class="stat-card">
 
                 <div class="stat-icon">
-
                     <i class="fas fa-circle-check"></i>
-
                 </div>
-
 
                 <div class="stat-number">
                     <?= $confirmedOrders ?>
                 </div>
-
 
                 <div class="stat-label">
                     Confirmed Orders
@@ -2320,19 +2426,15 @@ body {
             <div class="stat-card">
 
                 <div class="stat-icon">
-
                     <i class="fas fa-fire-burner"></i>
-
                 </div>
-
 
                 <div class="stat-number">
                     <?= $preparingOrders ?>
                 </div>
 
-
                 <div class="stat-label">
-                    Preparing Orders
+                    Preparing / Assigned
                 </div>
 
             </div>
@@ -2341,22 +2443,16 @@ body {
             <div class="stat-card">
 
                 <div class="stat-icon">
-
                     <i class="fas fa-wallet"></i>
-
                 </div>
 
-
                 <div class="stat-number">
-
                     Rs.
                     <?= number_format(
                         $totalSales,
                         0
                     ) ?>
-
                 </div>
-
 
                 <div class="stat-label">
                     Total Order Value
@@ -2364,13 +2460,10 @@ body {
 
             </div>
 
-
         </section>
 
 
-        <!-- ==================================================
-             ORDERS TITLE
-        =================================================== -->
+        <!-- ORDERS TITLE -->
 
         <div class="section-header">
 
@@ -2386,7 +2479,6 @@ body {
 
             </div>
 
-
             <div class="order-count">
 
                 <?= $totalOrders ?>
@@ -2398,21 +2490,16 @@ body {
         </div>
 
 
-        <!-- ==================================================
-             ORDERS
-        =================================================== -->
+        <!-- ORDERS -->
 
         <?php if (!empty($orders)): ?>
 
-
             <?php foreach ($orders as $order): ?>
-
 
                 <?php
 
                 $orderId =
                     (int)$order['id'];
-
 
                 $currentStatus =
                     strtolower(
@@ -2420,7 +2507,6 @@ body {
                             (string)$order['order_status']
                         )
                     );
-
 
                 $customerName =
                     trim(
@@ -2430,14 +2516,10 @@ body {
                         )
                     );
 
-
                 if ($customerName === '') {
-
                     $customerName =
                         'Customer';
-
                 }
-
 
                 $orderNumber =
                     trim(
@@ -2447,14 +2529,12 @@ body {
                         )
                     );
 
-
                 $items =
                     isset(
                         $orderItems[$orderId]
                     )
                         ? $orderItems[$orderId]
                         : array();
-
 
                 $address =
                     isset(
@@ -2463,27 +2543,21 @@ body {
                         ? $orderAddresses[$orderId]
                         : null;
 
-
                 ?>
 
-
                 <article class="order-card">
-
 
                     <!-- ORDER HEADER -->
 
                     <div class="order-header">
 
-
                         <div class="order-left">
-
 
                             <div class="order-icon">
 
                                 <i class="fas fa-receipt"></i>
 
                             </div>
-
 
                             <div>
 
@@ -2497,11 +2571,9 @@ body {
 
                                 </div>
 
-
                                 <div class="order-date">
 
                                     <?php
-
                                     if (
                                         !empty(
                                             $order['created_at']
@@ -2522,13 +2594,11 @@ body {
                                         echo '-';
 
                                     }
-
                                     ?>
 
                                 </div>
 
                             </div>
-
 
                         </div>
 
@@ -2542,6 +2612,8 @@ body {
                             ) ?>"
                         >
 
+                            <i class="fas fa-circle"></i>
+
                             <?= h(
                                 orderStatusLabel(
                                     $currentStatus
@@ -2549,7 +2621,6 @@ body {
                             ) ?>
 
                         </span>
-
 
                     </div>
 
@@ -2576,7 +2647,6 @@ body {
 
                                 </div>
 
-
                                 <div class="info-main">
 
                                     <?= h(
@@ -2584,7 +2654,6 @@ body {
                                     ) ?>
 
                                 </div>
-
 
                                 <?php if (
                                     !empty(
@@ -2638,9 +2707,7 @@ body {
 
                                 </div>
 
-
                                 <?php if ($address): ?>
-
 
                                     <div class="info-main">
 
@@ -2650,7 +2717,6 @@ body {
                                         ) ?>
 
                                     </div>
-
 
                                     <div class="info-small">
 
@@ -2680,7 +2746,7 @@ body {
                                             )
                                         ): ?>
 
-                                            ,
+                                            <br>
 
                                             <?= h(
                                                 $address['city']
@@ -2688,16 +2754,30 @@ body {
 
                                         <?php endif; ?>
 
-                                    </div>
 
+                                        <?php if (
+                                            !empty(
+                                                $address['phone']
+                                            )
+                                        ): ?>
+
+                                            <br>
+
+                                            Phone:
+
+                                            <?= h(
+                                                $address['phone']
+                                            ) ?>
+
+                                        <?php endif; ?>
+
+                                    </div>
 
                                 <?php else: ?>
 
-
                                     <div class="info-small">
-                                        Address not available.
+                                        Address information not available.
                                     </div>
-
 
                                 <?php endif; ?>
 
@@ -2716,7 +2796,6 @@ body {
 
                                 </div>
 
-
                                 <div class="info-main">
 
                                     <?= h(
@@ -2731,7 +2810,6 @@ body {
                                     ) ?>
 
                                 </div>
-
 
                                 <div class="info-small">
 
@@ -2760,7 +2838,6 @@ body {
 
                         <div class="items-box">
 
-
                             <div class="items-heading">
 
                                 <i class="fas fa-utensils"></i>
@@ -2774,12 +2851,12 @@ body {
 
                             <?php if (!empty($items)): ?>
 
-
-                                <?php foreach ($items as $item): ?>
-
+                                <?php foreach (
+                                    $items
+                                    as $item
+                                ): ?>
 
                                     <div class="item-row">
-
 
                                         <div>
 
@@ -2791,7 +2868,6 @@ body {
 
                                             </div>
 
-
                                             <div class="item-meta">
 
                                                 Qty:
@@ -2800,9 +2876,7 @@ body {
                                                     $item['quantity']
                                                 ) ?>
 
-                                                ×
-
-                                                Rs.
+                                                × Rs.
 
                                                 <?= number_format(
                                                     (float)$item['item_price'],
@@ -2825,29 +2899,21 @@ body {
 
                                         </div>
 
-
                                     </div>
-
 
                                 <?php endforeach; ?>
 
-
                             <?php else: ?>
-
 
                                 <div class="item-row">
 
                                     <div class="item-meta">
-
                                         No order items found.
-
                                     </div>
 
                                 </div>
 
-
                             <?php endif; ?>
-
 
                         </div>
 
@@ -2856,16 +2922,13 @@ body {
 
                         <div class="bottom-grid">
 
-
                             <div>
-
 
                                 <?php if (
                                     !empty(
                                         $order['customer_note']
                                     )
                                 ): ?>
-
 
                                     <div class="customer-note">
 
@@ -2876,7 +2939,6 @@ body {
                                             Customer Note
 
                                         </div>
-
 
                                         <div class="customer-note-text">
 
@@ -2890,9 +2952,7 @@ body {
 
                                     </div>
 
-
                                 <?php endif; ?>
-
 
                             </div>
 
@@ -2900,7 +2960,6 @@ body {
                             <!-- TOTAL -->
 
                             <div class="total-box">
-
 
                                 <div class="total-row">
 
@@ -2981,17 +3040,47 @@ body {
 
                                 </div>
 
+                            </div>
+
+                        </div>
+
+
+                        <!-- AUTO RIDER STATUS -->
+
+                        <?php if (
+                            $currentStatus === 'rider_assigned'
+                        ): ?>
+
+                            <div class="auto-rider-note">
+
+                                <i class="fas fa-motorcycle"></i>
+
+                                Rider automatically assigned.
+                                The rider can now see the delivery
+                                request from the rider panel.
 
                             </div>
 
+                        <?php elseif (
+                            $currentStatus === 'preparing'
+                        ): ?>
 
-                        </div>
+                            <div class="auto-rider-note">
+
+                                <i class="fas fa-magnifying-glass-location"></i>
+
+                                Order is preparing.
+                                The system searches for an available
+                                rider immediately when the order is accepted.
+
+                            </div>
+
+                        <?php endif; ?>
 
 
                         <!-- STATUS -->
 
                         <div class="status-control">
-
 
                             <div class="status-label">
 
@@ -3006,7 +3095,6 @@ body {
                                 method="POST"
                                 class="status-form"
                             >
-
 
                                 <input
                                     type="hidden"
@@ -3038,7 +3126,7 @@ body {
                                             ? 'selected'
                                             : '' ?>
                                     >
-                                        Confirmed
+                                        Accept Order
                                     </option>
 
 
@@ -3049,6 +3137,36 @@ body {
                                             : '' ?>
                                     >
                                         Preparing
+                                    </option>
+
+
+                                    <option
+                                        value="rider_assigned"
+                                        <?= $currentStatus === 'rider_assigned'
+                                            ? 'selected'
+                                            : '' ?>
+                                    >
+                                        Rider Assigned
+                                    </option>
+
+
+                                    <option
+                                        value="ready_for_pickup"
+                                        <?= $currentStatus === 'ready_for_pickup'
+                                            ? 'selected'
+                                            : '' ?>
+                                    >
+                                        Ready for Pickup
+                                    </option>
+
+
+                                    <option
+                                        value="picked_up"
+                                        <?= $currentStatus === 'picked_up'
+                                            ? 'selected'
+                                            : '' ?>
+                                    >
+                                        Picked Up
                                     </option>
 
 
@@ -3106,29 +3224,22 @@ body {
 
                                 </button>
 
-
                             </form>
-
 
                         </div>
 
 
                     </div>
 
-
                 </article>
-
 
             <?php endforeach; ?>
 
-
         <?php else: ?>
-
 
             <!-- NO ORDERS -->
 
             <div class="empty">
-
 
                 <div class="empty-icon">
 
@@ -3136,33 +3247,25 @@ body {
 
                 </div>
 
-
                 <h2>
                     No Orders Yet
                 </h2>
 
-
                 <p>
-
                     Customer orders for your restaurant
                     will appear here.
-
                 </p>
 
-
             </div>
-
 
         <?php endif; ?>
 
 
     <?php endif; ?>
 
-
 </div>
 
 </main>
-
 
 </body>
 

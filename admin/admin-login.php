@@ -3,18 +3,20 @@ session_start();
 
 /*
 |--------------------------------------------------------------------------
-| ADMIN LOGIN
+| HUMSAFAR ADMIN LOGIN
 |--------------------------------------------------------------------------
-| Humsafar Food Delivery
+| Existing admin authentication preserved.
+| Credentials:
+| admin@humsafar.com
+| admin123
 |--------------------------------------------------------------------------
 */
 
-/*
-|--------------------------------------------------------------------------
-| If already logged in, go directly to admin panel
-|--------------------------------------------------------------------------
-*/
-if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+/* Already logged in */
+if (
+    isset($_SESSION['admin_logged_in']) &&
+    $_SESSION['admin_logged_in'] === true
+) {
     header("Location: admin-panel.php");
     exit;
 }
@@ -22,8 +24,6 @@ if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true
 /*
 |--------------------------------------------------------------------------
 | ADMIN CREDENTIALS
-|--------------------------------------------------------------------------
-| Change these credentials if required.
 |--------------------------------------------------------------------------
 */
 $admin_email = "admin@humsafar.com";
@@ -39,586 +39,1217 @@ $success = "";
 */
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
-    $email = isset($_POST['email']) ? trim($_POST['email']) : "";
-    $password = isset($_POST['password']) ? $_POST['password'] : "";
+    $email = trim(
+        $_POST['email'] ?? ''
+    );
 
-    if ($email === "" || $password === "") {
+    $password =
+        $_POST['password'] ?? '';
 
-        $error = "Please enter your email and password.";
+    if ($email === '' || $password === '') {
 
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error =
+            "Please enter your email and password.";
 
-        $error = "Please enter a valid email address.";
+    } elseif (
+        !filter_var(
+            $email,
+            FILTER_VALIDATE_EMAIL
+        )
+    ) {
 
-    } elseif ($email === $admin_email && $password === $admin_password) {
+        $error =
+            "Please enter a valid email address.";
+
+    } elseif (
+        $email === $admin_email &&
+        $password === $admin_password
+    ) {
 
         /*
-        |--------------------------------------------------------------
+        |--------------------------------------------------------------------------
         | Successful Login
-        |--------------------------------------------------------------
+        |--------------------------------------------------------------------------
         */
-        $_SESSION['admin_logged_in'] = true;
-        $_SESSION['admin_email'] = $admin_email;
-        $_SESSION['admin_name'] = "Humsafar Administrator";
 
-        /*
-        |--------------------------------------------------------------
-        | Regenerate session ID for security
-        |--------------------------------------------------------------
-        */
         session_regenerate_id(true);
 
-        header("Location: admin-panel.php");
+        $_SESSION['admin_logged_in'] = true;
+
+        $_SESSION['admin_email'] =
+            $admin_email;
+
+        $_SESSION['admin_name'] =
+            "Humsafar Administrator";
+
+        header(
+            "Location: admin-panel.php"
+        );
+
         exit;
 
     } else {
 
-        $error = "Invalid admin email or password.";
+        $error =
+            "Invalid admin email or password.";
     }
 }
 ?>
 
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
 
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
 
-    <title>Admin Login | Humsafar</title>
+<title>
+    Admin Login | Humsafar
+</title>
 
-    <style>
 
-        * {
-            box-sizing: border-box;
-        }
+<link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+>
 
-        html,
-        body {
-            margin: 0;
-            padding: 0;
-            min-height: 100%;
-        }
 
-        body {
-            font-family:
-                "Segoe UI",
-                Tahoma,
-                Geneva,
-                Verdana,
-                sans-serif;
+<style>
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #fff7fb 0%,
-                    #ffeaf4 50%,
-                    #fff8fb 100%
-                );
+/* =========================================================
+   RESET
+========================================================= */
 
-            color: #333;
+* {
+    box-sizing: border-box;
+}
 
-            min-height: 100vh;
 
-            display: flex;
+html,
+body {
 
-            align-items: center;
+    margin: 0;
+    padding: 0;
 
-            justify-content: center;
+    min-height: 100%;
+}
 
-            padding: 25px;
-        }
 
-        .login-wrapper {
-            width: 100%;
-            max-width: 440px;
-        }
+body {
 
-        .login-card {
-            background: #ffffff;
+    font-family:
+        "Segoe UI",
+        Tahoma,
+        Geneva,
+        Verdana,
+        sans-serif;
 
-            border: 1px solid #f1dce7;
+    background: #f7f7f9;
 
-            border-radius: 24px;
+    color: #292929;
 
-            padding: 38px 35px;
+    min-height: 100vh;
+}
 
-            box-shadow:
-                0 18px 50px
-                rgba(190, 48, 119, 0.12);
-        }
 
-        .admin-icon {
-            width: 72px;
-            height: 72px;
+/* =========================================================
+   MAIN WRAPPER
+========================================================= */
 
-            margin: 0 auto 20px;
+.page {
 
-            display: flex;
+    min-height: 100vh;
 
-            align-items: center;
+    display: flex;
 
-            justify-content: center;
+    align-items: center;
 
-            border-radius: 20px;
+    justify-content: center;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #ef5a9d,
-                    #cf327d
-                );
+    padding: 25px;
+}
 
-            color: #ffffff;
 
-            font-size: 30px;
+.login-wrapper {
 
-            box-shadow:
-                0 10px 25px
-                rgba(207, 50, 125, 0.25);
-        }
+    width: 100%;
 
-        .login-header {
-            text-align: center;
+    max-width: 1030px;
 
-            margin-bottom: 28px;
-        }
+    min-height: 620px;
 
-        .login-header h1 {
-            margin: 0 0 8px;
+    background: #fff;
 
-            color: #29232a;
+    border-radius: 24px;
 
-            font-size: 28px;
+    overflow: hidden;
 
-            font-weight: 800;
-        }
+    display: grid;
 
-        .login-header p {
-            margin: 0;
+    grid-template-columns:
+        0.95fr 1.05fr;
 
-            color: #777;
+    box-shadow:
+        0 18px 55px
+        rgba(237, 0, 56, .10);
 
-            font-size: 14px;
+    border:
+        1px solid #f0dfe4;
+}
 
-            line-height: 1.6;
-        }
 
-        .admin-badge {
-            display: inline-flex;
+/* =========================================================
+   LEFT PROMO
+========================================================= */
 
-            align-items: center;
+.promo {
 
-            justify-content: center;
+    position: relative;
 
-            gap: 6px;
+    overflow: hidden;
 
-            margin-bottom: 12px;
+    padding: 48px 42px;
 
-            padding: 7px 13px;
+    background:
+        linear-gradient(
+            145deg,
+            #ed0038 0%,
+            #d80035 55%,
+            #bf002e 100%
+        );
 
-            border-radius: 30px;
+    color: #fff;
 
-            background: #fff0f7;
+    display: flex;
 
-            color: #d33d83;
+    flex-direction: column;
 
-            font-size: 12px;
+    justify-content:
+        space-between;
+}
 
-            font-weight: 700;
-        }
 
-        .alert {
-            padding: 12px 14px;
+.promo::before {
 
-            margin-bottom: 20px;
+    content: "";
 
-            border-radius: 10px;
+    position: absolute;
 
-            font-size: 13px;
+    width: 260px;
+    height: 260px;
 
-            line-height: 1.5;
-        }
+    border-radius: 50%;
 
-        .alert-error {
-            background: #fff0f0;
+    background:
+        rgba(255,255,255,.08);
 
-            border: 1px solid #f3caca;
+    top: -80px;
+    right: -90px;
+}
 
-            color: #c62828;
-        }
 
-        .form-group {
-            margin-bottom: 18px;
-        }
+.promo::after {
 
-        .form-group label {
-            display: block;
+    content: "";
 
-            margin-bottom: 7px;
+    position: absolute;
 
-            color: #333;
+    width: 190px;
+    height: 190px;
 
-            font-size: 13px;
+    border-radius: 50%;
 
-            font-weight: 700;
-        }
+    background:
+        rgba(255,255,255,.05);
 
-        .input-wrapper {
-            position: relative;
-        }
+    bottom: -70px;
+    left: -60px;
+}
 
-        .input-wrapper i {
-            position: absolute;
 
-            left: 14px;
+.brand {
 
-            top: 50%;
+    position: relative;
 
-            transform: translateY(-50%);
+    z-index: 2;
 
-            color: #c55a8b;
+    display: flex;
 
-            font-size: 15px;
+    align-items: center;
 
-            pointer-events: none;
-        }
+    gap: 12px;
+}
 
-        .form-control {
-            width: 100%;
 
-            height: 48px;
+.brand-icon {
 
-            padding:
-                0 14px 0 42px;
+    width: 47px;
+    height: 47px;
 
-            border:
-                1px solid #e7ccd9;
+    border-radius: 13px;
 
-            border-radius: 10px;
+    background: #fff;
 
-            outline: none;
+    color: #ed0038;
 
-            background: #fff;
+    display: flex;
 
-            color: #333;
+    align-items: center;
 
-            font-size: 14px;
+    justify-content: center;
 
-            transition:
-                border-color .2s ease,
-                box-shadow .2s ease;
-        }
+    font-size: 20px;
+}
 
-        .form-control:focus {
-            border-color: #d33d83;
 
-            box-shadow:
-                0 0 0 3px
-                rgba(211, 61, 131, 0.10);
-        }
+.brand-name {
 
-        .password-toggle {
-            position: absolute;
+    font-size: 25px;
 
-            right: 13px;
+    line-height: 1;
 
-            top: 50%;
+    font-weight: 900;
+}
 
-            transform: translateY(-50%);
 
-            border: none;
+.brand-subtitle {
 
-            background: transparent;
+    margin-top: 5px;
 
-            color: #999;
+    font-size: 9px;
 
-            cursor: pointer;
+    font-weight: 800;
 
-            font-size: 14px;
+    letter-spacing: 1.1px;
 
-            padding: 5px;
-        }
+    opacity: .8;
+}
 
-        .password-toggle:hover {
-            color: #d33d83;
-        }
 
-        .login-button {
-            width: 100%;
+.promo-content {
 
-            height: 48px;
+    position: relative;
 
-            border: none;
+    z-index: 2;
+}
 
-            border-radius: 10px;
 
-            background:
-                linear-gradient(
-                    135deg,
-                    #ef5a9d,
-                    #cf327d
-                );
+.promo-badge {
 
-            color: #fff;
+    display: inline-flex;
 
-            font-size: 14px;
+    align-items: center;
 
-            font-weight: 800;
+    gap: 7px;
 
-            cursor: pointer;
+    background:
+        rgba(255,255,255,.13);
 
-            transition:
-                transform .2s ease,
-                box-shadow .2s ease;
-        }
+    border:
+        1px solid
+        rgba(255,255,255,.18);
 
-        .login-button:hover {
-            transform: translateY(-1px);
+    padding:
+        8px 12px;
 
-            box-shadow:
-                0 8px 20px
-                rgba(207, 50, 125, 0.22);
-        }
+    border-radius: 22px;
 
-        .login-button:active {
-            transform: translateY(0);
-        }
+    font-size: 10px;
 
-        .security-note {
-            margin-top: 20px;
+    font-weight: 800;
 
-            padding: 12px 14px;
+    margin-bottom: 17px;
+}
 
-            border-radius: 10px;
 
-            background: #faf7f9;
+.promo h1 {
 
-            border: 1px solid #eee1e8;
+    margin:
+        0 0 13px;
 
-            color: #777;
+    font-size: 37px;
 
-            text-align: center;
+    line-height: 1.08;
 
-            font-size: 11px;
+    font-weight: 900;
+}
 
-            line-height: 1.5;
-        }
 
-        .back-link {
-            display: block;
+.promo h1 span {
 
-            margin-top: 20px;
+    color: #ffd900;
+}
 
-            text-align: center;
 
-            color: #d33d83;
+.promo-text {
 
-            text-decoration: none;
+    margin: 0;
 
-            font-size: 13px;
+    max-width: 390px;
 
-            font-weight: 700;
-        }
+    color:
+        rgba(255,255,255,.85);
 
-        .back-link:hover {
-            color: #b82b6b;
+    font-size: 13px;
 
-            text-decoration: underline;
-        }
+    line-height: 1.7;
+}
 
-        .footer-text {
-            margin-top: 18px;
 
-            text-align: center;
+.features {
 
-            color: #999;
+    margin-top: 27px;
 
-            font-size: 11px;
-        }
+    display: grid;
 
-        @media (max-width: 500px) {
+    gap: 12px;
+}
 
-            body {
-                padding: 15px;
-            }
 
-            .login-card {
-                padding: 30px 22px;
+.feature {
 
-                border-radius: 20px;
-            }
+    display: flex;
 
-            .admin-icon {
-                width: 64px;
-                height: 64px;
+    align-items: center;
 
-                font-size: 26px;
-            }
+    gap: 10px;
+}
 
-            .login-header h1 {
-                font-size: 24px;
-            }
 
-        }
+.feature-icon {
 
-    </style>
+    width: 31px;
+    height: 31px;
 
-    <!-- Font Awesome -->
-    <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-    >
+    flex-shrink: 0;
+
+    border-radius: 8px;
+
+    background:
+        rgba(255,255,255,.14);
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 12px;
+}
+
+
+.feature-text {
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    color:
+        rgba(255,255,255,.9);
+}
+
+
+.promo-footer {
+
+    position: relative;
+
+    z-index: 2;
+
+    color:
+        rgba(255,255,255,.65);
+
+    font-size: 9px;
+
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   RIGHT LOGIN
+========================================================= */
+
+.form-side {
+
+    padding: 48px 52px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    justify-content: center;
+}
+
+
+.form-top {
+
+    margin-bottom: 28px;
+}
+
+
+.form-badge {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    background: #fff0f4;
+
+    color: #ed0038;
+
+    padding:
+        7px 11px;
+
+    border-radius: 20px;
+
+    font-size: 9px;
+
+    font-weight: 800;
+
+    margin-bottom: 13px;
+}
+
+
+.form-top h2 {
+
+    margin:
+        0 0 7px;
+
+    font-size: 28px;
+
+    font-weight: 900;
+
+    color: #292929;
+}
+
+
+.form-top p {
+
+    margin: 0;
+
+    color: #8a8a8a;
+
+    font-size: 11px;
+
+    line-height: 1.6;
+}
+
+
+/* =========================================================
+   ALERT
+========================================================= */
+
+.alert {
+
+    padding:
+        11px 13px;
+
+    margin-bottom: 18px;
+
+    border-radius: 9px;
+
+    font-size: 11px;
+
+    line-height: 1.5;
+}
+
+
+.alert-error {
+
+    background: #fff0f1;
+
+    border:
+        1px solid #ffd0d6;
+
+    color: #c82333;
+}
+
+
+/* =========================================================
+   FORM
+========================================================= */
+
+.form-group {
+
+    margin-bottom: 17px;
+}
+
+
+.form-group label {
+
+    display: block;
+
+    margin-bottom: 7px;
+
+    color: #333;
+
+    font-size: 11px;
+
+    font-weight: 800;
+}
+
+
+.input-wrap {
+
+    position: relative;
+}
+
+
+.input-wrap > i {
+
+    position: absolute;
+
+    left: 13px;
+
+    top: 50%;
+
+    transform:
+        translateY(-50%);
+
+    color: #ed0038;
+
+    font-size: 13px;
+
+    pointer-events: none;
+}
+
+
+.form-control {
+
+    width: 100%;
+
+    height: 46px;
+
+    padding:
+        0 42px 0 39px;
+
+    border:
+        1px solid #e2d7dc;
+
+    border-radius: 9px;
+
+    background: #fff;
+
+    outline: none;
+
+    color: #333;
+
+    font-size: 12px;
+
+    transition:
+        border .2s ease,
+        box-shadow .2s ease;
+}
+
+
+.form-control:focus {
+
+    border-color: #ed0038;
+
+    box-shadow:
+        0 0 0 3px
+        rgba(237,0,56,.08);
+}
+
+
+.password-toggle {
+
+    position: absolute;
+
+    right: 11px;
+
+    top: 50%;
+
+    transform:
+        translateY(-50%);
+
+    border: 0;
+
+    background: transparent;
+
+    color: #999;
+
+    cursor: pointer;
+
+    font-size: 12px;
+
+    padding: 5px;
+}
+
+
+.password-toggle:hover {
+
+    color: #ed0038;
+}
+
+
+/* =========================================================
+   LOGIN BUTTON
+========================================================= */
+
+.login-btn {
+
+    width: 100%;
+
+    height: 47px;
+
+    border: 0;
+
+    border-radius: 9px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #ed0038,
+            #c90031
+        );
+
+    color: #fff;
+
+    font-size: 12px;
+
+    font-weight: 800;
+
+    cursor: pointer;
+
+    box-shadow:
+        0 8px 18px
+        rgba(237,0,56,.18);
+
+    transition:
+        transform .18s ease,
+        box-shadow .18s ease;
+}
+
+
+.login-btn:hover {
+
+    transform:
+        translateY(-1px);
+
+    box-shadow:
+        0 10px 23px
+        rgba(237,0,56,.23);
+}
+
+
+.login-btn:active {
+
+    transform:
+        translateY(0);
+}
+
+
+/* =========================================================
+   SECURITY
+========================================================= */
+
+.security {
+
+    margin-top: 17px;
+
+    padding:
+        11px 12px;
+
+    border-radius: 9px;
+
+    background: #fafafa;
+
+    border:
+        1px solid #eeeeee;
+
+    color: #888;
+
+    text-align: center;
+
+    font-size: 9px;
+
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   BACK
+========================================================= */
+
+.back-link {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 6px;
+
+    width: 100%;
+
+    margin-top: 17px;
+
+    color: #ed0038;
+
+    text-decoration: none;
+
+    font-size: 10px;
+
+    font-weight: 800;
+}
+
+
+.back-link:hover {
+
+    text-decoration: underline;
+}
+
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+.copy {
+
+    margin-top: 19px;
+
+    text-align: center;
+
+    color: #aaa;
+
+    font-size: 8px;
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 820px) {
+
+    .page {
+
+        padding: 15px;
+    }
+
+
+    .login-wrapper {
+
+        min-height: auto;
+
+        grid-template-columns: 1fr;
+
+        max-width: 500px;
+    }
+
+
+    .promo {
+
+        padding: 30px 26px;
+
+        min-height: 280px;
+    }
+
+
+    .promo h1 {
+
+        font-size: 28px;
+    }
+
+
+    .promo-text {
+
+        font-size: 11px;
+    }
+
+
+    .features {
+
+        display: none;
+    }
+
+
+    .form-side {
+
+        padding:
+            32px 26px;
+    }
+
+}
+
+
+@media (max-width: 430px) {
+
+    .promo {
+
+        min-height: 240px;
+    }
+
+
+    .brand-name {
+
+        font-size: 22px;
+    }
+
+
+    .promo h1 {
+
+        font-size: 24px;
+    }
+
+
+    .form-top h2 {
+
+        font-size: 24px;
+    }
+
+}
+
+</style>
 
 </head>
 
+
 <body>
 
-<div class="login-wrapper">
 
-    <div class="login-card">
-
-        <div class="admin-icon">
-            <i class="fa-solid fa-shield-halved"></i>
-        </div>
-
-        <div class="login-header">
-
-            <div class="admin-badge">
-                <i class="fa-solid fa-lock"></i>
-                Administrator Access
-            </div>
-
-            <h1>Admin Login</h1>
-
-            <p>
-                Login to manage Humsafar restaurants,
-                payments and owner accounts.
-            </p>
-
-        </div>
+<div class="page">
 
 
-        <?php if ($error !== ""): ?>
-
-            <div class="alert alert-error">
-                <i class="fa-solid fa-circle-exclamation"></i>
-                <?php echo htmlspecialchars($error); ?>
-            </div>
-
-        <?php endif; ?>
+    <div class="login-wrapper">
 
 
-        <form
-            method="POST"
-            action=""
-            autocomplete="off"
-        >
+        <!-- =================================================
+             LEFT PROMOTIONAL AREA
+        ================================================== -->
 
-            <div class="form-group">
+        <section class="promo">
 
-                <label for="email">
-                    Admin Email
-                </label>
 
-                <div class="input-wrapper">
+            <div class="brand">
 
-                    <i class="fa-solid fa-envelope"></i>
+                <div class="brand-icon">
 
-                    <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        class="form-control"
-                        placeholder="Enter admin email"
-                        value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>"
-                        required
-                    >
+                    <i class="fas fa-shield-halved"></i>
+
+                </div>
+
+
+                <div>
+
+                    <div class="brand-name">
+                        Humsafar
+                    </div>
+
+                    <div class="brand-subtitle">
+                        FOOD DELIVERY
+                    </div>
 
                 </div>
 
             </div>
 
 
-            <div class="form-group">
+            <div class="promo-content">
 
-                <label for="password">
-                    Password
-                </label>
 
-                <div class="input-wrapper">
+                <div class="promo-badge">
 
-                    <i class="fa-solid fa-lock"></i>
+                    <i class="fas fa-lock"></i>
 
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        id="password"
-                        class="form-control"
-                        placeholder="Enter admin password"
-                        required
-                    >
-
-                    <button
-                        type="button"
-                        class="password-toggle"
-                        onclick="togglePassword()"
-                        aria-label="Show password"
-                    >
-                        <i
-                            class="fa-solid fa-eye"
-                            id="passwordIcon"
-                        ></i>
-                    </button>
+                    ADMINISTRATOR ACCESS
 
                 </div>
+
+
+                <h1>
+
+                    Control
+                    <span>Everything.</span>
+
+                </h1>
+
+
+                <p class="promo-text">
+
+                    Manage Humsafar from one secure admin panel.
+                    Control restaurants, riders, users, orders
+                    and the complete food delivery operation.
+
+                </p>
+
+
+                <div class="features">
+
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+
+                            <i class="fas fa-store"></i>
+
+                        </div>
+
+                        <div class="feature-text">
+                            Manage Restaurants & Owners
+                        </div>
+
+                    </div>
+
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+
+                            <i class="fas fa-motorcycle"></i>
+
+                        </div>
+
+                        <div class="feature-text">
+                            Approve & Manage Riders
+                        </div>
+
+                    </div>
+
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+
+                            <i class="fas fa-chart-line"></i>
+
+                        </div>
+
+                        <div class="feature-text">
+                            Monitor Platform Activity
+                        </div>
+
+                    </div>
+
+
+                </div>
+
 
             </div>
 
 
-            <button
-                type="submit"
-                class="login-button"
+            <div class="promo-footer">
+
+                <i class="fas fa-shield-halved"></i>
+
+                Authorized Humsafar administrators only.
+
+            </div>
+
+
+        </section>
+
+
+        <!-- =================================================
+             LOGIN FORM
+        ================================================== -->
+
+        <section class="form-side">
+
+
+            <div class="form-top">
+
+
+                <div class="form-badge">
+
+                    <i class="fas fa-user-shield"></i>
+
+                    ADMIN PORTAL
+
+                </div>
+
+
+                <h2>
+                    Admin Login
+                </h2>
+
+
+                <p>
+                    Sign in to access the Humsafar administration panel.
+                </p>
+
+            </div>
+
+
+            <?php if ($error !== ""): ?>
+
+                <div class="alert alert-error">
+
+                    <i class="fas fa-circle-exclamation"></i>
+
+                    &nbsp;
+
+                    <?= htmlspecialchars(
+                        $error,
+                        ENT_QUOTES,
+                        'UTF-8'
+                    ) ?>
+
+                </div>
+
+            <?php endif; ?>
+
+
+            <form
+                method="POST"
+                action=""
+                autocomplete="off"
             >
 
-                <i class="fa-solid fa-right-to-bracket"></i>
 
-                &nbsp;
+                <!-- EMAIL -->
 
-                Login to Admin Panel
-
-            </button>
-
-        </form>
+                <div class="form-group">
 
 
-        <div class="security-note">
-
-            <i class="fa-solid fa-shield-halved"></i>
-
-            This area is restricted to authorized
-            Humsafar administrators only.
-
-        </div>
+                    <label for="email">
+                        Admin Email
+                    </label>
 
 
-        <a
-            href="index.php"
-            class="back-link"
-        >
-            <i class="fa-solid fa-arrow-left"></i>
-            Back to Humsafar
-        </a>
-
-    </div>
+                    <div class="input-wrap">
 
 
-    <div class="footer-text">
+                        <i class="fas fa-envelope"></i>
 
-        © <?php echo date("Y"); ?> Humsafar Food Delivery.
-        All rights reserved.
+
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            class="form-control"
+                            placeholder="Enter admin email"
+                            value="<?= isset($_POST['email'])
+                                ? htmlspecialchars(
+                                    $_POST['email'],
+                                    ENT_QUOTES,
+                                    'UTF-8'
+                                )
+                                : '' ?>"
+                            autocomplete="username"
+                            required
+                        >
+
+
+                    </div>
+
+                </div>
+
+
+                <!-- PASSWORD -->
+
+                <div class="form-group">
+
+
+                    <label for="password">
+                        Password
+                    </label>
+
+
+                    <div class="input-wrap">
+
+
+                        <i class="fas fa-lock"></i>
+
+
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="form-control"
+                            placeholder="Enter admin password"
+                            autocomplete="current-password"
+                            required
+                        >
+
+
+                        <button
+                            type="button"
+                            class="password-toggle"
+                            id="passwordToggle"
+                            aria-label="Show password"
+                        >
+
+                            <i
+                                class="fas fa-eye"
+                                id="passwordIcon"
+                            ></i>
+
+                        </button>
+
+
+                    </div>
+
+                </div>
+
+
+                <!-- LOGIN -->
+
+                <button
+                    type="submit"
+                    class="login-btn"
+                >
+
+                    <i class="fas fa-right-to-bracket"></i>
+
+                    &nbsp;
+
+                    Login to Admin Panel
+
+                </button>
+
+
+            </form>
+
+
+            <!-- SECURITY -->
+
+            <div class="security">
+
+                <i class="fas fa-shield-halved"></i>
+
+                This area is restricted to authorized
+                Humsafar administrators only.
+
+            </div>
+
+
+            <!-- BACK -->
+
+            <a
+                href="../index.php"
+                class="back-link"
+            >
+
+                <i class="fas fa-arrow-left"></i>
+
+                Back to Humsafar
+
+            </a>
+
+
+            <div class="copy">
+
+                © <?= date("Y") ?>
+
+                Humsafar Food Delivery.
+
+                All rights reserved.
+
+            </div>
+
+
+        </section>
+
 
     </div>
 
@@ -627,34 +1258,88 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 <script>
 
-function togglePassword() {
+/*
+|--------------------------------------------------------------------------
+| Password Toggle
+|--------------------------------------------------------------------------
+*/
 
-    const passwordInput =
-        document.getElementById("password");
+const passwordInput =
+    document.getElementById(
+        'password'
+    );
 
-    const passwordIcon =
-        document.getElementById("passwordIcon");
 
-    if (passwordInput.type === "password") {
+const passwordToggle =
+    document.getElementById(
+        'passwordToggle'
+    );
 
-        passwordInput.type = "text";
 
-        passwordIcon.classList.remove("fa-eye");
+const passwordIcon =
+    document.getElementById(
+        'passwordIcon'
+    );
 
-        passwordIcon.classList.add("fa-eye-slash");
 
-    } else {
+if (
+    passwordInput &&
+    passwordToggle &&
+    passwordIcon
+) {
 
-        passwordInput.type = "password";
+    passwordToggle.addEventListener(
+        'click',
+        function () {
 
-        passwordIcon.classList.remove("fa-eye-slash");
+            if (
+                passwordInput.type ===
+                'password'
+            ) {
 
-        passwordIcon.classList.add("fa-eye");
+                passwordInput.type =
+                    'text';
 
-    }
+                passwordIcon.classList.remove(
+                    'fa-eye'
+                );
+
+                passwordIcon.classList.add(
+                    'fa-eye-slash'
+                );
+
+                passwordToggle.setAttribute(
+                    'aria-label',
+                    'Hide password'
+                );
+
+            } else {
+
+                passwordInput.type =
+                    'password';
+
+                passwordIcon.classList.remove(
+                    'fa-eye-slash'
+                );
+
+                passwordIcon.classList.add(
+                    'fa-eye'
+                );
+
+                passwordToggle.setAttribute(
+                    'aria-label',
+                    'Show password'
+                );
+            }
+
+        }
+    );
+
 }
 
 </script>
 
+
 </body>
+
 </html>
