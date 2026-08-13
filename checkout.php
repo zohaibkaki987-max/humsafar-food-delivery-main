@@ -1,150 +1,177 @@
 <?php
 
-require_once 'includes/config.php';
-require_once 'includes/session.php';
+/*
+|--------------------------------------------------------------------------
+| HUMSAFAR FOOD DELIVERY
+| CUSTOMER CHECKOUT
+|--------------------------------------------------------------------------
+*/
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+/*
+|--------------------------------------------------------------------------
+| VERIFIED PROJECT INCLUDES
+|--------------------------------------------------------------------------
+| Same pattern used by my-account.php
+*/
+
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/customer-header.php';
 
 
-/* =====================================================
-   LOGIN CHECK
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| LOGIN
+|--------------------------------------------------------------------------
+*/
 
-if (!isset($_SESSION['user_id'])) {
-
-    header("Location: login.php");
+if (
+    !isset($_SESSION['user_id']) ||
+    (int)$_SESSION['user_id'] <= 0
+) {
+    header('Location: login.php');
     exit;
 }
 
 
-$user_id = (int) $_SESSION['user_id'];
+$userId =
+    (int)$_SESSION['user_id'];
 
 
-/* =====================================================
-   HELPER
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| HELPER
+|--------------------------------------------------------------------------
+*/
 
-if (!function_exists('h')) {
-
-    function h($value)
-    {
-        return htmlspecialchars(
-            (string) $value,
-            ENT_QUOTES,
-            'UTF-8'
-        );
-    }
+function checkout_h($value)
+{
+    return htmlspecialchars(
+        (string)$value,
+        ENT_QUOTES,
+        'UTF-8'
+    );
 }
 
 
-/* =====================================================
-   SUCCESS STATE
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| IMAGE HELPERS
+|--------------------------------------------------------------------------
+| Same paths used by cart.php
+|--------------------------------------------------------------------------
+*/
 
-$orderSuccess = false;
-
-$successOrderNumber = '';
-
-$successOrderId = 0;
-
-
-/* =====================================================
-   ERROR
-===================================================== */
-
-$errorMessage = '';
-
-
-/* =====================================================
-   PAYMENT FROM CART
-===================================================== */
-
-$paymentFromCart =
-    isset($_GET['payment'])
-    ? strtolower(
+function checkoutRestaurantImage($image)
+{
+    $image =
         trim(
-            $_GET['payment']
+            (string)$image
+        );
+
+    if ($image === '') {
+        return '';
+    }
+
+    if (
+        preg_match(
+            '/^(https?:\/\/|data:|\/)/i',
+            $image
         )
-    )
-    : 'cod';
+    ) {
+        return $image;
+    }
 
+    if (
+        strpos(
+            $image,
+            'assets/'
+        ) === 0
+    ) {
+        return $image;
+    }
 
-if (
-    $paymentFromCart !== 'cod'
-    &&
-    $paymentFromCart !== 'card'
-) {
-
-    $paymentFromCart = 'cod';
+    return
+        'assets/images/restaurants/' .
+        basename($image);
 }
 
 
-/* =====================================================
-   ADDRESS FROM CART
-===================================================== */
+function checkoutMenuImage($image)
+{
+    $image =
+        trim(
+            (string)$image
+        );
 
-$addressFromCart =
-    isset($_GET['address'])
-    ? trim(
-        $_GET['address']
-    )
-    : '';
+    if ($image === '') {
+        return '';
+    }
+
+    if (
+        preg_match(
+            '/^(https?:\/\/|data:|\/)/i',
+            $image
+        )
+    ) {
+        return $image;
+    }
+
+    if (
+        strpos(
+            $image,
+            'assets/'
+        ) === 0
+    ) {
+        return $image;
+    }
+
+    return
+        'assets/images/menu/' .
+        basename($image);
+}
 
 
-/* =====================================================
-   CART DATA
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| GET CART
+|--------------------------------------------------------------------------
+| Same query structure as cart.php
+|--------------------------------------------------------------------------
+*/
 
 $cartItems = [];
-
-$totalItems = 0;
-
-$subTotal = 0;
-
-$deliveryFee = 0;
-
-$grandTotal = 0;
-
-$restaurantID = 0;
-
-$restaurantName = '';
-
-$restaurantImage = '';
-
-$deliveryTime = '';
 
 
 $cartSql = "
     SELECT
 
-        cart.id AS cart_id,
-        cart.quantity,
+        c.id AS cart_id,
+        c.menu_item_id,
+        c.quantity,
 
-        menu_items.id AS menu_id,
-        menu_items.restaurant_id,
-        menu_items.name AS item_name,
-        menu_items.description AS item_description,
-        menu_items.price AS item_price,
-        menu_items.image AS item_image,
+        m.name AS item_name,
+        m.description AS item_description,
+        m.price AS item_price,
+        m.image AS item_image,
+        m.restaurant_id,
 
-        restaurants.name AS restaurant_name,
-        restaurants.image AS restaurant_image,
-        restaurants.delivery_time,
-        restaurants.delivery_fee
+        r.name AS restaurant_name,
+        r.image AS restaurant_image,
+        r.address AS restaurant_address,
+        r.delivery_time,
+        r.delivery_fee
 
-    FROM cart
+    FROM cart c
 
-    INNER JOIN menu_items
-        ON cart.menu_item_id = menu_items.id
+    INNER JOIN menu_items m
+        ON c.menu_item_id = m.id
 
-    INNER JOIN restaurants
-        ON menu_items.restaurant_id = restaurants.id
+    INNER JOIN restaurants r
+        ON m.restaurant_id = r.id
 
-    WHERE cart.user_id = ?
+    WHERE c.user_id = ?
 
-    ORDER BY cart.id DESC
+    ORDER BY c.id ASC
 ";
 
 
@@ -157,16 +184,16 @@ $cartStmt =
 if (!$cartStmt) {
 
     die(
-        "Cart query error: "
-        .
+        'Unable to load cart: ' .
         $conn->error
     );
+
 }
 
 
 $cartStmt->bind_param(
     "i",
-    $user_id
+    $userId
 );
 
 
@@ -182,75 +209,24 @@ while (
     $cartResult->fetch_assoc()
 ) {
 
+    $row['cart_id'] =
+        (int)$row['cart_id'];
 
-    if (
-        $restaurantID === 0
-    ) {
-
-        $restaurantID =
-            (int)
-            $row['restaurant_id'];
-
-        $restaurantName =
-            $row['restaurant_name']
-            ??
-            '';
-
-        $restaurantImage =
-            $row['restaurant_image']
-            ??
-            '';
-
-        $deliveryTime =
-            $row['delivery_time']
-            ??
-            '';
-
-        $deliveryFee =
-            (float)
-            (
-                $row['delivery_fee']
-                ??
-                0
-            );
-    }
-
-
-    $quantity =
-        (int)
-        $row['quantity'];
-
-
-    $itemPrice =
-        (float)
-        $row['item_price'];
-
-
-    $itemSubtotal =
-        $itemPrice
-        *
-        $quantity;
-
+    $row['menu_item_id'] =
+        (int)$row['menu_item_id'];
 
     $row['quantity'] =
-        $quantity;
-
+        max(
+            1,
+            (int)$row['quantity']
+        );
 
     $row['item_price'] =
-        $itemPrice;
-
+        (float)$row['item_price'];
 
     $row['item_subtotal'] =
-        $itemSubtotal;
-
-
-    $totalItems +=
-        $quantity;
-
-
-    $subTotal +=
-        $itemSubtotal;
-
+        $row['item_price'] *
+        $row['quantity'];
 
     $cartItems[] =
         $row;
@@ -260,52 +236,178 @@ while (
 $cartStmt->close();
 
 
-/* =====================================================
-   EMPTY CART
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| EMPTY CART
+|--------------------------------------------------------------------------
+*/
 
 if (
     empty($cartItems)
-    &&
-    !isset($_GET['success'])
 ) {
 
-    header("Location: cart.php");
+    header(
+        'Location: cart.php'
+    );
+
     exit;
 }
 
 
-/* =====================================================
-   TOTAL
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT CHECK
+|--------------------------------------------------------------------------
+*/
 
-$grandTotal =
-    $subTotal
-    +
-    $deliveryFee;
+$restaurantIds = [];
 
 
-/* =====================================================
-   SAVED ADDRESSES
-===================================================== */
+foreach (
+    $cartItems as $item
+) {
+
+    $restaurantIds[] =
+        (int)$item[
+            'restaurant_id'
+        ];
+}
+
+
+$restaurantIds =
+    array_values(
+        array_unique(
+            $restaurantIds
+        )
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| SAME RESTAURANT ONLY
+|--------------------------------------------------------------------------
+| Existing checkout follows this rule.
+|--------------------------------------------------------------------------
+*/
+
+if (
+    count($restaurantIds) !== 1
+) {
+
+    die(
+        'Your cart contains items from multiple restaurants. ' .
+        'Please keep items from one restaurant in the cart.'
+    );
+}
+
+
+$restaurantId =
+    (int)$restaurantIds[0];
+
+
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT INFORMATION
+|--------------------------------------------------------------------------
+*/
+
+$firstItem =
+    $cartItems[0];
+
+
+$restaurantName =
+    $firstItem[
+        'restaurant_name'
+    ] ?? '';
+
+
+$restaurantImage =
+    $firstItem[
+        'restaurant_image'
+    ] ?? '';
+
+
+$restaurantAddress =
+    $firstItem[
+        'restaurant_address'
+    ] ?? '';
+
+
+$deliveryTime =
+    $firstItem[
+        'delivery_time'
+    ] ?? '';
+
+
+$deliveryFee =
+    (float)(
+        $firstItem[
+            'delivery_fee'
+        ] ?? 0
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| TOTALS
+|--------------------------------------------------------------------------
+*/
+
+$subtotal = 0;
+
+$totalItems = 0;
+
+
+foreach (
+    $cartItems as $item
+) {
+
+    $subtotal +=
+        (float)$item[
+            'item_subtotal'
+        ];
+
+    $totalItems +=
+        (int)$item[
+            'quantity'
+        ];
+}
+
+
+$discount = 0;
+
+
+$total =
+    $subtotal +
+    $deliveryFee -
+    $discount;
+
+
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER ADDRESSES
+|--------------------------------------------------------------------------
+| EXACTLY the working structure used by cart.php
+|--------------------------------------------------------------------------
+*/
 
 $addresses = [];
 
 
 $addressSql = "
+
     SELECT
 
         id,
+        user_id,
         address_title,
-        full_name,
-        phone,
-        address,
-        area,
+        address_line,
         city,
-        delivery_instructions,
-        latitude,
-        longitude,
-        is_default
+        area,
+        phone,
+        is_default,
+        created_at,
+        updated_at
 
     FROM customer_addresses
 
@@ -323,378 +425,555 @@ $addressStmt =
     );
 
 
-if ($addressStmt) {
+if (!$addressStmt) {
 
-    $addressStmt->bind_param(
-        "i",
-        $user_id
+    die(
+        'Unable to load addresses: ' .
+        $conn->error
     );
 
-
-    $addressStmt->execute();
-
-
-    $addressResult =
-        $addressStmt->get_result();
-
-
-    while (
-        $address =
-        $addressResult->fetch_assoc()
-    ) {
-
-        $addresses[] =
-            $address;
-    }
-
-
-    $addressStmt->close();
 }
 
 
-/* =====================================================
-   SELECTED ADDRESS
-===================================================== */
+$addressStmt->bind_param(
+    "i",
+    $userId
+);
+
+
+$addressStmt->execute();
+
+
+$addressResult =
+    $addressStmt->get_result();
+
+
+while (
+    $addressRow =
+    $addressResult->fetch_assoc()
+) {
+
+    $addresses[] =
+        $addressRow;
+}
+
+
+$addressStmt->close();
+
+
+/*
+|--------------------------------------------------------------------------
+| SELECTED ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 $selectedAddressId = 0;
 
 
-/* =====================================================
-   FIRST: ADDRESS SENT FROM CART
-===================================================== */
-
-if (
-    $addressFromCart !== ''
-) {
-
-
-    foreach (
-        $addresses
-        as $address
-    ) {
-
-
-        $fullAddress =
-            trim(
-                $address['address']
-            );
-
-
-        if (
-            !empty(
-                $address['area']
-            )
-        ) {
-
-            $fullAddress .=
-                ', '
-                .
-                $address['area'];
-        }
-
-
-        if (
-            !empty(
-                $address['city']
-            )
-        ) {
-
-            $fullAddress .=
-                ', '
-                .
-                $address['city'];
-        }
-
-
-        if (
-            !empty(
-                $address['phone']
-            )
-        ) {
-
-            $fullAddress .=
-                ' | '
-                .
-                $address['phone'];
-        }
-
-
-        if (
-            strcasecmp(
-                $fullAddress,
-                $addressFromCart
-            ) === 0
-        ) {
-
-            $selectedAddressId =
-                (int)
-                $address['id'];
-
-            break;
-        }
-    }
-}
-
-
-/* =====================================================
-   SECOND: DEFAULT ADDRESS
-===================================================== */
-
-if (
-    $selectedAddressId === 0
-) {
-
-
-    foreach (
-        $addresses
-        as $address
-    ) {
-
-        if (
-            (int)
-            $address['is_default']
-            ===
-            1
-        ) {
-
-            $selectedAddressId =
-                (int)
-                $address['id'];
-
-            break;
-        }
-    }
-}
-
-
-/* =====================================================
-   SUCCESS PAGE
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| ADDRESS FROM CART / URL
+|--------------------------------------------------------------------------
+*/
 
 if (
     isset(
-        $_GET['success']
+        $_GET['address_id']
     )
     &&
-    $_GET['success'] === '1'
+    (int)$_GET['address_id'] > 0
 ) {
 
-    $orderSuccess = true;
-
-    $successOrderNumber =
-        isset(
-            $_GET['order']
-        )
-        ?
-        trim(
-            $_GET['order']
-        )
-        :
-        '';
-
-    $successOrderId =
-        isset(
-            $_GET['order_id']
-        )
-        ?
-        (int)
-        $_GET['order_id']
-        :
-        0;
+    $selectedAddressId =
+        (int)$_GET['address_id'];
 }
 
 
-/* =====================================================
-   PLACE ORDER
-===================================================== */
+if (
+    isset(
+        $_POST['address_id']
+    )
+    &&
+    (int)$_POST['address_id'] > 0
+) {
+
+    $selectedAddressId =
+        (int)$_POST['address_id'];
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| VERIFY SELECTED ADDRESS
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $selectedAddressId > 0
+) {
+
+    $addressExists = false;
+
+
+    foreach (
+        $addresses as $address
+    ) {
+
+        if (
+            (int)$address['id']
+            ===
+            $selectedAddressId
+        ) {
+
+            $addressExists = true;
+
+            break;
+        }
+    }
+
+
+    if (
+        !$addressExists
+    ) {
+
+        $selectedAddressId = 0;
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DEFAULT ADDRESS
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $selectedAddressId <= 0
+) {
+
+    foreach (
+        $addresses as $address
+    ) {
+
+        if (
+            (int)$address[
+                'is_default'
+            ] === 1
+        ) {
+
+            $selectedAddressId =
+                (int)$address['id'];
+
+            break;
+        }
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FIRST ADDRESS FALLBACK
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $selectedAddressId <= 0
+    &&
+    !empty($addresses)
+) {
+
+    $selectedAddressId =
+        (int)$addresses[0]['id'];
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| PAYMENT METHOD
+|--------------------------------------------------------------------------
+| Same values used by existing checkout flow.
+|--------------------------------------------------------------------------
+*/
+
+$paymentMethod =
+    'cash_on_delivery';
+
+
+if (
+    isset(
+        $_POST['payment_method']
+    )
+) {
+
+    $paymentMethod =
+        trim(
+            $_POST[
+                'payment_method'
+            ]
+        );
+}
+
+
+$allowedPayments = [
+
+    'cash_on_delivery',
+    'card',
+    'online'
+
+];
+
+
+if (
+    !in_array(
+        $paymentMethod,
+        $allowedPayments,
+        true
+    )
+) {
+
+    $paymentMethod =
+        'cash_on_delivery';
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ORDER ERROR
+|--------------------------------------------------------------------------
+*/
+
+$orderError = '';
+
+
+/*
+|--------------------------------------------------------------------------
+| PLACE ORDER
+|--------------------------------------------------------------------------
+*/
 
 if (
     $_SERVER['REQUEST_METHOD']
     ===
     'POST'
+    &&
+    isset(
+        $_POST['place_order']
+    )
 ) {
-
 
     $selectedAddressId =
         isset(
             $_POST['address_id']
         )
         ?
-        (int)
-        $_POST['address_id']
+        (int)$_POST['address_id']
         :
         0;
 
 
-    $selectedPayment =
+    $paymentMethod =
         isset(
             $_POST['payment_method']
         )
         ?
-        strtolower(
-            trim(
-                $_POST['payment_method']
-            )
+        trim(
+            $_POST[
+                'payment_method'
+            ]
+        )
+        :
+        'cash_on_delivery';
+
+
+    $customerNote =
+        isset(
+            $_POST['customer_note']
+        )
+        ?
+        trim(
+            $_POST[
+                'customer_note'
+            ]
         )
         :
         '';
 
 
-    /* =================================================
-       VALIDATE ADDRESS
-    ================================================= */
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE PAYMENT
+    |--------------------------------------------------------------------------
+    */
 
     if (
-        $selectedAddressId <= 0
-    ) {
-
-        $errorMessage =
-            "Please select a delivery address.";
-    }
-
-
-    /* =================================================
-       VALIDATE PAYMENT
-    ================================================= */
-
-    if (
-        $errorMessage === ''
-        &&
-        (
-            $selectedPayment !== 'cod'
-            &&
-            $selectedPayment !== 'card'
+        !in_array(
+            $paymentMethod,
+            $allowedPayments,
+            true
         )
     ) {
 
-        $errorMessage =
-            "Please select a payment method.";
+        $orderError =
+            'Please select a valid payment method.';
     }
 
 
-    /* =================================================
-       VERIFY ADDRESS
-    ================================================= */
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE ADDRESS
+    |--------------------------------------------------------------------------
+    */
 
     if (
-        $errorMessage === ''
+        $orderError === ''
     ) {
 
-
-        $verifyAddressSql = "
-            SELECT id
-
-            FROM customer_addresses
-
-            WHERE id = ?
-
-            AND user_id = ?
-
-            LIMIT 1
-        ";
-
-
-        $verifyAddressStmt =
-            $conn->prepare(
-                $verifyAddressSql
-            );
-
-
         if (
-            !$verifyAddressStmt
+            $selectedAddressId <= 0
         ) {
 
-            $errorMessage =
-                "Unable to verify delivery address.";
+            $orderError =
+                'Please select a delivery address.';
 
         } else {
 
+            $verifyAddress =
+                $conn->prepare("
 
-            $verifyAddressStmt->bind_param(
-                "ii",
-                $selectedAddressId,
-                $user_id
-            );
+                    SELECT id
+
+                    FROM customer_addresses
+
+                    WHERE id = ?
+
+                    AND user_id = ?
+
+                    LIMIT 1
+
+                ");
 
 
-            $verifyAddressStmt->execute();
+            if (!$verifyAddress) {
+
+                $orderError =
+                    'Unable to verify address.';
+
+            } else {
+
+                $verifyAddress->bind_param(
+                    "ii",
+                    $selectedAddressId,
+                    $userId
+                );
 
 
-            $verifyAddressResult =
-                $verifyAddressStmt->get_result();
+                $verifyAddress->execute();
 
 
-            if (
-                $verifyAddressResult->num_rows
-                ===
-                0
-            ) {
+                $verifyResult =
+                    $verifyAddress->get_result();
 
-                $errorMessage =
-                    "Selected address is invalid.";
+
+                if (
+                    $verifyResult->num_rows
+                    ===
+                    0
+                ) {
+
+                    $orderError =
+                        'Please select a valid delivery address.';
+                }
+
+
+                $verifyAddress->close();
             }
-
-
-            $verifyAddressStmt->close();
         }
     }
 
 
-    /* =================================================
-       PAYMENT NAME
-    ================================================= */
+    /*
+    |--------------------------------------------------------------------------
+    | RE-CHECK CART
+    |--------------------------------------------------------------------------
+    | Prices and delivery fee are read again from DB.
+    |--------------------------------------------------------------------------
+    */
 
     if (
-        $selectedPayment === 'cod'
+        $orderError === ''
     ) {
 
-        $paymentMethod =
-            'Cash on Delivery';
+        $freshCartStmt =
+            $conn->prepare("
 
-    } else {
+                SELECT
 
-        $paymentMethod =
-            'Card Payment';
-    }
+                    c.id AS cart_id,
+                    c.menu_item_id,
+                    c.quantity,
+
+                    m.name,
+                    m.price,
+                    m.restaurant_id,
+
+                    r.delivery_fee
+
+                FROM cart c
+
+                INNER JOIN menu_items m
+                    ON c.menu_item_id = m.id
+
+                INNER JOIN restaurants r
+                    ON m.restaurant_id = r.id
+
+                WHERE c.user_id = ?
+
+            ");
 
 
-    /* =================================================
-       CREATE ORDER NUMBER
-    ================================================= */
+        if (!$freshCartStmt) {
 
-    if (
-        $errorMessage === ''
-    ) {
+            $orderError =
+                'Unable to verify cart.';
 
-        $orderNumber =
-            'HS'
-            .
-            date('YmdHis')
-            .
-            rand(
-                100,
-                999
+        } else {
+
+            $freshCartStmt->bind_param(
+                "i",
+                $userId
             );
+
+
+            $freshCartStmt->execute();
+
+
+            $freshResult =
+                $freshCartStmt->get_result();
+
+
+            $freshCart = [];
+
+            $freshSubtotal = 0;
+
+            $freshRestaurantId = 0;
+
+
+            while (
+                $freshItem =
+                $freshResult->fetch_assoc()
+            ) {
+
+                $freshItem[
+                    'quantity'
+                ] =
+                    max(
+                        1,
+                        (int)$freshItem[
+                            'quantity'
+                        ]
+                    );
+
+
+                $freshItem[
+                    'price'
+                ] =
+                    (float)$freshItem[
+                        'price'
+                    ];
+
+
+                $freshItem[
+                    'subtotal'
+                ] =
+                    $freshItem[
+                        'price'
+                    ]
+                    *
+                    $freshItem[
+                        'quantity'
+                    ];
+
+
+                $freshCart[] =
+                    $freshItem;
+
+
+                $freshSubtotal +=
+                    $freshItem[
+                        'subtotal'
+                    ];
+
+
+                if (
+                    $freshRestaurantId
+                    ===
+                    0
+                ) {
+
+                    $freshRestaurantId =
+                        (int)$freshItem[
+                            'restaurant_id'
+                        ];
+                }
+            }
+
+
+            $freshCartStmt->close();
+
+
+            if (
+                empty($freshCart)
+            ) {
+
+                $orderError =
+                    'Your cart is empty.';
+
+            } elseif (
+                $freshRestaurantId
+                !==
+                $restaurantId
+            ) {
+
+                $orderError =
+                    'Your cart has changed. Please refresh the page.';
+
+            } else {
+
+                $subtotal =
+                    $freshSubtotal;
+
+
+                $deliveryFee =
+                    isset(
+                        $freshCart[0][
+                            'delivery_fee'
+                        ]
+                    )
+                    ?
+                    (float)$freshCart[0][
+                        'delivery_fee'
+                    ]
+                    :
+                    $deliveryFee;
+
+
+                $total =
+                    $subtotal +
+                    $deliveryFee -
+                    $discount;
+            }
+        }
     }
 
 
-    /* =================================================
-       ORDER STATUS
-    ================================================= */
-
-    $orderStatus =
-        'pending';
-
-
-    $discount = 0;
-
-
-    /* =================================================
-       START TRANSACTION
-    ================================================= */
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE ORDER
+    |--------------------------------------------------------------------------
+    */
 
     if (
-        $errorMessage === ''
+        $orderError === ''
     ) {
 
         $conn->begin_transaction();
@@ -702,332 +981,183 @@ if (
 
         try {
 
+            /*
+            |--------------------------------------------------------------------------
+            | ORDER NUMBER
+            |--------------------------------------------------------------------------
+            */
 
-            /* =========================================
-               RE-CHECK CART INSIDE TRANSACTION
-            ========================================= */
-
-            $orderCartSql = "
-                SELECT
-
-                    cart.id AS cart_id,
-                    cart.quantity,
-
-                    menu_items.id AS menu_id,
-                    menu_items.restaurant_id,
-                    menu_items.name AS item_name,
-                    menu_items.price AS item_price,
-                    menu_items.image AS item_image,
-
-                    restaurants.name AS restaurant_name,
-                    restaurants.image AS restaurant_image,
-                    restaurants.delivery_time,
-                    restaurants.delivery_fee
-
-                FROM cart
-
-                INNER JOIN menu_items
-                    ON cart.menu_item_id =
-                       menu_items.id
-
-                INNER JOIN restaurants
-                    ON menu_items.restaurant_id =
-                       restaurants.id
-
-                WHERE cart.user_id = ?
-
-                ORDER BY cart.id ASC
-            ";
-
-
-            $orderCartStmt =
-                $conn->prepare(
-                    $orderCartSql
+            $orderNumber =
+                'HUM-' .
+                date('YmdHis') .
+                '-' .
+                random_int(
+                    100,
+                    999
                 );
 
 
-            if (
-                !$orderCartStmt
-            ) {
+            /*
+            |--------------------------------------------------------------------------
+            | CHECK ORDER NUMBER
+            |--------------------------------------------------------------------------
+            */
+
+            $orderCheck =
+                $conn->prepare("
+
+                    SELECT id
+
+                    FROM orders
+
+                    WHERE order_number = ?
+
+                    LIMIT 1
+
+                ");
+
+
+            if (!$orderCheck) {
 
                 throw new Exception(
-                    "Unable to load cart."
-                );
-            }
-
-
-            $orderCartStmt->bind_param(
-                "i",
-                $user_id
-            );
-
-
-            $orderCartStmt->execute();
-
-
-            $orderCartResult =
-                $orderCartStmt->get_result();
-
-
-            $orderCartItems = [];
-
-            $orderSubTotal = 0;
-
-            $orderDeliveryFee = 0;
-
-            $orderRestaurantId = 0;
-
-
-            while (
-                $cartRow =
-                $orderCartResult->fetch_assoc()
-            ) {
-
-
-                if (
-                    $orderRestaurantId === 0
-                ) {
-
-                    $orderRestaurantId =
-                        (int)
-                        $cartRow[
-                            'restaurant_id'
-                        ];
-
-
-                    $orderDeliveryFee =
-                        (float)
-                        (
-                            $cartRow[
-                                'delivery_fee'
-                            ]
-                            ??
-                            0
-                        );
-                }
-
-
-                $cartQuantity =
-                    (int)
-                    $cartRow[
-                        'quantity'
-                    ];
-
-
-                $cartPrice =
-                    (float)
-                    $cartRow[
-                        'item_price'
-                    ];
-
-
-                $cartSubtotal =
-                    $cartPrice
-                    *
-                    $cartQuantity;
-
-
-                $cartRow[
-                    'quantity'
-                ] =
-                    $cartQuantity;
-
-
-                $cartRow[
-                    'item_price'
-                ] =
-                    $cartPrice;
-
-
-                $cartRow[
-                    'item_subtotal'
-                ] =
-                    $cartSubtotal;
-
-
-                $orderSubTotal +=
-                    $cartSubtotal;
-
-
-                $orderCartItems[] =
-                    $cartRow;
-            }
-
-
-            $orderCartStmt->close();
-
-
-            if (
-                empty(
-                    $orderCartItems
-                )
-            ) {
-
-                throw new Exception(
-                    "Your cart is empty."
-                );
-            }
-
-
-            /* =========================================
-               CALCULATE FINAL TOTAL
-            ========================================= */
-
-            $orderTotal =
-                $orderSubTotal
-                +
-                $orderDeliveryFee
-                -
-                $discount;
-
-
-            /* =========================================
-               INSERT ORDER
-            ========================================= */
-
-            $insertOrderSql = "
-                INSERT INTO orders
-                (
-                    user_id,
-                    order_number,
-                    restaurant_id,
-                    address_id,
-                    payment_method,
-                    subtotal,
-                    delivery_fee,
-                    discount,
-                    total,
-                    order_status
-                )
-
-                VALUES
-                (
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?
-                )
-            ";
-
-
-            $insertOrderStmt =
-                $conn->prepare(
-                    $insertOrderSql
-                );
-
-
-            if (
-                !$insertOrderStmt
-            ) {
-
-                throw new Exception(
-                    "Order query error: "
-                    .
                     $conn->error
                 );
             }
 
 
-            /*
-             * i = user_id
-             * s = order_number
-             * i = restaurant_id
-             * i = address_id
-             * s = payment_method
-             * d = subtotal
-             * d = delivery_fee
-             * d = discount
-             * d = total
-             * s = order_status
-             */
-
-            $insertOrderStmt->bind_param(
-                "isiisdddds",
-                $user_id,
-                $orderNumber,
-                $orderRestaurantId,
-                $selectedAddressId,
-                $paymentMethod,
-                $orderSubTotal,
-                $orderDeliveryFee,
-                $discount,
-                $orderTotal,
-                $orderStatus
+            $orderCheck->bind_param(
+                "s",
+                $orderNumber
             );
 
 
+            $orderCheck->execute();
+
+
+            $orderCheckResult =
+                $orderCheck->get_result();
+
+
             if (
-                !$insertOrderStmt->execute()
+                $orderCheckResult->num_rows
+                > 0
             ) {
 
+                $orderNumber =
+                    'HUM-' .
+                    date('YmdHis') .
+                    '-' .
+                    random_int(
+                        1000,
+                        9999
+                    );
+            }
+
+
+            $orderCheck->close();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | INSERT ORDER
+            |--------------------------------------------------------------------------
+            | Same order columns used by
+            | the project's existing checkout.
+            |--------------------------------------------------------------------------
+            */
+
+            $orderStmt =
+                $conn->prepare("
+
+                    INSERT INTO orders
+
+                    (
+                        order_number,
+                        user_id,
+                        restaurant_id,
+                        address_id,
+                        payment_method,
+                        subtotal,
+                        delivery_fee,
+                        discount,
+                        total,
+                        order_status,
+                        customer_note
+                    )
+
+                    VALUES
+
+                    (
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        ?,
+                        'pending',
+                        ?
+                    )
+
+                ");
+
+
+            if (!$orderStmt) {
+
                 throw new Exception(
-                    "Unable to create order: "
-                    .
-                    $insertOrderStmt->error
+                    $conn->error
                 );
             }
 
 
-            $newOrderId =
-                (int)
-                $insertOrderStmt->insert_id;
+            $orderStmt->bind_param(
+
+                "siiisdddds",
+
+                $orderNumber,
+                $userId,
+                $restaurantId,
+                $selectedAddressId,
+                $paymentMethod,
+                $subtotal,
+                $deliveryFee,
+                $discount,
+                $total,
+                $customerNote
+
+            );
 
 
-            $insertOrderStmt->close();
-
-
-            /* =========================================
-               INSERT ORDER ITEMS
-            ========================================= */
-
-            foreach (
-                $orderCartItems
-                as $orderItem
+            if (
+                !$orderStmt->execute()
             ) {
 
-
-                $orderMenuItemId =
-                    (int)
-                    $orderItem[
-                        'menu_id'
-                    ];
+                throw new Exception(
+                    $orderStmt->error
+                );
+            }
 
 
-                $orderItemName =
-                    $orderItem[
-                        'item_name'
-                    ];
+            $orderId =
+                (int)$conn->insert_id;
 
 
-                $orderItemPrice =
-                    (float)
-                    $orderItem[
-                        'item_price'
-                    ];
+            $orderStmt->close();
 
 
-                $orderQuantity =
-                    (int)
-                    $orderItem[
-                        'quantity'
-                    ];
+            /*
+            |--------------------------------------------------------------------------
+            | INSERT ORDER ITEMS
+            |--------------------------------------------------------------------------
+            */
 
+            $itemStmt =
+                $conn->prepare("
 
-                $orderItemSubtotal =
-                    (float)
-                    $orderItem[
-                        'item_subtotal'
-                    ];
-
-
-                $insertItemSql = "
                     INSERT INTO order_items
+
                     (
                         order_id,
                         menu_item_id,
@@ -1038,6 +1168,7 @@ if (
                     )
 
                     VALUES
+
                     (
                         ?,
                         ?,
@@ -1046,189 +1177,194 @@ if (
                         ?,
                         ?
                     )
-                ";
+
+                ");
 
 
-                $insertItemStmt =
-                    $conn->prepare(
-                        $insertItemSql
-                    );
-
-
-                if (
-                    !$insertItemStmt
-                ) {
-
-                    throw new Exception(
-                        "Order item query error: "
-                        .
-                        $conn->error
-                    );
-                }
-
-
-                $insertItemStmt->bind_param(
-                    "iisddi",
-                    $newOrderId,
-                    $orderMenuItemId,
-                    $orderItemName,
-                    $orderItemPrice,
-                    $orderQuantity,
-                    $orderItemSubtotal
-                );
-
-
-                /*
-                 * Correct bind types for:
-                 *
-                 * order_id       integer
-                 * menu_item_id   integer
-                 * item_name      string
-                 * item_price     double
-                 * quantity       integer
-                 * subtotal       double
-                 */
-
-                $insertItemStmt->close();
-
-
-                /*
-                 * Re-run with the correct bind string.
-                 */
-
-                $insertItemStmt =
-                    $conn->prepare(
-                        $insertItemSql
-                    );
-
-
-                if (
-                    !$insertItemStmt
-                ) {
-
-                    throw new Exception(
-                        "Unable to prepare order item."
-                    );
-                }
-
-
-                $insertItemStmt->bind_param(
-                    "iisdid",
-                    $newOrderId,
-                    $orderMenuItemId,
-                    $orderItemName,
-                    $orderItemPrice,
-                    $orderQuantity,
-                    $orderItemSubtotal
-                );
-
-
-                if (
-                    !$insertItemStmt->execute()
-                ) {
-
-                    throw new Exception(
-                        "Unable to save order item: "
-                        .
-                        $insertItemStmt->error
-                    );
-                }
-
-
-                $insertItemStmt->close();
-            }
-
-
-            /* =========================================
-               CLEAR CUSTOMER CART
-            ========================================= */
-
-            $clearCartSql = "
-                DELETE FROM cart
-
-                WHERE user_id = ?
-            ";
-
-
-            $clearCartStmt =
-                $conn->prepare(
-                    $clearCartSql
-                );
-
-
-            if (
-                !$clearCartStmt
-            ) {
+            if (!$itemStmt) {
 
                 throw new Exception(
-                    "Unable to clear cart."
+                    $conn->error
                 );
             }
 
 
-            $clearCartStmt->bind_param(
+            foreach (
+                $cartItems as $item
+            ) {
+
+                $menuItemId =
+                    (int)$item[
+                        'menu_item_id'
+                    ];
+
+
+                $itemName =
+                    $item[
+                        'item_name'
+                    ];
+
+
+                $itemPrice =
+                    (float)$item[
+                        'item_price'
+                    ];
+
+
+                $quantity =
+                    (int)$item[
+                        'quantity'
+                    ];
+
+
+                $itemSubtotal =
+                    $itemPrice *
+                    $quantity;
+
+
+                $itemStmt->bind_param(
+
+                    "iisdid",
+
+                    $orderId,
+                    $menuItemId,
+                    $itemName,
+                    $itemPrice,
+                    $quantity,
+                    $itemSubtotal
+
+                );
+
+
+                if (
+                    !$itemStmt->execute()
+                ) {
+
+                    throw new Exception(
+                        $itemStmt->error
+                    );
+                }
+            }
+
+
+            $itemStmt->close();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CLEAR CART
+            |--------------------------------------------------------------------------
+            */
+
+            $deleteCart =
+                $conn->prepare("
+
+                    DELETE FROM cart
+
+                    WHERE user_id = ?
+
+                ");
+
+
+            if (!$deleteCart) {
+
+                throw new Exception(
+                    $conn->error
+                );
+            }
+
+
+            $deleteCart->bind_param(
                 "i",
-                $user_id
+                $userId
             );
 
 
             if (
-                !$clearCartStmt->execute()
+                !$deleteCart->execute()
             ) {
 
                 throw new Exception(
-                    "Unable to clear cart."
+                    $deleteCart->error
                 );
             }
 
 
-            $clearCartStmt->close();
+            $deleteCart->close();
 
 
-            /* =========================================
-               COMMIT
-            ========================================= */
+            /*
+            |--------------------------------------------------------------------------
+            | COMMIT
+            |--------------------------------------------------------------------------
+            */
 
             $conn->commit();
 
 
-            /* =========================================
-               REDIRECT
-               PREVENT DOUBLE ORDER ON REFRESH
-            ========================================= */
+            /*
+            |--------------------------------------------------------------------------
+            | EXISTING PROJECT SUCCESS PAGE
+            |--------------------------------------------------------------------------
+            */
 
             header(
-                "Location: checkout.php?success=1"
-                .
-                "&order="
-                .
-                urlencode(
-                    $orderNumber
-                )
-                .
-                "&order_id="
-                .
-                $newOrderId
+                'Location: order_success.php?order_id=' .
+                $orderId
             );
 
             exit;
 
 
         } catch (
-            Throwable $exception
+            Throwable $e
         ) {
-
 
             $conn->rollback();
 
 
-            $errorMessage =
-                $exception->getMessage();
+            $orderError =
+                'Unable to place your order. Please try again.';
         }
     }
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| SELECTED ADDRESS OBJECT
+|--------------------------------------------------------------------------
+*/
+
+$selectedAddress = null;
+
+
+foreach (
+    $addresses as $address
+) {
+
+    if (
+        (int)$address['id']
+        ===
+        $selectedAddressId
+    ) {
+
+        $selectedAddress =
+            $address;
+
+        break;
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| PAGE
+|--------------------------------------------------------------------------
+*/
+
 ?>
+
 <!DOCTYPE html>
 
 <html lang="en">
@@ -1247,23 +1383,15 @@ if (
     </title>
 
 
-    <!-- MAIN WEBSITE CSS -->
-
     <link
         rel="stylesheet"
         href="css/style.css"
     >
 
-
-    <!-- HEADER CSS -->
-
     <link
         rel="stylesheet"
         href="css/css_header.css"
     >
-
-
-    <!-- FONT AWESOME -->
 
     <link
         rel="stylesheet"
@@ -1271,1373 +1399,956 @@ if (
     >
 
 
-    <style>
+<style>
 
-        /* =====================================================
-           CHECKOUT
-        ===================================================== */
+* {
+    box-sizing: border-box;
+}
 
-        * {
-            box-sizing: border-box;
-        }
 
+body {
 
-        body {
+    margin: 0;
 
-            margin: 0;
+    background: #f8f8f9;
 
-            background:
-                #f6f7fb;
+    color: #222;
 
-            color:
-                #292929;
+    font-family:
+        "Segoe UI",
+        Arial,
+        Helvetica,
+        sans-serif;
+}
 
-            font-family:
-                'Segoe UI',
-                Tahoma,
-                Geneva,
-                Verdana,
-                sans-serif;
-        }
 
+a {
+    text-decoration: none;
+}
 
-        .checkout-page {
 
-            width: 100%;
+.checkout-page {
 
-            max-width: 1250px;
+    width: 100%;
 
-            margin:
-                32px auto 0;
+    min-height:
+        calc(
+            100vh - 100px
+        );
 
-            padding:
-                0 20px 55px;
-        }
+    padding:
+        35px 4%
+        70px;
 
+    background:
+        linear-gradient(
+            180deg,
+            #fff7fa 0,
+            #ffffff 330px
+        );
+}
 
-        /* =====================================================
-           PAGE TITLE
-        ===================================================== */
 
-        .checkout-title {
+.checkout-wrapper {
 
-            position: relative;
+    width: 100%;
 
-            overflow: hidden;
+    max-width: 1250px;
 
-            margin-bottom: 24px;
+    margin: 0 auto;
+}
 
-            padding:
-                29px 34px;
 
-            border-radius: 17px;
+/*
+|--------------------------------------------------------------------------
+| HEADING
+|--------------------------------------------------------------------------
+*/
 
-            background:
-                linear-gradient(
-                    105deg,
-                    #ed0640 0%,
-                    #f52d69 52%,
-                    #ff6190 100%
-                );
+.checkout-heading {
 
-            box-shadow:
-                0 10px 28px
-                rgba(
-                    239,
-                    30,
-                    84,
-                    .16
-                );
-        }
+    display: flex;
 
+    align-items: flex-end;
 
-        .checkout-title::before {
+    justify-content: space-between;
 
-            content: "";
+    gap: 20px;
 
-            position: absolute;
+    margin-bottom: 25px;
+}
 
-            width: 170px;
 
-            height: 170px;
+.checkout-heading h1 {
 
-            right: -55px;
+    margin: 0;
 
-            top: -85px;
+    color: #ed0038;
 
-            border-radius: 50%;
+    font-size: 32px;
 
-            background:
-                rgba(
-                    255,
-                    255,
-                    255,
-                    .09
-                );
-        }
+    font-weight: 800;
+}
 
 
-        .checkout-title h1 {
+.checkout-heading p {
 
-            position: relative;
+    margin:
+        7px 0 0;
 
-            z-index: 2;
+    color: #777;
 
-            margin: 0 0 7px;
+    font-size: 13px;
+}
 
-            color:
-                #fff;
 
-            font-size:
-                31px;
+.back-cart {
 
-            font-weight:
-                800;
-        }
+    color: #ed0038;
 
+    font-size: 13px;
 
-        .checkout-title p {
+    font-weight: 600;
+}
 
-            position: relative;
 
-            z-index: 2;
+/*
+|--------------------------------------------------------------------------
+| MESSAGE
+|--------------------------------------------------------------------------
+*/
 
-            margin: 0;
+.message {
 
-            color:
-                rgba(
-                    255,
-                    255,
-                    255,
-                    .9
-                );
+    padding: 13px 16px;
 
-            font-size:
-                14px;
-        }
+    margin-bottom: 20px;
 
+    border-radius: 10px;
 
-        /* =====================================================
-           LAYOUT
-        ===================================================== */
+    font-size: 13px;
+}
 
-        .checkout-grid {
 
-            display:
-                grid;
+.error-message {
 
-            grid-template-columns:
-                minmax(
-                    0,
-                    1fr
-                )
-                390px;
+    background: #fff0f3;
 
-            gap:
-                24px;
+    color: #c51e43;
 
-            align-items:
-                start;
-        }
+    border:
+        1px solid #ffd2dc;
+}
 
 
-        /* =====================================================
-           CARD
-        ===================================================== */
+/*
+|--------------------------------------------------------------------------
+| GRID
+|--------------------------------------------------------------------------
+*/
 
-        .checkout-card {
+.checkout-grid {
 
-            background:
-                #fff;
+    display: grid;
 
-            border:
-                1px solid #ececec;
+    grid-template-columns:
+        minmax(0, 1fr)
+        380px;
 
-            border-radius:
-                13px;
+    gap: 24px;
 
-            padding:
-                22px;
+    align-items: start;
+}
 
-            margin-bottom:
-                18px;
 
-            box-shadow:
-                0 5px 18px
-                rgba(
-                    0,
-                    0,
-                    0,
-                    .045
-                );
-        }
+.checkout-card {
 
+    background: #fff;
 
-        .card-heading {
+    border:
+        1px solid #eeeeee;
 
-            display:
-                flex;
+    border-radius: 16px;
 
-            align-items:
-                center;
+    padding: 22px;
 
-            gap:
-                10px;
+    margin-bottom: 18px;
 
-            margin-bottom:
-                18px;
-        }
+    box-shadow:
+        0 8px 30px
+        rgba(
+            40,
+            15,
+            25,
+            .06
+        );
+}
 
 
-        .card-heading i {
+.card-title {
 
-            color:
-                #ed1748;
+    display: flex;
 
-            font-size:
-                19px;
-        }
+    align-items: center;
 
+    gap: 9px;
 
-        .card-heading h2 {
+    margin-bottom: 18px;
+}
 
-            margin:
-                0;
 
-            color:
-                #292929;
+.card-title i {
 
-            font-size:
-                19px;
+    color: #ed0038;
 
-            font-weight:
-                600;
-        }
+    font-size: 17px;
+}
 
 
-        /* =====================================================
-           ADDRESS
-        ===================================================== */
+.card-title h2 {
 
-        .address-option {
+    margin: 0;
 
-            position:
-                relative;
+    color: #222;
 
-            display:
-                block;
+    font-size: 19px;
 
-            margin-bottom:
-                12px;
+    font-weight: 700;
+}
 
-            padding:
-                16px;
 
-            border:
-                1px solid #e4e4e4;
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT
+|--------------------------------------------------------------------------
+*/
 
-            border-radius:
-                10px;
+.restaurant-box {
 
-            background:
-                #fff;
+    display: flex;
 
-            cursor:
-                pointer;
+    align-items: center;
 
-            transition:
-                .2s;
-        }
+    gap: 14px;
 
+    padding-bottom: 16px;
 
-        .address-option:hover {
+    border-bottom:
+        1px solid #eeeeee;
+}
 
-            border-color:
-                #f42a65;
-        }
 
+.restaurant-image {
 
-        .address-option.selected {
+    width: 68px;
 
-            border-color:
-                #ed1748;
+    height: 68px;
 
-            background:
-                #fff7f9;
+    flex-shrink: 0;
 
-            box-shadow:
-                0 0 0 1px
-                rgba(
-                    237,
-                    23,
-                    72,
-                    .05
-                );
-        }
+    overflow: hidden;
 
+    border-radius: 13px;
 
-        .address-option input {
+    background: #fff0f4;
 
-            position:
-                absolute;
+    border:
+        2px solid #ed0038;
+}
 
-            opacity:
-                0;
-        }
 
+.restaurant-image img {
 
-        .address-top {
+    width: 100%;
 
-            display:
-                flex;
+    height: 100%;
 
-            align-items:
-                center;
+    object-fit: cover;
+}
 
-            justify-content:
-                space-between;
 
-            gap:
-                10px;
+.restaurant-placeholder {
 
-            margin-bottom:
-                9px;
-        }
+    width: 100%;
 
+    height: 100%;
 
-        .address-title {
+    display: flex;
 
-            display:
-                flex;
+    align-items: center;
 
-            align-items:
-                center;
+    justify-content: center;
 
-            gap:
-                8px;
+    color: #ed0038;
 
-            color:
-                #333;
+    font-size: 22px;
+}
 
-            font-size:
-                15px;
 
-            font-weight:
-                600;
-        }
+.restaurant-info h3 {
 
+    margin: 0 0 5px;
 
-        .radio-circle {
+    color: #222;
 
-            width:
-                18px;
+    font-size: 18px;
+}
 
-            height:
-                18px;
 
-            flex-shrink:
-                0;
+.restaurant-info p {
 
-            border:
-                2px solid #bbb;
+    margin: 4px 0;
 
-            border-radius:
-                50%;
+    color: #777;
 
-            display:
-                flex;
+    font-size: 12px;
+}
 
-            align-items:
-                center;
 
-            justify-content:
-                center;
-        }
+/*
+|--------------------------------------------------------------------------
+| ITEMS
+|--------------------------------------------------------------------------
+*/
 
+.checkout-item {
 
-        .address-option.selected
-        .radio-circle {
+    display: grid;
 
-            border-color:
-                #ed1748;
-        }
+    grid-template-columns:
+        70px
+        minmax(0, 1fr)
+        auto;
 
+    gap: 13px;
 
-        .address-option.selected
-        .radio-circle::after {
+    align-items: center;
 
-            content:
-                "";
+    padding:
+        14px 0;
 
-            width:
-                8px;
+    border-bottom:
+        1px solid #eeeeee;
+}
 
-            height:
-                8px;
 
-            border-radius:
-                50%;
+.checkout-item:last-child {
 
-            background:
-                #ed1748;
-        }
+    border-bottom: 0;
+}
 
 
-        .default-badge {
+.checkout-item-image {
 
-            padding:
-                4px 9px;
+    width: 70px;
 
-            border-radius:
-                20px;
+    height: 65px;
 
-            background:
-                #ffe9ef;
+    overflow: hidden;
 
-            color:
-                #ed1748;
+    border-radius: 10px;
 
-            font-size:
-                11px;
+    background: #fff0f4;
+}
 
-            white-space:
-                nowrap;
-        }
 
+.checkout-item-image img {
 
-        .address-name {
+    width: 100%;
 
-            margin-bottom:
-                5px;
+    height: 100%;
 
-            color:
-                #333;
+    object-fit: cover;
+}
 
-            font-size:
-                14px;
-        }
 
+.item-placeholder {
 
-        .address-phone {
+    width: 100%;
 
-            margin-bottom:
-                6px;
+    height: 100%;
 
-            color:
-                #777;
+    display: flex;
 
-            font-size:
-                13px;
-        }
+    align-items: center;
 
+    justify-content: center;
 
-        .address-text {
+    color: #ed0038;
 
-            color:
-                #666;
+    font-size: 20px;
+}
 
-            font-size:
-                13px;
 
-            line-height:
-                1.55;
-        }
+.checkout-item-details h3 {
 
+    margin: 0 0 5px;
 
-        .address-note {
+    color: #222;
 
-            margin-top:
-                8px;
+    font-size: 14px;
 
-            color:
-                #888;
+    font-weight: 700;
+}
 
-            font-size:
-                12px;
-        }
 
+.checkout-item-details p {
 
-        .no-address {
+    margin: 3px 0;
 
-            padding:
-                16px;
+    color: #888;
 
-            border-radius:
-                9px;
+    font-size: 12px;
+}
 
-            background:
-                #fff5f7;
 
-            color:
-                #777;
+.checkout-item-price {
 
-            font-size:
-                13px;
+    color: #222;
 
-            line-height:
-                1.6;
-        }
+    font-size: 13px;
 
+    font-weight: 700;
 
-        .manage-address {
+    white-space: nowrap;
+}
 
-            display:
-                inline-flex;
 
-            align-items:
-                center;
+/*
+|--------------------------------------------------------------------------
+| ADDRESS
+|--------------------------------------------------------------------------
+*/
 
-            gap:
-                6px;
+.address-list {
 
-            margin-top:
-                14px;
+    display: flex;
 
-            color:
-                #ed1748;
+    flex-direction: column;
 
-            font-size:
-                13px;
+    gap: 10px;
+}
 
-            font-weight:
-                600;
-        }
 
+.address-option {
 
-        .manage-address:hover {
+    display: flex;
 
-            color:
-                #c9123d;
-        }
+    align-items: flex-start;
 
+    gap: 11px;
 
-        /* =====================================================
-           PAYMENT
-        ===================================================== */
+    padding: 14px;
 
-        .payment-option {
+    border:
+        2px solid #eeeeee;
 
-            position:
-                relative;
+    border-radius: 11px;
 
-            display:
-                flex;
+    cursor: pointer;
 
-            align-items:
-                center;
+    transition: .2s;
+}
 
-            gap:
-                12px;
 
-            margin-bottom:
-                11px;
+.address-option:hover {
 
-            padding:
-                14px;
+    border-color: #ed0038;
 
-            border:
-                1px solid #e4e4e4;
+    background: #fff8fa;
+}
 
-            border-radius:
-                10px;
 
-            cursor:
-                pointer;
+.address-option.selected {
 
-            transition:
-                .2s;
-        }
+    border-color: #ed0038;
 
+    background: #fff5f8;
+}
 
-        .payment-option:hover {
 
-            border-color:
-                #f42a65;
-        }
+.address-option input {
 
+    margin-top: 4px;
 
-        .payment-option.selected {
+    accent-color: #ed0038;
+}
 
-            border-color:
-                #ed1748;
 
-            background:
-                #fff7f9;
-        }
+.address-details {
 
+    flex: 1;
+}
 
-        .payment-option input {
 
-            width:
-                17px;
+.address-details h4 {
 
-            height:
-                17px;
+    margin:
+        0 0 5px;
 
-            margin:
-                0;
+    color: #222;
 
-            accent-color:
-                #ed1748;
-        }
+    font-size: 14px;
+}
 
 
-        .payment-icon {
+.address-details p {
 
-            width:
-                40px;
+    margin: 4px 0;
 
-            height:
-                40px;
+    color: #777;
 
-            display:
-                flex;
+    font-size: 12px;
 
-            align-items:
-                center;
+    line-height: 1.5;
+}
 
-            justify-content:
-                center;
 
-            flex-shrink:
-                0;
+.default-badge {
 
-            border-radius:
-                8px;
+    display: inline-block;
 
-            background:
-                #fff0f4;
+    margin-left: 6px;
 
-            color:
-                #ed1748;
+    padding:
+        3px 7px;
 
-            font-size:
-                17px;
-        }
+    border-radius: 12px;
 
+    background: #ed0038;
 
-        .payment-info {
+    color: #fff;
 
-            display:
-                flex;
+    font-size: 9px;
+}
 
-            flex-direction:
-                column;
 
-            gap:
-                3px;
-        }
+.manage-address {
 
+    display: inline-flex;
 
-        .payment-name {
+    align-items: center;
 
-            color:
-                #333;
+    gap: 6px;
 
-            font-size:
-                14px;
+    margin-top: 12px;
 
-            font-weight:
-                600;
-        }
+    color: #ed0038;
 
+    font-size: 12px;
 
-        .payment-description {
+    font-weight: 600;
+}
 
-            color:
-                #888;
 
-            font-size:
-                12px;
-        }
+.no-address {
 
+    padding: 15px;
 
-        /* =====================================================
-           RESTAURANT
-        ===================================================== */
+    border-radius: 10px;
 
-        .restaurant-box {
+    background: #fff5f7;
 
-            display:
-                flex;
+    color: #777;
 
-            align-items:
-                center;
+    font-size: 13px;
 
-            gap:
-                12px;
+    line-height: 1.6;
+}
 
-            padding-bottom:
-                15px;
 
-            margin-bottom:
-                4px;
+/*
+|--------------------------------------------------------------------------
+| PAYMENT
+|--------------------------------------------------------------------------
+*/
 
-            border-bottom:
-                1px solid #eee;
-        }
+.payment-list {
 
+    display: flex;
 
-        .restaurant-image {
+    flex-direction: column;
 
-            width:
-                55px;
+    gap: 10px;
+}
 
-            height:
-                55px;
 
-            flex-shrink:
-                0;
+.payment-option {
 
-            object-fit:
-                cover;
+    display: flex;
 
-            border-radius:
-                50%;
+    align-items: center;
 
-            border:
-                1px solid #eee;
-        }
+    gap: 11px;
 
+    padding: 14px;
 
-        .restaurant-placeholder {
+    border:
+        2px solid #eeeeee;
 
-            width:
-                55px;
+    border-radius: 11px;
 
-            height:
-                55px;
+    cursor: pointer;
 
-            flex-shrink:
-                0;
+    transition: .2s;
+}
 
-            display:
-                flex;
 
-            align-items:
-                center;
+.payment-option:hover {
 
-            justify-content:
-                center;
+    border-color: #ed0038;
 
-            border-radius:
-                50%;
+    background: #fff8fa;
+}
 
-            background:
-                #fff0f4;
 
-            color:
-                #ed1748;
+.payment-option.selected {
 
-            font-size:
-                20px;
-        }
+    border-color: #ed0038;
 
+    background: #fff5f8;
+}
 
-        .restaurant-name {
 
-            margin-bottom:
-                4px;
+.payment-option input {
 
-            color:
-                #333;
+    accent-color: #ed0038;
+}
 
-            font-size:
-                15px;
 
-            font-weight:
-                600;
-        }
+.payment-icon {
 
+    width: 38px;
 
-        .restaurant-time {
+    height: 38px;
 
-            color:
-                #777;
+    flex-shrink: 0;
 
-            font-size:
-                12px;
-        }
+    display: flex;
 
+    align-items: center;
 
-        /* =====================================================
-           ITEMS
-        ===================================================== */
+    justify-content: center;
 
-        .checkout-item {
+    border-radius: 9px;
 
-            display:
-                flex;
+    background: #fff0f4;
 
-            align-items:
-                center;
+    color: #ed0038;
+}
 
-            gap:
-                11px;
 
-            padding:
-                13px 0;
+.payment-text strong {
 
-            border-bottom:
-                1px solid #eee;
-        }
+    display: block;
 
+    color: #222;
 
-        .checkout-item:last-child {
+    font-size: 13px;
+}
 
-            border-bottom:
-                0;
-        }
 
+.payment-text small {
 
-        .item-image {
+    display: block;
 
-            width:
-                62px;
+    margin-top: 3px;
 
-            height:
-                62px;
+    color: #888;
 
-            flex-shrink:
-                0;
+    font-size: 11px;
+}
 
-            object-fit:
-                cover;
 
-            border-radius:
-                9px;
+/*
+|--------------------------------------------------------------------------
+| SUMMARY
+|--------------------------------------------------------------------------
+*/
 
-            background:
-                #f2f2f2;
-        }
+.summary-card {
 
+    position: sticky;
 
-        .item-placeholder {
+    top: 25px;
+}
 
-            width:
-                62px;
 
-            height:
-                62px;
+.summary-row {
 
-            flex-shrink:
-                0;
+    display: flex;
 
-            display:
-                flex;
+    align-items: center;
 
-            align-items:
-                center;
+    justify-content: space-between;
 
-            justify-content:
-                center;
+    gap: 15px;
 
-            border-radius:
-                9px;
+    margin-bottom: 13px;
 
-            background:
-                #fff0f4;
+    color: #666;
 
-            color:
-                #ed1748;
+    font-size: 13px;
+}
 
-            font-size:
-                19px;
-        }
 
+.summary-row strong {
 
-        .item-info {
+    color: #222;
 
-            min-width:
-                0;
+    font-weight: 600;
+}
 
-            flex:
-                1;
-        }
 
+.summary-divider {
 
-        .item-name {
+    height: 1px;
 
-            margin-bottom:
-                4px;
+    margin:
+        17px 0;
 
-            color:
-                #333;
+    background: #eeeeee;
+}
 
-            font-size:
-                14px;
 
-            font-weight:
-                500;
+.summary-total {
 
-            line-height:
-                1.35;
-        }
+    display: flex;
 
+    align-items: center;
 
-        .item-quantity {
+    justify-content: space-between;
 
-            color:
-                #888;
+    color: #222;
 
-            font-size:
-                12px;
-        }
+    font-size: 18px;
 
+    font-weight: 700;
+}
 
-        .item-total {
 
-            color:
-                #ed1748;
+.summary-total strong {
 
-            font-size:
-                13px;
+    color: #ed0038;
 
-            white-space:
-                nowrap;
-        }
+    font-size: 21px;
+}
 
 
-        /* =====================================================
-           SUMMARY
-        ===================================================== */
+/*
+|--------------------------------------------------------------------------
+| NOTE
+|--------------------------------------------------------------------------
+*/
 
-        .summary-row {
+.note-box {
 
-            display:
-                flex;
+    margin-top: 18px;
+}
 
-            align-items:
-                center;
 
-            justify-content:
-                space-between;
+.note-box label {
 
-            gap:
-                15px;
+    display: block;
 
-            padding:
-                8px 0;
+    margin-bottom: 7px;
 
-            color:
-                #666;
+    color: #333;
 
-            font-size:
-                13px;
-        }
+    font-size: 13px;
 
+    font-weight: 600;
+}
 
-        .summary-divider {
 
-            height:
-                1px;
+.note-box textarea {
 
-            margin:
-                8px 0;
+    width: 100%;
 
-            background:
-                #eee;
-        }
+    min-height: 75px;
 
+    resize: vertical;
 
-        .summary-total {
+    padding: 10px;
 
-            display:
-                flex;
+    border:
+        1px solid #ddd;
 
-            align-items:
-                center;
+    border-radius: 9px;
 
-            justify-content:
-                space-between;
+    outline: none;
 
-            padding-top:
-                10px;
+    font-family: inherit;
 
-            color:
-                #333;
+    font-size: 12px;
+}
 
-            font-size:
-                17px;
 
-            font-weight:
-                600;
-        }
+.note-box textarea:focus {
 
+    border-color: #ed0038;
 
-        .summary-total strong {
+    box-shadow:
+        0 0 0 3px
+        rgba(
+            237,
+            0,
+            56,
+            .08
+        );
+}
 
-            color:
-                #ed1748;
-        }
 
+/*
+|--------------------------------------------------------------------------
+| BUTTON
+|--------------------------------------------------------------------------
+*/
 
-        .free {
+.place-order-btn {
 
-            color:
-                #ed1748;
-        }
+    width: 100%;
 
+    margin-top: 18px;
 
-        /* =====================================================
-           BUTTON
-        ===================================================== */
+    padding: 14px;
 
-        .place-order-btn {
+    border: 0;
 
-            width:
-                100%;
+    border-radius: 9px;
 
-            margin-top:
-                17px;
+    background: #ed0038;
 
-            padding:
-                13px 18px;
+    color: #fff;
 
-            border:
-                0;
+    font-size: 14px;
 
-            border-radius:
-                8px;
+    font-weight: 700;
 
-            background:
-                #ed1748;
+    cursor: pointer;
 
-            color:
-                #fff;
+    transition: .2s;
+}
 
-            font-size:
-                14px;
 
-            font-weight:
-                600;
+.place-order-btn:hover {
 
-            cursor:
-                pointer;
+    background: #d90034;
 
-            transition:
-                .2s;
-        }
+    transform:
+        translateY(-1px);
+}
 
 
-        .place-order-btn:hover {
+.place-order-btn:disabled {
 
-            background:
-                #d91442;
-        }
+    opacity: .5;
 
+    cursor: not-allowed;
 
-        .place-order-btn:disabled {
+    transform: none;
+}
 
-            opacity:
-                .55;
 
-            cursor:
-                not-allowed;
-        }
+.security-note {
 
+    margin-top: 12px;
 
-        /* =====================================================
-           ERROR
-        ===================================================== */
+    text-align: center;
 
-        .checkout-error {
+    color: #888;
 
-            margin-bottom:
-                20px;
+    font-size: 10px;
+}
 
-            padding:
-                13px 15px;
 
-            border:
-                1px solid #ffd0d7;
+/*
+|--------------------------------------------------------------------------
+| MOBILE
+|--------------------------------------------------------------------------
+*/
 
-            border-radius:
-                9px;
+@media (
+    max-width: 900px
+) {
 
-            background:
-                #fff1f3;
+    .checkout-grid {
 
-            color:
-                #c92347;
+        grid-template-columns: 1fr;
+    }
 
-            font-size:
-                13px;
-        }
 
+    .summary-card {
 
-        /* =====================================================
-           SUCCESS
-        ===================================================== */
+        position: relative;
 
-        .success-wrapper {
+        top: 0;
+    }
 
-            max-width:
-                650px;
+}
 
-            margin:
-                45px auto;
 
-            text-align:
-                center;
-        }
+@media (
+    max-width: 600px
+) {
 
+    .checkout-page {
 
-        .success-card {
+        padding:
+            25px 12px
+            50px;
+    }
 
-            padding:
-                42px 30px;
 
-            border:
-                1px solid #eee;
+    .checkout-heading {
 
-            border-radius:
-                16px;
+        align-items: flex-start;
 
-            background:
-                #fff;
+        flex-direction: column;
+    }
 
-            box-shadow:
-                0 10px 30px
-                rgba(
-                    0,
-                    0,
-                    0,
-                    .06
-                );
-        }
 
+    .checkout-heading h1 {
 
-        .success-icon {
+        font-size: 27px;
+    }
 
-            width:
-                72px;
 
-            height:
-                72px;
+    .checkout-card {
 
-            margin:
-                0 auto 18px;
+        padding: 17px;
 
-            display:
-                flex;
+        border-radius: 13px;
+    }
 
-            align-items:
-                center;
 
-            justify-content:
-                center;
+    .checkout-item {
 
-            border-radius:
-                50%;
+        grid-template-columns:
+            60px
+            minmax(0, 1fr);
 
-            background:
-                #eafaf0;
+    }
 
-            color:
-                #25a65a;
 
-            font-size:
-                31px;
-        }
+    .checkout-item-image {
 
+        width: 60px;
 
-        .success-card h1 {
+        height: 58px;
+    }
 
-            margin:
-                0 0 9px;
 
-            color:
-                #333;
+    .checkout-item-price {
 
-            font-size:
-                28px;
+        grid-column: 2;
 
-            font-weight:
-                700;
-        }
+        text-align: left;
+    }
 
+}
 
-        .success-card p {
-
-            margin:
-                0 0 10px;
-
-            color:
-                #777;
-
-            font-size:
-                14px;
-
-            line-height:
-                1.6;
-        }
-
-
-        .order-number {
-
-            display:
-                inline-block;
-
-            margin:
-                10px 0 20px;
-
-            padding:
-                8px 14px;
-
-            border-radius:
-                20px;
-
-            background:
-                #fff0f4;
-
-            color:
-                #ed1748;
-
-            font-size:
-                14px;
-
-            font-weight:
-                600;
-        }
-
-
-        .success-actions {
-
-            display:
-                flex;
-
-            justify-content:
-                center;
-
-            gap:
-                10px;
-
-            flex-wrap:
-                wrap;
-        }
-
-
-        .success-btn {
-
-            display:
-                inline-flex;
-
-            align-items:
-                center;
-
-            justify-content:
-                center;
-
-            gap:
-                7px;
-
-            min-width:
-                145px;
-
-            padding:
-                11px 16px;
-
-            border-radius:
-                8px;
-
-            font-size:
-                13px;
-
-            font-weight:
-                600;
-
-            text-decoration:
-                none;
-        }
-
-
-        .success-btn.primary {
-
-            background:
-                #ed1748;
-
-            color:
-                #fff;
-        }
-
-
-        .success-btn.secondary {
-
-            border:
-                1px solid #ed1748;
-
-            background:
-                #fff;
-
-            color:
-                #ed1748;
-        }
-
-
-        /* =====================================================
-           MOBILE
-        ===================================================== */
-
-        @media (
-            max-width: 850px
-        ) {
-
-            .checkout-grid {
-
-                grid-template-columns:
-                    1fr;
-            }
-        }
-
-
-        @media (
-            max-width: 600px
-        ) {
-
-            .checkout-page {
-
-                margin-top:
-                    20px;
-
-                padding:
-                    0 14px 40px;
-            }
-
-
-            .checkout-title {
-
-                padding:
-                    24px 22px;
-            }
-
-
-            .checkout-title h1 {
-
-                font-size:
-                    26px;
-            }
-
-
-            .checkout-card {
-
-                padding:
-                    18px;
-            }
-
-
-            .item-image,
-            .item-placeholder {
-
-                width:
-                    57px;
-
-                height:
-                    57px;
-            }
-        }
-
-    </style>
+</style>
 
 </head>
 
@@ -2645,273 +2356,505 @@ if (
 <body>
 
 
-<?php
-/*
-|--------------------------------------------------------------------------
-| EXISTING CUSTOMER HEADER
-|--------------------------------------------------------------------------
-|
-| The repo's customer-facing pages use includes/header.php.
-| This keeps the same Humsafar header/navigation instead of creating
-| another different header.
-|
-*/
-require_once 'includes/header.php';
-?>
-
-
-<!-- =====================================================
-     CHECKOUT PAGE
-===================================================== -->
-
-<main class="checkout-page">
-
-
-<?php if (
-    $orderSuccess
-) { ?>
-
-
-    <!-- =================================================
-         ORDER SUCCESS
-    ================================================== -->
+<main
+    class="checkout-page"
+>
 
     <div
-        class="success-wrapper"
-    >
-
-        <div
-            class="success-card"
-        >
-
-            <div
-                class="success-icon"
-            >
-
-                <i
-                    class="fas fa-check"
-                ></i>
-
-            </div>
-
-
-            <h1>
-                Order Placed Successfully
-            </h1>
-
-
-            <p>
-
-                Thank you for ordering
-                from Humsafar.
-
-            </p>
-
-
-            <?php if (
-                $successOrderNumber !== ''
-            ) { ?>
-
-                <div
-                    class="order-number"
-                >
-
-                    Order #
-                    <?php
-                        echo h(
-                            $successOrderNumber
-                        );
-                    ?>
-
-                </div>
-
-            <?php } ?>
-
-
-            <p>
-
-                Your order has been received
-                and is now pending confirmation.
-
-            </p>
-
-
-            <div
-                class="success-actions"
-            >
-
-
-                <a
-                    href="my_orders.php"
-                    class="
-                        success-btn
-                        primary
-                    "
-                >
-
-                    <i
-                        class="
-                            fas
-                            fa-receipt
-                        "
-                    ></i>
-
-                    My Orders
-
-                </a>
-
-
-                <a
-                    href="restaurants.php"
-                    class="
-                        success-btn
-                        secondary
-                    "
-                >
-
-                    <i
-                        class="
-                            fas
-                            fa-store
-                        "
-                    ></i>
-
-                    Continue Shopping
-
-                </a>
-
-
-            </div>
-
-
-        </div>
-
-    </div>
-
-
-<?php } else { ?>
-
-
-    <!-- =================================================
-         TITLE
-    ================================================== -->
-
-    <section
-        class="checkout-title"
-    >
-
-        <h1>
-
-            <i
-                class="
-                    fas
-                    fa-credit-card
-                "
-            ></i>
-
-            Checkout
-
-        </h1>
-
-
-        <p>
-
-            Confirm your saved delivery address
-            and payment method before placing your order.
-
-        </p>
-
-    </section>
-
-
-    <?php if (
-        $errorMessage !== ''
-    ) { ?>
-
-
-        <div
-            class="checkout-error"
-        >
-
-            <i
-                class="
-                    fas
-                    fa-circle-exclamation
-                "
-            ></i>
-
-            &nbsp;
-
-            <?php
-                echo h(
-                    $errorMessage
-                );
-            ?>
-
-        </div>
-
-
-    <?php } ?>
-
-
-    <!-- =================================================
-         FORM
-    ================================================== -->
-
-    <form
-        method="POST"
-        action="checkout.php"
-        id="checkout-form"
+        class="checkout-wrapper"
     >
 
 
+        <!-- =====================================================
+             HEADING
+        ====================================================== -->
+
         <div
-            class="checkout-grid"
+            class="checkout-heading"
         >
-
-
-            <!-- =============================================
-                 LEFT SIDE
-            ============================================== -->
 
             <div>
 
+                <h1>
 
-                <!-- =========================================
-                     DELIVERY ADDRESS
-                ========================================== -->
+                    <i
+                        class="fas fa-bag-shopping"
+                    ></i>
 
-                <section
-                    class="checkout-card"
-                >
+                    Checkout
+
+                </h1>
 
 
-                    <div
-                        class="card-heading"
+                <p>
+                    Review your order before placing it.
+                </p>
+
+            </div>
+
+
+            <a
+                href="cart.php"
+                class="back-cart"
+            >
+
+                <i
+                    class="fas fa-arrow-left"
+                ></i>
+
+                Back to Cart
+
+            </a>
+
+        </div>
+
+
+        <?php if (
+            $orderError !== ''
+        ): ?>
+
+            <div
+                class="
+                    message
+                    error-message
+                "
+            >
+
+                <i
+                    class="
+                        fas
+                        fa-circle-exclamation
+                    "
+                ></i>
+
+                &nbsp;
+
+                <?php
+                    echo checkout_h(
+                        $orderError
+                    );
+                ?>
+
+            </div>
+
+        <?php endif; ?>
+
+
+        <form
+            method="POST"
+            action="checkout.php"
+            id="checkoutForm"
+        >
+
+            <div
+                class="checkout-grid"
+            >
+
+
+                <!-- =================================================
+                     LEFT SIDE
+                ================================================== -->
+
+                <div>
+
+
+                    <!-- RESTAURANT -->
+
+                    <section
+                        class="checkout-card"
                     >
 
-                        <i
-                            class="
-                                fas
-                                fa-location-dot
-                            "
-                        ></i>
+                        <div
+                            class="card-title"
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-store
+                                "
+                            ></i>
 
 
-                        <h2>
-                            Delivery Address
-                        </h2>
+                            <h2>
+                                Restaurant
+                            </h2>
 
-                    </div>
-
-
-                    <?php if (
-                        empty($addresses)
-                    ) { ?>
+                        </div>
 
 
                         <div
-                            class="no-address"
+                            class="restaurant-box"
+                        >
+
+                            <div
+                                class="restaurant-image"
+                            >
+
+                                <?php
+
+                                $restaurantImagePath =
+                                    checkoutRestaurantImage(
+                                        $restaurantImage
+                                    );
+
+                                ?>
+
+
+                                <?php if (
+                                    $restaurantImagePath
+                                    !==
+                                    ''
+                                ): ?>
+
+                                    <img
+                                        src="<?php
+                                            echo checkout_h(
+                                                $restaurantImagePath
+                                            );
+                                        ?>"
+                                        alt="<?php
+                                            echo checkout_h(
+                                                $restaurantName
+                                            );
+                                        ?>"
+                                    >
+
+                                <?php else: ?>
+
+                                    <div
+                                        class="
+                                            restaurant-placeholder
+                                        "
+                                    >
+
+                                        <i
+                                            class="
+                                                fas
+                                                fa-store
+                                            "
+                                        ></i>
+
+                                    </div>
+
+                                <?php endif; ?>
+
+                            </div>
+
+
+                            <div
+                                class="restaurant-info"
+                            >
+
+                                <h3>
+
+                                    <?php
+                                        echo checkout_h(
+                                            $restaurantName
+                                        );
+                                    ?>
+
+                                </h3>
+
+
+                                <?php if (
+                                    trim(
+                                        (string)
+                                        $restaurantAddress
+                                    )
+                                    !==
+                                    ''
+                                ): ?>
+
+                                    <p>
+
+                                        <i
+                                            class="
+                                                fas
+                                                fa-location-dot
+                                            "
+                                        ></i>
+
+                                        &nbsp;
+
+                                        <?php
+                                            echo checkout_h(
+                                                $restaurantAddress
+                                            );
+                                        ?>
+
+                                    </p>
+
+                                <?php endif; ?>
+
+
+                                <?php if (
+                                    trim(
+                                        (string)
+                                        $deliveryTime
+                                    )
+                                    !==
+                                    ''
+                                ): ?>
+
+                                    <p>
+
+                                        <i
+                                            class="
+                                                fas
+                                                fa-clock
+                                            "
+                                        ></i>
+
+                                        &nbsp;
+
+                                        Delivery:
+
+                                        <?php
+                                            echo checkout_h(
+                                                $deliveryTime
+                                            );
+                                        ?>
+
+                                    </p>
+
+                                <?php endif; ?>
+
+                            </div>
+
+                        </div>
+
+                    </section>
+
+
+                    <!-- ITEMS -->
+
+                    <section
+                        class="checkout-card"
+                    >
+
+                        <div
+                            class="card-title"
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-utensils
+                                "
+                            ></i>
+
+
+                            <h2>
+
+                                Your Items
+
+                                <span
+                                    style="
+                                        color:#888;
+                                        font-size:12px;
+                                        font-weight:400;
+                                    "
+                                >
+
+                                    (
+                                    <?php
+                                        echo
+                                        $totalItems;
+                                    ?>
+                                    )
+
+                                </span>
+
+                            </h2>
+
+                        </div>
+
+
+                        <?php foreach (
+                            $cartItems
+                            as $item
+                        ): ?>
+
+
+                            <?php
+
+                            $itemImagePath =
+                                checkoutMenuImage(
+                                    $item[
+                                        'item_image'
+                                    ]
+                                );
+
+                            ?>
+
+
+                            <div
+                                class="
+                                    checkout-item
+                                "
+                            >
+
+
+                                <div
+                                    class="
+                                        checkout-item-image
+                                    "
+                                >
+
+                                    <?php if (
+                                        $itemImagePath
+                                        !==
+                                        ''
+                                    ): ?>
+
+                                        <img
+                                            src="<?php
+                                                echo checkout_h(
+                                                    $itemImagePath
+                                                );
+                                            ?>"
+                                            alt="<?php
+                                                echo checkout_h(
+                                                    $item[
+                                                        'item_name'
+                                                    ]
+                                                );
+                                            ?>"
+                                        >
+
+                                    <?php else: ?>
+
+                                        <div
+                                            class="
+                                                item-placeholder
+                                            "
+                                        >
+
+                                            <i
+                                                class="
+                                                    fas
+                                                    fa-utensils
+                                                "
+                                            ></i>
+
+                                        </div>
+
+                                    <?php endif; ?>
+
+                                </div>
+
+
+                                <div
+                                    class="
+                                        checkout-item-details
+                                    "
+                                >
+
+                                    <h3>
+
+                                        <?php
+                                            echo checkout_h(
+                                                $item[
+                                                    'item_name'
+                                                ]
+                                            );
+                                        ?>
+
+                                    </h3>
+
+
+                                    <p>
+
+                                        Qty:
+
+                                        <?php
+                                            echo
+                                            (int)
+                                            $item[
+                                                'quantity'
+                                            ];
+                                        ?>
+
+                                        × Rs.
+
+                                        <?php
+                                            echo
+                                            number_format(
+                                                (float)
+                                                $item[
+                                                    'item_price'
+                                                ],
+                                                0
+                                            );
+                                        ?>
+
+                                    </p>
+
+
+                                    <?php if (
+                                        !empty(
+                                            $item[
+                                                'item_description'
+                                            ]
+                                        )
+                                    ): ?>
+
+                                        <p>
+
+                                            <?php
+                                                echo checkout_h(
+                                                    $item[
+                                                        'item_description'
+                                                    ]
+                                                );
+                                            ?>
+
+                                        </p>
+
+                                    <?php endif; ?>
+
+                                </div>
+
+
+                                <div
+                                    class="
+                                        checkout-item-price
+                                    "
+                                >
+
+                                    Rs.
+
+                                    <?php
+                                        echo
+                                        number_format(
+                                            (float)
+                                            $item[
+                                                'item_subtotal'
+                                            ],
+                                            0
+                                        );
+                                    ?>
+
+                                </div>
+
+
+                            </div>
+
+
+                        <?php endforeach; ?>
+
+                    </section>
+
+
+                    <!-- ADDRESS -->
+
+                    <section
+                        class="checkout-card"
+                    >
+
+                        <div
+                            class="card-title"
                         >
 
                             <i
@@ -2921,26 +2864,287 @@ require_once 'includes/header.php';
                                 "
                             ></i>
 
-                            &nbsp;
 
-                            No saved delivery address
-                            was found.
+                            <h2>
+                                Delivery Address
+                            </h2>
 
-                            Please add an address
-                            from My Address first.
-
-                            <br>
+                        </div>
 
 
-                            <a
-                                href="customer/manage-addresses.php"
-                                class="manage-address"
+                        <?php if (
+                            empty($addresses)
+                        ): ?>
+
+
+                            <div
+                                class="no-address"
                             >
 
                                 <i
                                     class="
                                         fas
-                                        fa-arrow-right
+                                        fa-circle-info
+                                    "
+                                ></i>
+
+                                &nbsp;
+
+                                You don't have a saved delivery
+                                address yet.
+
+
+                                <br><br>
+
+
+                                <a
+                                    href="customer/manage-addresses.php"
+                                    class="
+                                        manage-address
+                                    "
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-location-dot
+                                        "
+                                    ></i>
+
+                                    Manage Addresses
+
+                                </a>
+
+                            </div>
+
+
+                        <?php else: ?>
+
+
+                            <div
+                                class="address-list"
+                            >
+
+                                <?php foreach (
+                                    $addresses
+                                    as $address
+                                ): ?>
+
+
+                                    <?php
+
+                                    $addressId =
+                                        (int)
+                                        $address[
+                                            'id'
+                                        ];
+
+
+                                    $isSelected =
+                                        (
+                                            $addressId
+                                            ===
+                                            $selectedAddressId
+                                        );
+
+                                    ?>
+
+
+                                    <label
+                                        class="
+                                            address-option
+                                            <?php
+                                            echo
+                                            $isSelected
+                                                ? 'selected'
+                                                : '';
+                                            ?>
+                                        "
+                                    >
+
+                                        <input
+                                            type="radio"
+                                            name="address_id"
+                                            value="<?php
+                                                echo
+                                                $addressId;
+                                            ?>"
+                                            <?php
+                                            echo
+                                            $isSelected
+                                                ? 'checked'
+                                                : '';
+                                            ?>
+                                            required
+                                        >
+
+
+                                        <div
+                                            class="
+                                                address-details
+                                            "
+                                        >
+
+                                            <h4>
+
+                                                <i
+                                                    class="
+                                                        fas
+                                                        fa-location-dot
+                                                    "
+                                                ></i>
+
+                                                <?php
+                                                    echo checkout_h(
+                                                        $address[
+                                                            'address_title'
+                                                        ]
+                                                        ??
+                                                        'Address'
+                                                    );
+                                                ?>
+
+
+                                                <?php if (
+                                                    (int)
+                                                    $address[
+                                                        'is_default'
+                                                    ]
+                                                    ===
+                                                    1
+                                                ): ?>
+
+
+                                                    <span
+                                                        class="
+                                                            default-badge
+                                                        "
+                                                    >
+                                                        Default
+                                                    </span>
+
+
+                                                <?php endif; ?>
+
+                                            </h4>
+
+
+                                            <p>
+
+                                                <?php
+                                                    echo checkout_h(
+                                                        $address[
+                                                            'address_line'
+                                                        ]
+                                                        ??
+                                                        ''
+                                                    );
+                                                ?>
+
+                                            </p>
+
+
+                                            <p>
+
+                                                <?php
+
+                                                $locationParts = [];
+
+
+                                                if (
+                                                    !empty(
+                                                        $address[
+                                                            'area'
+                                                        ]
+                                                    )
+                                                ) {
+
+                                                    $locationParts[] =
+                                                        $address[
+                                                            'area'
+                                                        ];
+                                                }
+
+
+                                                if (
+                                                    !empty(
+                                                        $address[
+                                                            'city'
+                                                        ]
+                                                    )
+                                                ) {
+
+                                                    $locationParts[] =
+                                                        $address[
+                                                            'city'
+                                                        ];
+                                                }
+
+
+                                                echo checkout_h(
+                                                    implode(
+                                                        ', ',
+                                                        $locationParts
+                                                    )
+                                                );
+
+                                                ?>
+
+                                            </p>
+
+
+                                            <?php if (
+                                                !empty(
+                                                    $address[
+                                                        'phone'
+                                                    ]
+                                                )
+                                            ): ?>
+
+                                                <p>
+
+                                                    <i
+                                                        class="
+                                                            fas
+                                                            fa-phone
+                                                        "
+                                                    ></i>
+
+                                                    &nbsp;
+
+                                                    <?php
+                                                        echo checkout_h(
+                                                            $address[
+                                                                'phone'
+                                                            ]
+                                                        );
+                                                    ?>
+
+                                                </p>
+
+                                            <?php endif; ?>
+
+                                        </div>
+
+                                    </label>
+
+
+                                <?php endforeach; ?>
+
+                            </div>
+
+
+                            <a
+                                href="customer/manage-addresses.php"
+                                class="
+                                    manage-address
+                                "
+                            >
+
+                                <i
+                                    class="
+                                        fas
+                                        fa-location-dot
                                     "
                                 ></i>
 
@@ -2948,97 +3152,65 @@ require_once 'includes/header.php';
 
                             </a>
 
+
+                        <?php endif; ?>
+
+                    </section>
+
+
+                    <!-- PAYMENT -->
+
+                    <section
+                        class="checkout-card"
+                    >
+
+                        <div
+                            class="card-title"
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-wallet
+                                "
+                            ></i>
+
+
+                            <h2>
+                                Payment Method
+                            </h2>
+
                         </div>
 
 
-                    <?php } else { ?>
-
-
-                        <?php foreach (
-                            $addresses
-                            as $address
-                        ) { ?>
-
-
-                            <?php
-
-                            $addressId =
-                                (int)
-                                $address['id'];
-
-
-                            $isSelected =
-                                (
-                                    $addressId
-                                    ===
-                                    $selectedAddressId
-                                );
-
-
-                            $fullAddress =
-                                trim(
-                                    $address[
-                                        'address'
-                                    ]
-                                );
-
-
-                            if (
-                                !empty(
-                                    $address[
-                                        'area'
-                                    ]
-                                )
-                            ) {
-
-                                $fullAddress .=
-                                    ', '
-                                    .
-                                    $address[
-                                        'area'
-                                    ];
-                            }
-
-
-                            if (
-                                !empty(
-                                    $address[
-                                        'city'
-                                    ]
-                                )
-                            ) {
-
-                                $fullAddress .=
-                                    ', '
-                                    .
-                                    $address[
-                                        'city'
-                                    ];
-                            }
-
-                            ?>
+                        <div
+                            class="payment-list"
+                        >
 
 
                             <label
                                 class="
-                                    address-option
+                                    payment-option
                                     <?php
-                                    echo $isSelected
+                                    echo
+                                    $paymentMethod
+                                    ===
+                                    'cash_on_delivery'
                                         ? 'selected'
                                         : '';
                                     ?>
                                 "
                             >
 
-
                                 <input
                                     type="radio"
-                                    name="address_id"
-                                    value="<?php
-                                        echo $addressId;
-                                    ?>"
+                                    name="payment_method"
+                                    value="cash_on_delivery"
                                     <?php
-                                    echo $isSelected
+                                    echo
+                                    $paymentMethod
+                                    ===
+                                    'cash_on_delivery'
                                         ? 'checked'
                                         : '';
                                     ?>
@@ -3046,911 +3218,428 @@ require_once 'includes/header.php';
                                 >
 
 
-                                <div
+                                <span
                                     class="
-                                        address-top
-                                    "
-                                >
-
-
-                                    <span
-                                        class="
-                                            address-title
-                                        "
-                                    >
-
-                                        <span
-                                            class="
-                                                radio-circle
-                                            "
-                                        ></span>
-
-
-                                        <?php
-                                            echo h(
-                                                $address[
-                                                    'address_title'
-                                                ]
-                                            );
-                                        ?>
-
-                                    </span>
-
-
-                                    <?php if (
-                                        (int)
-                                        $address[
-                                            'is_default'
-                                        ] === 1
-                                    ) { ?>
-
-
-                                        <span
-                                            class="
-                                                default-badge
-                                            "
-                                        >
-
-                                            Default
-
-                                        </span>
-
-
-                                    <?php } ?>
-
-
-                                </div>
-
-
-                                <div
-                                    class="
-                                        address-name
-                                    "
-                                >
-
-                                    <?php
-                                        echo h(
-                                            $address[
-                                                'full_name'
-                                            ]
-                                        );
-                                    ?>
-
-                                </div>
-
-
-                                <div
-                                    class="
-                                        address-phone
+                                        payment-icon
                                     "
                                 >
 
                                     <i
                                         class="
                                             fas
-                                            fa-phone
+                                            fa-money-bill-wave
                                         "
                                     ></i>
 
-                                    &nbsp;
-
-                                    <?php
-                                        echo h(
-                                            $address[
-                                                'phone'
-                                            ]
-                                        );
-                                    ?>
-
-                                </div>
+                                </span>
 
 
-                                <div
+                                <span
                                     class="
-                                        address-text
+                                        payment-text
                                     "
                                 >
 
-                                    <?php
-                                        echo h(
-                                            $fullAddress
-                                        );
-                                    ?>
+                                    <strong>
+                                        Cash on Delivery
+                                    </strong>
 
-                                </div>
+                                    <small>
+                                        Pay when your order arrives.
+                                    </small>
 
-
-                                <?php if (
-                                    !empty(
-                                        $address[
-                                            'delivery_instructions'
-                                        ]
-                                    )
-                                ) { ?>
-
-
-                                    <div
-                                        class="
-                                            address-note
-                                        "
-                                    >
-
-                                        <i
-                                            class="
-                                                fas
-                                                fa-circle-info
-                                            "
-                                        ></i>
-
-                                        &nbsp;
-
-                                        <?php
-                                            echo h(
-                                                $address[
-                                                    'delivery_instructions'
-                                                ]
-                                            );
-                                        ?>
-
-                                    </div>
-
-
-                                <?php } ?>
-
+                                </span>
 
                             </label>
 
 
-                        <?php } ?>
-
-
-                        <a
-                            href="customer/manage-addresses.php"
-                            class="manage-address"
-                        >
-
-                            <i
+                            <label
                                 class="
-                                    fas
-                                    fa-pen
-                                "
-                            ></i>
-
-                            Manage Addresses
-
-                        </a>
-
-
-                    <?php } ?>
-
-
-                </section>
-
-
-                <!-- =========================================
-                     PAYMENT METHOD
-                ========================================== -->
-
-                <section
-                    class="checkout-card"
-                >
-
-
-                    <div
-                        class="card-heading"
-                    >
-
-                        <i
-                            class="
-                                fas
-                                fa-wallet
-                            "
-                        ></i>
-
-
-                        <h2>
-                            Payment Method
-                        </h2>
-
-                    </div>
-
-
-                    <!-- COD -->
-
-                    <label
-                        class="
-                            payment-option
-                            <?php
-                            echo
-                            $paymentFromCart
-                            ===
-                            'cod'
-                                ?
-                                'selected'
-                                :
-                                '';
-                            ?>
-                        "
-                    >
-
-
-                        <input
-                            type="radio"
-                            name="payment_method"
-                            value="cod"
-                            <?php
-                            echo
-                            $paymentFromCart
-                            ===
-                            'cod'
-                                ?
-                                'checked'
-                                :
-                                '';
-                            ?>
-                            required
-                        >
-
-
-                        <span
-                            class="
-                                payment-icon
-                            "
-                        >
-
-                            <i
-                                class="
-                                    fas
-                                    fa-money-bill-wave
-                                "
-                            ></i>
-
-                        </span>
-
-
-                        <span
-                            class="
-                                payment-info
-                            "
-                        >
-
-                            <span
-                                class="
-                                    payment-name
-                                "
-                            >
-
-                                Cash on Delivery
-
-                            </span>
-
-
-                            <span
-                                class="
-                                    payment-description
-                                "
-                            >
-
-                                Pay when your order arrives.
-
-                            </span>
-
-                        </span>
-
-
-                    </label>
-
-
-                    <!-- CARD -->
-
-                    <label
-                        class="
-                            payment-option
-                            <?php
-                            echo
-                            $paymentFromCart
-                            ===
-                            'card'
-                                ?
-                                'selected'
-                                :
-                                '';
-                            ?>
-                        "
-                    >
-
-
-                        <input
-                            type="radio"
-                            name="payment_method"
-                            value="card"
-                            <?php
-                            echo
-                            $paymentFromCart
-                            ===
-                            'card'
-                                ?
-                                'checked'
-                                :
-                                '';
-                            ?>
-                            required
-                        >
-
-
-                        <span
-                            class="
-                                payment-icon
-                            "
-                        >
-
-                            <i
-                                class="
-                                    fas
-                                    fa-credit-card
-                                "
-                            ></i>
-
-                        </span>
-
-
-                        <span
-                            class="
-                                payment-info
-                            "
-                        >
-
-                            <span
-                                class="
-                                    payment-name
-                                "
-                            >
-
-                                Card Payment
-
-                            </span>
-
-
-                            <span
-                                class="
-                                    payment-description
-                                "
-                            >
-
-                                Pay securely using your card.
-
-                            </span>
-
-                        </span>
-
-
-                    </label>
-
-
-                </section>
-
-
-            </div>
-
-
-            <!-- =============================================
-                 RIGHT SIDE
-            ============================================== -->
-
-            <aside>
-
-
-                <section
-                    class="checkout-card"
-                >
-
-
-                    <div
-                        class="card-heading"
-                    >
-
-                        <i
-                            class="
-                                fas
-                                fa-bag-shopping
-                            "
-                        ></i>
-
-
-                        <h2>
-                            Order Summary
-                        </h2>
-
-                    </div>
-
-
-                    <!-- =====================================
-                         RESTAURANT
-                    ====================================== -->
-
-                    <div
-                        class="
-                            restaurant-box
-                        "
-                    >
-
-
-                        <?php if (
-                            !empty(
-                                $restaurantImage
-                            )
-                        ) { ?>
-
-
-                            <img
-                                src="
-                                    assets/images/restaurants/<?php
-                                        echo h(
-                                            $restaurantImage
-                                        );
+                                    payment-option
+                                    <?php
+                                    echo
+                                    $paymentMethod
+                                    ===
+                                    'card'
+                                        ? 'selected'
+                                        : '';
                                     ?>
                                 "
-                                class="
-                                    restaurant-image
-                                "
-                                alt="<?php
-                                    echo h(
-                                        $restaurantName
-                                    );
-                                ?>"
-                                onerror="
-                                    this.style.display='none';
-                                    this.nextElementSibling.style.display='flex';
-                                "
                             >
 
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="card"
+                                    <?php
+                                    echo
+                                    $paymentMethod
+                                    ===
+                                    'card'
+                                        ? 'checked'
+                                        : '';
+                                    ?>
+                                >
 
-                            <div
-                                class="
-                                    restaurant-placeholder
-                                "
-                                style="
-                                    display:none;
-                                "
-                            >
 
-                                <i
+                                <span
                                     class="
-                                        fas
-                                        fa-store
-                                    "
-                                ></i>
-
-                            </div>
-
-
-                        <?php } else { ?>
-
-
-                            <div
-                                class="
-                                    restaurant-placeholder
-                                "
-                            >
-
-                                <i
-                                    class="
-                                        fas
-                                        fa-store
-                                    "
-                                ></i>
-
-                            </div>
-
-
-                        <?php } ?>
-
-
-                        <div>
-
-                            <div
-                                class="
-                                    restaurant-name
-                                "
-                            >
-
-                                <?php
-                                    echo h(
-                                        $restaurantName
-                                    );
-                                ?>
-
-                            </div>
-
-
-                            <?php if (
-                                !empty(
-                                    $deliveryTime
-                                )
-                            ) { ?>
-
-
-                                <div
-                                    class="
-                                        restaurant-time
+                                        payment-icon
                                     "
                                 >
 
                                     <i
                                         class="
                                             fas
-                                            fa-clock
+                                            fa-credit-card
                                         "
                                     ></i>
 
-                                    &nbsp;
+                                </span>
 
+
+                                <span
+                                    class="
+                                        payment-text
+                                    "
+                                >
+
+                                    <strong>
+                                        Debit / Credit Card
+                                    </strong>
+
+                                    <small>
+                                        Card payment option.
+                                    </small>
+
+                                </span>
+
+                            </label>
+
+
+                            <label
+                                class="
+                                    payment-option
                                     <?php
-                                        echo h(
-                                            $deliveryTime
-                                        );
+                                    echo
+                                    $paymentMethod
+                                    ===
+                                    'online'
+                                        ? 'selected'
+                                        : '';
                                     ?>
+                                "
+                            >
 
-                                </div>
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="online"
+                                    <?php
+                                    echo
+                                    $paymentMethod
+                                    ===
+                                    'online'
+                                        ? 'checked'
+                                        : '';
+                                    ?>
+                                >
 
 
-                            <?php } ?>
+                                <span
+                                    class="
+                                        payment-icon
+                                    "
+                                >
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-mobile-screen
+                                        "
+                                    ></i>
+
+                                </span>
+
+
+                                <span
+                                    class="
+                                        payment-text
+                                    "
+                                >
+
+                                    <strong>
+                                        Online Payment
+                                    </strong>
+
+                                    <small>
+                                        Online payment option.
+                                    </small>
+
+                                </span>
+
+                            </label>
 
 
                         </div>
 
+                    </section>
 
-                    </div>
+                </div>
 
 
-                    <!-- =====================================
-                         ITEMS
-                    ====================================== -->
+                <!-- =================================================
+                     RIGHT SIDE
+                ================================================== -->
 
-                    <?php foreach (
-                        $cartItems
-                        as $item
-                    ) { ?>
+                <aside>
+
+
+                    <section
+                        class="
+                            checkout-card
+                            summary-card
+                        "
+                    >
+
+                        <div
+                            class="card-title"
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-receipt
+                                "
+                            ></i>
+
+
+                            <h2>
+                                Order Summary
+                            </h2>
+
+                        </div>
+
+
+                        <div
+                            class="summary-row"
+                        >
+
+                            <span>
+                                Items
+                            </span>
+
+
+                            <strong>
+
+                                <?php
+                                    echo
+                                    $totalItems;
+                                ?>
+
+                            </strong>
+
+                        </div>
+
+
+                        <div
+                            class="summary-row"
+                        >
+
+                            <span>
+                                Subtotal
+                            </span>
+
+
+                            <strong>
+
+                                Rs.
+
+                                <?php
+                                    echo
+                                    number_format(
+                                        $subtotal,
+                                        0
+                                    );
+                                ?>
+
+                            </strong>
+
+                        </div>
+
+
+                        <div
+                            class="summary-row"
+                        >
+
+                            <span>
+                                Delivery Fee
+                            </span>
+
+
+                            <strong>
+
+                                <?php if (
+                                    $deliveryFee
+                                    >
+                                    0
+                                ): ?>
+
+                                    Rs.
+
+                                    <?php
+                                        echo
+                                        number_format(
+                                            $deliveryFee,
+                                            0
+                                        );
+                                    ?>
+
+                                <?php else: ?>
+
+                                    FREE
+
+                                <?php endif; ?>
+
+                            </strong>
+
+                        </div>
 
 
                         <div
                             class="
-                                checkout-item
+                                summary-divider
+                            "
+                        ></div>
+
+
+                        <div
+                            class="
+                                summary-total
                             "
                         >
 
-
-                            <?php if (
-                                !empty(
-                                    $item[
-                                        'item_image'
-                                    ]
-                                )
-                            ) { ?>
+                            <span>
+                                Total
+                            </span>
 
 
-                                <img
-                                    src="
-                                        assets/images/menu/<?php
-                                            echo h(
-                                                $item[
-                                                    'item_image'
-                                                ]
-                                            );
-                                        ?>
-                                    "
-                                    class="
-                                        item-image
-                                    "
-                                    alt="<?php
-                                        echo h(
-                                            $item[
-                                                'item_name'
-                                            ]
-                                        );
-                                    ?>"
-                                    onerror="
-                                        this.style.display='none';
-                                        this.nextElementSibling.style.display='flex';
-                                    "
-                                >
-
-
-                                <div
-                                    class="
-                                        item-placeholder
-                                    "
-                                    style="
-                                        display:none;
-                                    "
-                                >
-
-                                    <i
-                                        class="
-                                            fas
-                                            fa-utensils
-                                        "
-                                    ></i>
-
-                                </div>
-
-
-                            <?php } else { ?>
-
-
-                                <div
-                                    class="
-                                        item-placeholder
-                                    "
-                                >
-
-                                    <i
-                                        class="
-                                            fas
-                                            fa-utensils
-                                        "
-                                    ></i>
-
-                                </div>
-
-
-                            <?php } ?>
-
-
-                            <div
-                                class="
-                                    item-info
-                                "
-                            >
-
-                                <div
-                                    class="
-                                        item-name
-                                    "
-                                >
-
-                                    <?php
-                                        echo h(
-                                            $item[
-                                                'item_name'
-                                            ]
-                                        );
-                                    ?>
-
-                                </div>
-
-
-                                <div
-                                    class="
-                                        item-quantity
-                                    "
-                                >
-
-                                    Qty:
-                                    <?php
-                                        echo (int)
-                                            $item[
-                                                'quantity'
-                                            ];
-                                    ?>
-
-                                    ×
-
-                                    Rs.
-                                    <?php
-                                        echo number_format(
-                                            $item[
-                                                'item_price'
-                                            ],
-                                            2
-                                        );
-                                    ?>
-
-                                </div>
-
-                            </div>
-
-
-                            <div
-                                class="
-                                    item-total
-                                "
-                            >
+                            <strong>
 
                                 Rs.
+
                                 <?php
-                                    echo number_format(
-                                        $item[
-                                            'item_subtotal'
-                                        ],
-                                        2
+                                    echo
+                                    number_format(
+                                        $total,
+                                        0
                                     );
                                 ?>
 
-                            </div>
-
+                            </strong>
 
                         </div>
 
 
-                    <?php } ?>
+                        <div
+                            class="note-box"
+                        >
 
-
-                    <!-- =====================================
-                         SUBTOTAL
-                    ====================================== -->
-
-                    <div
-                        class="
-                            summary-row
-                        "
-                    >
-
-                        <span>
-                            Subtotal
-                        </span>
-
-
-                        <span>
-
-                            Rs.
-                            <?php
-                                echo number_format(
-                                    $subTotal,
-                                    2
-                                );
-                            ?>
-
-                        </span>
-
-                    </div>
-
-
-                    <!-- =====================================
-                         DELIVERY FEE
-                    ====================================== -->
-
-                    <div
-                        class="
-                            summary-row
-                        "
-                    >
-
-                        <span>
-                            Delivery Fee
-                        </span>
-
-
-                        <?php if (
-                            $deliveryFee > 0
-                        ) { ?>
-
-
-                            <span>
-
-                                Rs.
-                                <?php
-                                    echo number_format(
-                                        $deliveryFee,
-                                        2
-                                    );
-                                ?>
-
-                            </span>
-
-
-                        <?php } else { ?>
-
-
-                            <span
-                                class="free"
+                            <label
+                                for="customer_note"
                             >
 
-                                FREE
+                                Order Note
+                                <span
+                                    style="
+                                        color:#999;
+                                        font-weight:400;
+                                    "
+                                >
+                                    (Optional)
+                                </span>
 
-                            </span>
-
-
-                        <?php } ?>
-
-
-                    </div>
-
-
-                    <div
-                        class="
-                            summary-divider
-                        "
-                    ></div>
+                            </label>
 
 
-                    <!-- =====================================
-                         TOTAL
-                    ====================================== -->
+                            <textarea
+                                id="customer_note"
+                                name="customer_note"
+                                placeholder="Any special instructions..."
+                            ></textarea>
 
-                    <div
-                        class="
-                            summary-total
-                        "
-                    >
-
-                        <span>
-                            Total
-                        </span>
+                        </div>
 
 
-                        <strong>
-
-                            Rs.
-                            <?php
-                                echo number_format(
-                                    $grandTotal,
-                                    2
-                                );
-                            ?>
-
-                        </strong>
-
-                    </div>
-
-
-                    <!-- =====================================
-                         PLACE ORDER
-                    ====================================== -->
-
-                    <button
-                        type="submit"
-                        class="
-                            place-order-btn
-                        "
-                        <?php
-                        echo empty(
-                            $addresses
-                        )
-                            ?
-                            'disabled'
-                            :
-                            '';
-                        ?>
-                    >
-
-                        <i
+                        <button
+                            type="submit"
+                            name="place_order"
+                            value="1"
                             class="
-                                fas
-                                fa-check
+                                place-order-btn
                             "
-                        ></i>
+                            <?php
+                            echo
+                            empty($addresses)
+                                ?
+                                'disabled'
+                                :
+                                '';
+                            ?>
+                        >
 
-                        &nbsp;
+                            <i
+                                class="
+                                    fas
+                                    fa-check
+                                "
+                            ></i>
 
-                        Place Order
+                            Complete Order
 
-                    </button>
-
-
-                </section>
-
-
-            </aside>
-
-
-        </div>
+                        </button>
 
 
-    </form>
+                        <div
+                            class="
+                                security-note
+                            "
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-shield-halved
+                                "
+                            ></i>
+
+                            Your order information is secure.
+
+                        </div>
 
 
-<?php } ?>
+                    </section>
 
+
+                </aside>
+
+
+            </div>
+
+        </form>
+
+    </div>
 
 </main>
 
 
 <script>
 
-/* =====================================================
-   ADDRESS SELECTION
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| ADDRESS SELECTION
+|--------------------------------------------------------------------------
+*/
 
 document
     .querySelectorAll(
@@ -3963,7 +3652,6 @@ document
                 'click',
                 function() {
 
-
                     document
                         .querySelectorAll(
                             '.address-option'
@@ -3971,10 +3659,9 @@ document
                         .forEach(
                             function(item) {
 
-                                item.classList
-                                    .remove(
-                                        'selected'
-                                    );
+                                item.classList.remove(
+                                    'selected'
+                                );
 
                             }
                         );
@@ -3984,19 +3671,6 @@ document
                         'selected'
                     );
 
-
-                    var radio =
-                        option.querySelector(
-                            'input[type="radio"]'
-                        );
-
-
-                    if (radio) {
-
-                        radio.checked =
-                            true;
-                    }
-
                 }
             );
 
@@ -4004,9 +3678,11 @@ document
     );
 
 
-/* =====================================================
-   PAYMENT SELECTION
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| PAYMENT SELECTION
+|--------------------------------------------------------------------------
+*/
 
 document
     .querySelectorAll(
@@ -4019,7 +3695,6 @@ document
                 'click',
                 function() {
 
-
                     document
                         .querySelectorAll(
                             '.payment-option'
@@ -4027,10 +3702,9 @@ document
                         .forEach(
                             function(item) {
 
-                                item.classList
-                                    .remove(
-                                        'selected'
-                                    );
+                                item.classList.remove(
+                                    'selected'
+                                );
 
                             }
                         );
@@ -4060,23 +3734,23 @@ document
     );
 
 
-/* =====================================================
-   FORM VALIDATION
-===================================================== */
+/*
+|--------------------------------------------------------------------------
+| FORM VALIDATION
+|--------------------------------------------------------------------------
+*/
 
 var checkoutForm =
     document.getElementById(
-        'checkout-form'
+        'checkoutForm'
     );
 
 
 if (checkoutForm) {
 
-
     checkoutForm.addEventListener(
         'submit',
         function(event) {
-
 
             var address =
                 document.querySelector(
@@ -4113,7 +3787,6 @@ if (checkoutForm) {
                 return;
             }
 
-
         }
     );
 
@@ -4122,14 +3795,6 @@ if (checkoutForm) {
 </script>
 
 
-<?php
+</body>
 
-/*
-|--------------------------------------------------------------------------
-| EXISTING FOOTER
-|--------------------------------------------------------------------------
-*/
-
-require_once 'includes/footer.php';
-
-?>
+</html>
