@@ -5,9 +5,11 @@ session_start();
 require_once '../includes/config.php';
 
 
-/* =========================================================
-   RIDER AUTHENTICATION
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| RIDER AUTHENTICATION
+|--------------------------------------------------------------------------
+*/
 
 if (
     !isset($_SESSION['rider_logged_in']) ||
@@ -33,9 +35,11 @@ if ($riderId <= 0) {
 }
 
 
-/* =========================================================
-   HELPER
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| HELPER
+|--------------------------------------------------------------------------
+*/
 
 function riderDashboardEscape($value)
 {
@@ -47,9 +51,11 @@ function riderDashboardEscape($value)
 }
 
 
-/* =========================================================
-   LOGOUT
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| LOGOUT
+|--------------------------------------------------------------------------
+*/
 
 if (
     isset($_GET['logout']) &&
@@ -70,9 +76,11 @@ if (
 }
 
 
-/* =========================================================
-   GET RIDER
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| GET RIDER
+|--------------------------------------------------------------------------
+*/
 
 $rider = [
     'id' => $riderId,
@@ -134,15 +142,15 @@ if ($stmt) {
 
         $_SESSION['rider_vehicle'] =
             $rider['vehicle_type'];
-
     }
-
 }
 
 
-/* =========================================================
-   RIDER STATUS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| RIDER STATUS
+|--------------------------------------------------------------------------
+*/
 
 $riderStatus =
     strtolower(
@@ -194,13 +202,14 @@ if ($riderStatus === 'pending') {
 
     $statusMessage =
         'Your rider account is active and ready for delivery orders.';
-
 }
 
 
-/* =========================================================
-   VEHICLE
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| VEHICLE
+|--------------------------------------------------------------------------
+*/
 
 $vehicleType =
     strtolower(
@@ -229,7 +238,6 @@ $vehicleNames = [
 
     'van' =>
         'Van'
-
 ];
 
 
@@ -240,9 +248,11 @@ $vehicleName =
     );
 
 
-/* =========================================================
-   INITIALS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| INITIALS
+|--------------------------------------------------------------------------
+*/
 
 $nameParts =
     preg_split(
@@ -266,7 +276,6 @@ if (!empty($nameParts[0])) {
                 1
             )
         );
-
 }
 
 
@@ -280,39 +289,300 @@ if (!empty($nameParts[1])) {
                 1
             )
         );
-
 }
 
 
 if ($initials === '') {
 
     $initials = 'R';
-
 }
 
 
-/* =========================================================
-   DASHBOARD COUNTERS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| FLASH MESSAGE
+|--------------------------------------------------------------------------
+*/
+
+$successMessage = '';
+$errorMessage = '';
+
+
+/*
+|--------------------------------------------------------------------------
+| AVAILABILITY TABLE
+|--------------------------------------------------------------------------
+*/
+
+$conn->query("
+    CREATE TABLE IF NOT EXISTS rider_availability (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        rider_id INT(11) NOT NULL,
+        available_date DATE NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY rider_id (rider_id),
+        KEY available_date (available_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+");
+
+
+/*
+|--------------------------------------------------------------------------
+| SAVE AVAILABILITY
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['save_availability'])
+) {
+
+    $availabilityDate =
+        trim(
+            $_POST['available_date']
+            ?? ''
+        );
+
+    $startTime =
+        trim(
+            $_POST['start_time']
+            ?? ''
+        );
+
+    $endTime =
+        trim(
+            $_POST['end_time']
+            ?? ''
+        );
+
+
+    if (!$isApproved) {
+
+        $errorMessage =
+            'Your rider account must be approved before setting availability.';
+
+    } elseif (
+        $availabilityDate === '' ||
+        $startTime === '' ||
+        $endTime === ''
+    ) {
+
+        $errorMessage =
+            'Please select date, start time and end time.';
+
+    } elseif (
+        $availabilityDate < date('Y-m-d')
+    ) {
+
+        $errorMessage =
+            'You cannot select a previous date.';
+
+    } elseif (
+        $startTime >= $endTime
+    ) {
+
+        $errorMessage =
+            'End time must be later than start time.';
+
+    } else {
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK OVERLAPPING SCHEDULE
+        |--------------------------------------------------------------------------
+        */
+
+        $checkStmt =
+            $conn->prepare("
+                SELECT id
+                FROM rider_availability
+                WHERE rider_id = ?
+                AND available_date = ?
+                AND start_time < ?
+                AND end_time > ?
+                LIMIT 1
+            ");
+
+
+        $overlapFound = false;
+
+
+        if ($checkStmt) {
+
+            $checkStmt->bind_param(
+                'isss',
+                $riderId,
+                $availabilityDate,
+                $endTime,
+                $startTime
+            );
+
+            $checkStmt->execute();
+
+            $checkResult =
+                $checkStmt->get_result();
+
+            $overlapFound =
+                $checkResult->num_rows > 0;
+
+            $checkStmt->close();
+        }
+
+
+        if ($overlapFound) {
+
+            $errorMessage =
+                'You already have an availability schedule during this time.';
+
+        } else {
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | SAVE
+            |--------------------------------------------------------------------------
+            */
+
+            $insertStmt =
+                $conn->prepare("
+                    INSERT INTO rider_availability
+                    (
+                        rider_id,
+                        available_date,
+                        start_time,
+                        end_time
+                    )
+                    VALUES
+                    (
+                        ?,
+                        ?,
+                        ?,
+                        ?
+                    )
+                ");
+
+
+            if ($insertStmt) {
+
+                $insertStmt->bind_param(
+                    'isss',
+                    $riderId,
+                    $availabilityDate,
+                    $startTime,
+                    $endTime
+                );
+
+
+                if (
+                    $insertStmt->execute()
+                ) {
+
+                    $successMessage =
+                        'Your availability schedule has been saved successfully.';
+
+                } else {
+
+                    $errorMessage =
+                        'Unable to save availability schedule.';
+
+                }
+
+
+                $insertStmt->close();
+
+            } else {
+
+                $errorMessage =
+                    'Unable to prepare availability request.';
+            }
+        }
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DELETE AVAILABILITY
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['delete_availability'])
+) {
+
+    $availabilityId =
+        isset(
+            $_POST['availability_id']
+        )
+        ? (int)$_POST['availability_id']
+        : 0;
+
+
+    if ($availabilityId > 0) {
+
+        $deleteStmt =
+            $conn->prepare("
+                DELETE FROM rider_availability
+                WHERE id = ?
+                AND rider_id = ?
+                LIMIT 1
+            ");
+
+
+        if ($deleteStmt) {
+
+            $deleteStmt->bind_param(
+                'ii',
+                $availabilityId,
+                $riderId
+            );
+
+
+            if (
+                $deleteStmt->execute()
+            ) {
+
+                $successMessage =
+                    'Availability schedule removed.';
+
+            } else {
+
+                $errorMessage =
+                    'Unable to remove availability schedule.';
+            }
+
+
+            $deleteStmt->close();
+        }
+    }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| DASHBOARD COUNTERS
+|--------------------------------------------------------------------------
+*/
 
 $availableOrders = 0;
 $activeDeliveries = 0;
 $completedToday = 0;
 $totalCompleted = 0;
-$todayEarnings = 0;
 
 
 /*
 |--------------------------------------------------------------------------
-| Available orders
+| DETECT ORDER COLUMNS
 |--------------------------------------------------------------------------
-|
-| Orders ready for pickup and not assigned to a rider.
-| If your orders table has rider_id, this query uses it.
-|
 */
 
 $orderColumns = [];
+
 
 $columnsResult =
     $conn->query(
@@ -329,23 +599,27 @@ if ($columnsResult) {
 
         $orderColumns[] =
             $column['Field'];
-
     }
-
 }
 
 
 $hasOrderColumn =
-    function ($column) use ($orderColumns) {
+    function ($column)
+    use ($orderColumns) {
 
         return in_array(
             $column,
             $orderColumns,
             true
         );
-
     };
 
+
+/*
+|--------------------------------------------------------------------------
+| RIDER COLUMN
+|--------------------------------------------------------------------------
+*/
 
 $riderOrderColumn = null;
 
@@ -369,11 +643,15 @@ foreach (
             $column;
 
         break;
-
     }
-
 }
 
+
+/*
+|--------------------------------------------------------------------------
+| STATUS COLUMN
+|--------------------------------------------------------------------------
+*/
 
 $statusColumn = null;
 
@@ -396,15 +674,13 @@ foreach (
             $column;
 
         break;
-
     }
-
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| Available orders count
+| AVAILABLE ORDERS
 |--------------------------------------------------------------------------
 */
 
@@ -446,18 +722,19 @@ if (
             $result->fetch_assoc();
 
         $availableOrders =
-            (int)($row['total'] ?? 0);
+            (int)(
+                $row['total']
+                ?? 0
+            );
 
         $stmt->close();
-
     }
-
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| Assigned active orders
+| ACTIVE DELIVERIES
 |--------------------------------------------------------------------------
 */
 
@@ -501,18 +778,19 @@ if (
             $result->fetch_assoc();
 
         $activeDeliveries =
-            (int)($row['total'] ?? 0);
+            (int)(
+                $row['total']
+                ?? 0
+            );
 
         $stmt->close();
-
     }
-
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| Completed orders today
+| COMPLETED TODAY
 |--------------------------------------------------------------------------
 */
 
@@ -561,18 +839,27 @@ if (
             $result->fetch_assoc();
 
         $completedToday =
-            (int)($row['total'] ?? 0);
+            (int)(
+                $row['total']
+                ?? 0
+            );
 
         $stmt->close();
-
     }
+}
 
 
-    /*
-    |--------------------------------------------------------------------------
-    | Total completed
-    |--------------------------------------------------------------------------
-    */
+/*
+|--------------------------------------------------------------------------
+| TOTAL COMPLETED
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $isApproved &&
+    $riderOrderColumn !== null &&
+    $statusColumn !== null
+) {
 
     $sql = "
         SELECT COUNT(*) AS total
@@ -607,116 +894,120 @@ if (
             $result->fetch_assoc();
 
         $totalCompleted =
-            (int)($row['total'] ?? 0);
+            (int)(
+                $row['total']
+                ?? 0
+            );
 
         $stmt->close();
-
     }
-
 }
 
 
-/* =========================================================
-   RIDER EARNINGS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| TODAY'S EARNINGS
+|--------------------------------------------------------------------------
+*/
 
-$earningsColumns = [];
+$todayEarnings = 0;
 
-$earningsResult =
-    $conn->query(
-        "SHOW COLUMNS FROM rider_earnings"
-    );
+$earningsTableExists = false;
 
 
-if ($earningsResult) {
+$tableCheck =
+    $conn->query("
+        SHOW TABLES LIKE 'rider_earnings'
+    ");
 
-    while (
-        $column =
-        $earningsResult->fetch_assoc()
-    ) {
 
-        $earningsColumns[] =
-            $column['Field'];
+if (
+    $tableCheck &&
+    $tableCheck->num_rows > 0
+) {
 
-    }
-
+    $earningsTableExists = true;
 }
 
 
-$hasEarningColumn =
-    function ($column) use ($earningsColumns) {
+if ($earningsTableExists) {
 
-        return in_array(
-            $column,
-            $earningsColumns,
-            true
+    $earningsColumns = [];
+
+
+    $earningsResult =
+        $conn->query(
+            "SHOW COLUMNS FROM rider_earnings"
         );
 
-    };
 
+    if ($earningsResult) {
 
-$earningAmountColumn = null;
+        while (
+            $column =
+            $earningsResult->fetch_assoc()
+        ) {
 
-
-foreach (
-    [
-        'amount',
-        'earning',
-        'rider_earning',
-        'delivery_fee'
-    ]
-    as $column
-) {
-
-    if (
-        $hasEarningColumn(
-            $column
-        )
-    ) {
-
-        $earningAmountColumn =
-            $column;
-
-        break;
-
+            $earningsColumns[] =
+                $column['Field'];
+        }
     }
 
-}
+
+    $hasEarningColumn =
+        function ($column)
+        use ($earningsColumns) {
+
+            return in_array(
+                $column,
+                $earningsColumns,
+                true
+            );
+        };
 
 
-$earningRiderColumn = null;
+    $earningAmountColumn = null;
 
 
-foreach (
-    [
-        'rider_id'
-    ]
-    as $column
-) {
+    foreach (
+        [
+            'amount',
+            'earning',
+            'rider_earning',
+            'delivery_fee'
+        ]
+        as $column
+    ) {
+
+        if (
+            $hasEarningColumn(
+                $column
+            )
+        ) {
+
+            $earningAmountColumn =
+                $column;
+
+            break;
+        }
+    }
+
+
+    $earningRiderColumn = null;
+
 
     if (
         $hasEarningColumn(
-            $column
+            'rider_id'
         )
     ) {
 
         $earningRiderColumn =
-            $column;
-
-        break;
-
+            'rider_id';
     }
 
-}
 
-
-if (
-    $isApproved &&
-    $earningAmountColumn !== null &&
-    $earningRiderColumn !== null
-) {
-
-    $dateColumn = null;
+    $earningDateColumn = null;
 
 
     foreach (
@@ -735,17 +1026,19 @@ if (
             )
         ) {
 
-            $dateColumn =
+            $earningDateColumn =
                 $column;
 
             break;
-
         }
-
     }
 
 
-    if ($dateColumn !== null) {
+    if (
+        $earningAmountColumn !== null &&
+        $earningRiderColumn !== null &&
+        $earningDateColumn !== null
+    ) {
 
         $sql = "
             SELECT
@@ -758,7 +1051,7 @@ if (
             FROM rider_earnings
             WHERE `$earningRiderColumn` = ?
             AND DATE(
-                `$dateColumn`
+                `$earningDateColumn`
             ) = CURDATE()
         ";
 
@@ -789,17 +1082,116 @@ if (
                 );
 
             $stmt->close();
-
         }
-
     }
-
 }
 
 
-/* =========================================================
-   ACTIVE DELIVERY DETAILS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| UPCOMING AVAILABILITY
+|--------------------------------------------------------------------------
+*/
+
+$availabilityList = [];
+
+
+$availabilityStmt =
+    $conn->prepare("
+        SELECT
+            id,
+            available_date,
+            start_time,
+            end_time
+        FROM rider_availability
+        WHERE rider_id = ?
+        AND available_date >= CURDATE()
+        ORDER BY
+            available_date ASC,
+            start_time ASC
+        LIMIT 10
+    ");
+
+
+if ($availabilityStmt) {
+
+    $availabilityStmt->bind_param(
+        'i',
+        $riderId
+    );
+
+    $availabilityStmt->execute();
+
+    $availabilityResult =
+        $availabilityStmt->get_result();
+
+
+    while (
+        $row =
+        $availabilityResult->fetch_assoc()
+    ) {
+
+        $availabilityList[] =
+            $row;
+    }
+
+
+    $availabilityStmt->close();
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| TODAY AVAILABILITY
+|--------------------------------------------------------------------------
+*/
+
+$todayAvailability = null;
+
+
+$todayStmt =
+    $conn->prepare("
+        SELECT
+            start_time,
+            end_time
+        FROM rider_availability
+        WHERE rider_id = ?
+        AND available_date = CURDATE()
+        AND start_time <= CURTIME()
+        AND end_time >= CURTIME()
+        ORDER BY start_time ASC
+        LIMIT 1
+    ");
+
+
+if ($todayStmt) {
+
+    $todayStmt->bind_param(
+        'i',
+        $riderId
+    );
+
+    $todayStmt->execute();
+
+    $todayResult =
+        $todayStmt->get_result();
+
+    $todayAvailability =
+        $todayResult->fetch_assoc();
+
+    $todayStmt->close();
+}
+
+
+$isAvailableNow =
+    $todayAvailability !== null;
+
+
+/*
+|--------------------------------------------------------------------------
+| ACTIVE ORDER
+|--------------------------------------------------------------------------
+*/
 
 $activeOrder = null;
 
@@ -812,19 +1204,17 @@ if (
 
     $sql = "
         SELECT
-            o.*
-        FROM orders o
-        WHERE o.`$riderOrderColumn` = ?
+            *
+        FROM orders
+        WHERE `$riderOrderColumn` = ?
         AND LOWER(
-            TRIM(
-                o.`$statusColumn`
-            )
+            TRIM(`$statusColumn`)
         ) NOT IN (
             'delivered',
             'cancelled',
             'completed'
         )
-        ORDER BY o.id DESC
+        ORDER BY id DESC
         LIMIT 1
     ";
 
@@ -849,222 +1239,76 @@ if (
             $result->fetch_assoc();
 
         $stmt->close();
-
     }
-
 }
 
 
-/* =========================================================
-   ACTIVE ORDER DISPLAY DATA
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| AVAILABLE ORDERS PREVIEW
+|--------------------------------------------------------------------------
+*/
 
-$activeOrderNumber = '';
-$activeOrderStatus = '';
-$activeOrderTotal = 0;
-$activePaymentMethod = '';
-$activeRestaurantId = 0;
-$activeAddressId = 0;
+$availableOrderList = [];
 
 
-if ($activeOrder) {
+if (
+    $isApproved &&
+    $riderOrderColumn !== null &&
+    $statusColumn !== null
+) {
 
-    $activeOrderNumber =
-        $activeOrder['order_number']
-        ?? (
-            '#' .
-            (int)$activeOrder['id']
-        );
+    $sql = "
+        SELECT
+            id,
+            order_number,
+            restaurant_id,
+            order_status,
+            total,
+            payment_method,
+            created_at
+        FROM orders
+        WHERE LOWER(
+            TRIM(`$statusColumn`)
+        ) IN (
+            'ready_for_pickup',
+            'ready for pickup',
+            'ready'
+        )
+        AND (
+            `$riderOrderColumn` IS NULL
+            OR `$riderOrderColumn` = 0
+        )
+        ORDER BY id DESC
+        LIMIT 5
+    ";
 
-
-    $activeOrderStatus =
-        $activeOrder[$statusColumn]
-        ?? 'Assigned';
-
-
-    $activeOrderTotal =
-        (float)(
-            $activeOrder['total']
-            ?? 0
-        );
-
-
-    $activePaymentMethod =
-        $activeOrder['payment_method']
-        ?? '';
-
-
-    $activeRestaurantId =
-        (int)(
-            $activeOrder['restaurant_id']
-            ?? 0
-        );
-
-
-    $activeAddressId =
-        (int)(
-            $activeOrder['address_id']
-            ?? 0
-        );
-
-}
-
-
-/* =========================================================
-   RESTAURANT DETAILS
-========================================================= */
-
-$restaurantName = 'Restaurant';
-$restaurantAddress = 'Pickup address not available';
-
-
-if ($activeRestaurantId > 0) {
 
     $stmt =
-        $conn->prepare("
-            SELECT
-                name,
-                address
-            FROM restaurants
-            WHERE id = ?
-            LIMIT 1
-        ");
+        $conn->prepare($sql);
 
 
     if ($stmt) {
-
-        $stmt->bind_param(
-            'i',
-            $activeRestaurantId
-        );
 
         $stmt->execute();
 
         $result =
             $stmt->get_result();
 
-        $restaurant =
-            $result->fetch_assoc();
 
-        $stmt->close();
+        while (
+            $row =
+            $result->fetch_assoc()
+        ) {
 
-
-        if ($restaurant) {
-
-            $restaurantName =
-                $restaurant['name']
-                ?? 'Restaurant';
-
-            $restaurantAddress =
-                $restaurant['address']
-                ?? 'Pickup address not available';
-
+            $availableOrderList[] =
+                $row;
         }
 
-    }
-
-}
-
-
-/* =========================================================
-   CUSTOMER ADDRESS
-========================================================= */
-
-$customerAddress =
-    'Delivery address not available';
-
-
-if ($activeAddressId > 0) {
-
-    /*
-     * Current customer address system
-     */
-
-    $stmt =
-        $conn->prepare("
-            SELECT
-                address_line,
-                city,
-                area,
-                landmark
-            FROM customer_addresses
-            WHERE id = ?
-            LIMIT 1
-        ");
-
-
-    if ($stmt) {
-
-        $stmt->bind_param(
-            'i',
-            $activeAddressId
-        );
-
-        $stmt->execute();
-
-        $result =
-            $stmt->get_result();
-
-        $address =
-            $result->fetch_assoc();
 
         $stmt->close();
-
-
-        if ($address) {
-
-            $parts = [];
-
-
-            foreach (
-                [
-                    'address_line',
-                    'area',
-                    'city',
-                    'landmark'
-                ]
-                as $field
-            ) {
-
-                if (
-                    isset(
-                        $address[$field]
-                    ) &&
-                    trim(
-                        (string)$address[$field]
-                    ) !== ''
-                ) {
-
-                    $parts[] =
-                        trim(
-                            (string)$address[$field]
-                        );
-
-                }
-
-            }
-
-
-            if (!empty($parts)) {
-
-                $customerAddress =
-                    implode(
-                        ', ',
-                        $parts
-                    );
-
-            }
-
-        }
-
     }
-
 }
-
-
-/* =========================================================
-   PAGE
-========================================================= */
 
 ?>
 
@@ -1103,737 +1347,59 @@ body {
 
     margin: 0;
 
+    background: #f7f7f9;
+
+    color: #222;
+
     font-family:
         Arial,
         Helvetica,
         sans-serif;
-
-    background: #f6f7f9;
-
-    color: #252525;
 }
 
 
-.rider-page {
+.rider-dashboard {
+
+    margin-left: 223px;
 
     min-height: 100vh;
 
-    padding-left: 223px;
+    padding: 30px;
 }
 
 
-.rider-topbar {
-
-    height: 72px;
-
-    background: #fff;
-
-    border-bottom:
-        1px solid #eeeeee;
+.top-header {
 
     display: flex;
-
-    align-items: center;
 
     justify-content:
         space-between;
 
-    padding:
-        0 30px;
-
-    position: sticky;
-
-    top: 0;
-
-    z-index: 100;
-}
-
-
-.rider-top-title {
-
-    display: flex;
-
     align-items: center;
 
-    gap: 12px;
-}
-
-
-.rider-top-title-icon {
-
-    width: 40px;
-
-    height: 40px;
-
-    border-radius: 10px;
-
-    background: #fff0f3;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-}
-
-
-.rider-top-title h2 {
-
-    margin: 0;
-
-    font-size: 18px;
-
-    font-weight: 800;
-}
-
-
-.rider-top-title span {
-
-    display: block;
-
-    margin-top: 3px;
-
-    color: #999;
-
-    font-size: 10px;
-}
-
-
-.rider-top-right {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 14px;
-}
-
-
-.rider-top-user {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 8px;
-
-    font-size: 13px;
-
-    font-weight: 700;
-}
-
-
-.rider-top-avatar {
-
-    width: 34px;
-
-    height: 34px;
-
-    border-radius: 50%;
-
-    background: #ffd900;
-
-    color: #111;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    font-size: 11px;
-
-    font-weight: 900;
-}
-
-
-.rider-logout {
-
-    height: 36px;
-
-    padding:
-        0 13px;
-
-    border-radius: 8px;
-
-    background: #fff0f3;
-
-    border:
-        1px solid #ffd4df;
-
-    color: #ed0038;
-
-    text-decoration: none;
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 7px;
-
-    font-size: 12px;
-
-    font-weight: 700;
-}
-
-
-.rider-content {
-
-    padding: 28px;
-
-    max-width: 1500px;
-
-    margin: 0 auto;
-}
-
-
-.rider-welcome {
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content:
-        space-between;
-
-    gap: 20px;
-
-    margin-bottom: 22px;
-}
-
-
-.rider-welcome h1 {
-
-    margin: 0;
-
-    font-size: 27px;
-
-    font-weight: 800;
-}
-
-
-.rider-welcome p {
-
-    margin:
-        6px 0 0;
-
-    color: #777;
-
-    font-size: 13px;
-}
-
-
-.rider-date {
-
-    padding:
-        10px 14px;
-
-    background: #fff;
-
-    border:
-        1px solid #eeeeee;
-
-    border-radius: 9px;
-
-    color: #777;
-
-    font-size: 11px;
-
-    font-weight: 700;
-}
-
-
-.rider-status {
-
-    background: #fff;
-
-    border:
-        1px solid #eeeeee;
-
-    border-radius: 14px;
-
-    padding: 18px 20px;
-
-    margin-bottom: 20px;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content:
-        space-between;
+    margin-bottom: 25px;
 
     gap: 20px;
 }
 
 
-.rider-status-left {
+.welcome h1 {
 
-    display: flex;
+    margin: 0 0 6px;
 
-    align-items: center;
+    font-size: 28px;
 
-    gap: 13px;
+    font-weight: 800;
 }
 
 
-.rider-status-icon {
-
-    width: 44px;
-
-    height: 44px;
-
-    border-radius: 50%;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    background: #eaf8ef;
-
-    color: #198842;
-}
-
-
-.rider-status-icon.pending {
-
-    background: #fff7df;
-
-    color: #d79a00;
-}
-
-
-.rider-status-icon.blocked {
-
-    background: #fff0f2;
-
-    color: #e00038;
-}
-
-
-.rider-status-text h3 {
-
-    margin:
-        0 0 4px;
-
-    font-size: 15px;
-}
-
-
-.rider-status-text p {
+.welcome p {
 
     margin: 0;
 
     color: #777;
 
-    font-size: 11px;
-}
-
-
-.rider-status-badge {
-
-    padding:
-        8px 13px;
-
-    border-radius: 20px;
-
-    background: #eaf8ef;
-
-    color: #198842;
-
-    font-size: 10px;
-
-    font-weight: 800;
-}
-
-
-.rider-status-badge.pending {
-
-    background: #fff7df;
-
-    color: #bd8600;
-}
-
-
-.rider-status-badge.blocked {
-
-    background: #fff0f2;
-
-    color: #e00038;
-}
-
-
-.rider-stats {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(4, 1fr);
-
-    gap: 16px;
-
-    margin-bottom: 20px;
-}
-
-
-.rider-stat-card {
-
-    background: #fff;
-
-    border:
-        1px solid #eeeeee;
-
-    border-radius: 14px;
-
-    padding: 19px;
-}
-
-
-.rider-stat-icon {
-
-    width: 42px;
-
-    height: 42px;
-
-    border-radius: 10px;
-
-    background: #fff0f3;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    margin-bottom: 13px;
-}
-
-
-.rider-stat-label {
-
-    color: #888;
-
-    font-size: 11px;
-
-    margin-bottom: 6px;
-}
-
-
-.rider-stat-value {
-
-    color: #252525;
-
-    font-size: 24px;
-
-    font-weight: 800;
-}
-
-
-.rider-stat-note {
-
-    margin-top: 5px;
-
-    color: #aaa;
-
-    font-size: 10px;
-}
-
-
-.rider-main-grid {
-
-    display: grid;
-
-    grid-template-columns:
-        1.55fr 1fr;
-
-    gap: 20px;
-
-    margin-bottom: 20px;
-}
-
-
-.rider-panel {
-
-    background: #fff;
-
-    border:
-        1px solid #eeeeee;
-
-    border-radius: 14px;
-
-    padding: 21px;
-}
-
-
-.rider-panel-header {
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content:
-        space-between;
-
-    margin-bottom: 17px;
-}
-
-
-.rider-panel-header h2 {
-
-    margin: 0;
-
-    font-size: 17px;
-}
-
-
-.rider-panel-header span {
-
-    color: #999;
-
-    font-size: 10px;
-}
-
-
-.delivery-box {
-
-    border:
-        1px solid #f0f0f0;
-
-    border-radius: 11px;
-
-    overflow: hidden;
-}
-
-
-.delivery-header {
-
-    padding: 15px 17px;
-
-    background: #fffafa;
-
-    border-bottom:
-        1px solid #eeeeee;
-
-    display: flex;
-
-    justify-content:
-        space-between;
-
-    align-items: center;
-}
-
-
-.delivery-order {
-
-    font-size: 14px;
-
-    font-weight: 800;
-}
-
-
-.delivery-status {
-
-    padding:
-        6px 10px;
-
-    border-radius: 20px;
-
-    background: #fff0f3;
-
-    color: #ed0038;
-
-    font-size: 9px;
-
-    font-weight: 800;
-
-    text-transform: uppercase;
-}
-
-
-.delivery-body {
-
-    padding: 17px;
-}
-
-
-.delivery-row {
-
-    display: flex;
-
-    gap: 12px;
-
-    margin-bottom: 16px;
-}
-
-
-.delivery-row:last-child {
-
-    margin-bottom: 0;
-}
-
-
-.delivery-icon {
-
-    width: 34px;
-
-    height: 34px;
-
-    flex-shrink: 0;
-
-    border-radius: 9px;
-
-    background: #fff0f3;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
     font-size: 12px;
-}
-
-
-.delivery-label {
-
-    color: #999;
-
-    font-size: 9px;
-
-    font-weight: 700;
-
-    text-transform: uppercase;
-
-    margin-bottom: 3px;
-}
-
-
-.delivery-value {
-
-    color: #333;
-
-    font-size: 12px;
-
-    line-height: 1.5;
-
-    font-weight: 600;
-}
-
-
-.delivery-footer {
-
-    padding:
-        13px 17px;
-
-    background: #fafafa;
-
-    border-top:
-        1px solid #eeeeee;
-
-    display: flex;
-
-    justify-content:
-        space-between;
-
-    align-items: center;
-}
-
-
-.delivery-total {
-
-    font-size: 15px;
-
-    font-weight: 800;
-}
-
-
-.delivery-btn {
-
-    display: inline-flex;
-
-    align-items: center;
-
-    gap: 7px;
-
-    padding:
-        9px 13px;
-
-    background: #ed0038;
-
-    color: #fff;
-
-    border-radius: 8px;
-
-    text-decoration: none;
-
-    font-size: 10px;
-
-    font-weight: 700;
-}
-
-
-.no-delivery {
-
-    text-align: center;
-
-    padding:
-        45px 20px;
-}
-
-
-.no-delivery-icon {
-
-    width: 62px;
-
-    height: 62px;
-
-    margin:
-        0 auto 15px;
-
-    border-radius: 50%;
-
-    background: #fff0f3;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    font-size: 22px;
-}
-
-
-.no-delivery h3 {
-
-    margin:
-        0 0 7px;
-
-    font-size: 16px;
-}
-
-
-.no-delivery p {
-
-    margin: 0 auto;
-
-    max-width: 400px;
-
-    color: #888;
-
-    font-size: 11px;
-
-    line-height: 1.6;
 }
 
 
@@ -1843,26 +1409,31 @@ body {
 
     align-items: center;
 
-    gap: 12px;
+    gap: 10px;
 
-    padding-bottom: 16px;
+    background: #fff;
 
-    margin-bottom: 14px;
+    padding:
+        9px 13px;
 
-    border-bottom:
-        1px solid #eeeeee;
+    border:
+        1px solid #eee;
+
+    border-radius: 10px;
 }
 
 
 .profile-avatar {
 
-    width: 48px;
+    width: 38px;
 
-    height: 48px;
+    height: 38px;
 
     border-radius: 50%;
 
-    background: #ffd900;
+    background: #e9003f;
+
+    color: #fff;
 
     display: flex;
 
@@ -1870,130 +1441,166 @@ body {
 
     justify-content: center;
 
-    font-weight: 900;
-
     font-size: 13px;
-}
-
-
-.profile-name {
-
-    font-size: 14px;
 
     font-weight: 800;
 }
 
 
-.profile-role {
+.profile-name {
 
-    color: #999;
+    font-size: 11px;
 
-    font-size: 10px;
+    font-weight: 800;
+}
+
+
+.profile-status {
+
+    font-size: 9px;
+
+    color: #777;
 
     margin-top: 3px;
 }
 
 
-.profile-row {
+.alert {
+
+    padding:
+        14px 16px;
+
+    border-radius: 10px;
+
+    margin-bottom: 20px;
+
+    font-size: 11px;
+}
+
+
+.alert.success {
+
+    background: #eaf8ef;
+
+    border:
+        1px solid #c9e8d3;
+
+    color: #176d38;
+}
+
+
+.alert.error {
+
+    background: #fff0f3;
+
+    border:
+        1px solid #ffd0da;
+
+    color: #a0002b;
+}
+
+
+.account-status {
 
     display: flex;
 
-    justify-content:
-        space-between;
+    align-items: center;
 
-    gap: 15px;
+    gap: 12px;
 
-    padding: 10px 0;
+    padding:
+        15px 18px;
 
-    border-bottom:
-        1px solid #f2f2f2;
+    margin-bottom: 22px;
+
+    border-radius: 12px;
+
+    background: #fff;
+
+    border:
+        1px solid #eee;
 }
 
 
-.profile-row:last-child {
+.status-dot {
 
-    border-bottom: 0;
+    width: 11px;
+
+    height: 11px;
+
+    border-radius: 50%;
+
+    background: #16a34a;
 }
 
 
-.profile-label {
+.status-dot.inactive {
 
-    color: #999;
+    background: #dc2626;
+}
+
+
+.account-status strong {
+
+    font-size: 12px;
+}
+
+
+.account-status span {
+
+    display: block;
+
+    margin-top: 3px;
+
+    color: #777;
 
     font-size: 10px;
 }
 
 
-.profile-value {
+/*
+|--------------------------------------------------------------------------
+| STAT CARDS
+|--------------------------------------------------------------------------
+*/
 
-    color: #333;
-
-    font-size: 10px;
-
-    font-weight: 700;
-
-    text-align: right;
-}
-
-
-.quick-actions {
+.stats {
 
     display: grid;
 
     grid-template-columns:
         repeat(4, 1fr);
 
-    gap: 12px;
+    gap: 15px;
 
-    margin-bottom: 20px;
+    margin-bottom: 22px;
 }
 
 
-.quick-action {
-
-    min-height: 78px;
-
-    padding: 13px;
+.stat-card {
 
     background: #fff;
 
     border:
-        1px solid #eeeeee;
+        1px solid #eee;
 
-    border-radius: 12px;
+    border-radius: 13px;
 
-    text-decoration: none;
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 11px;
-
-    transition: .18s ease;
+    padding: 18px;
 }
 
 
-.quick-action:hover {
+.stat-icon {
 
-    border-color: #ffc5d2;
+    width: 38px;
 
-    transform:
-        translateY(-1px);
-}
-
-
-.quick-action-icon {
-
-    width: 39px;
-
-    height: 39px;
+    height: 38px;
 
     border-radius: 9px;
 
     background: #fff0f3;
 
-    color: #ed0038;
+    color: #e9003f;
 
     display: flex;
 
@@ -2001,23 +1608,90 @@ body {
 
     justify-content: center;
 
-    flex-shrink: 0;
+    margin-bottom: 12px;
 }
 
 
-.quick-action-text strong {
+.stat-label {
 
-    display: block;
+    color: #888;
 
-    color: #333;
+    font-size: 9px;
 
-    font-size: 11px;
+    text-transform: uppercase;
 
-    margin-bottom: 4px;
+    font-weight: 700;
 }
 
 
-.quick-action-text span {
+.stat-number {
+
+    margin-top: 5px;
+
+    font-size: 24px;
+
+    font-weight: 800;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| GRID
+|--------------------------------------------------------------------------
+*/
+
+.dashboard-grid {
+
+    display: grid;
+
+    grid-template-columns:
+        1.35fr 1fr;
+
+    gap: 20px;
+
+    margin-bottom: 22px;
+}
+
+
+.card {
+
+    background: #fff;
+
+    border:
+        1px solid #eee;
+
+    border-radius: 14px;
+
+    overflow: hidden;
+}
+
+
+.card-header {
+
+    padding:
+        17px 18px;
+
+    border-bottom:
+        1px solid #eee;
+
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+}
+
+
+.card-header h2 {
+
+    margin: 0;
+
+    font-size: 16px;
+}
+
+
+.card-header span {
 
     color: #999;
 
@@ -2025,51 +1699,568 @@ body {
 }
 
 
-@media (max-width: 1100px) {
+.card-body {
 
-    .rider-stats {
+    padding: 18px;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| AVAILABILITY
+|--------------------------------------------------------------------------
+*/
+
+.availability-status {
+
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+
+    padding:
+        12px 13px;
+
+    margin-bottom: 17px;
+
+    border-radius: 9px;
+
+    background: #fafafa;
+
+    border:
+        1px solid #eee;
+}
+
+
+.availability-status strong {
+
+    font-size: 11px;
+}
+
+
+.availability-status span {
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    color: #e9003f;
+}
+
+
+.availability-form {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr 1fr 1fr;
+
+    gap: 10px;
+}
+
+
+.form-group label {
+
+    display: block;
+
+    font-size: 9px;
+
+    font-weight: 700;
+
+    color: #666;
+
+    margin-bottom: 6px;
+}
+
+
+.form-group input {
+
+    width: 100%;
+
+    padding:
+        10px;
+
+    border:
+        1px solid #ddd;
+
+    border-radius: 8px;
+
+    outline: none;
+
+    font-size: 10px;
+}
+
+
+.form-group input:focus {
+
+    border-color: #e9003f;
+}
+
+
+.save-btn {
+
+    grid-column:
+        1 / -1;
+
+    border: 0;
+
+    padding:
+        11px;
+
+    border-radius: 8px;
+
+    background: #e9003f;
+
+    color: #fff;
+
+    font-size: 10px;
+
+    font-weight: 800;
+
+    cursor: pointer;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| SCHEDULE
+|--------------------------------------------------------------------------
+*/
+
+.schedule-list {
+
+    margin-top: 18px;
+}
+
+
+.schedule-title {
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    margin-bottom: 9px;
+}
+
+
+.schedule-item {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content:
+        space-between;
+
+    gap: 10px;
+
+    padding:
+        11px 12px;
+
+    border:
+        1px solid #eee;
+
+    border-radius: 9px;
+
+    margin-bottom: 8px;
+}
+
+
+.schedule-date {
+
+    font-size: 10px;
+
+    font-weight: 800;
+}
+
+
+.schedule-time {
+
+    color: #777;
+
+    font-size: 9px;
+
+    margin-top: 3px;
+}
+
+
+.delete-btn {
+
+    border: 0;
+
+    background: #fff0f3;
+
+    color: #e9003f;
+
+    width: 29px;
+
+    height: 29px;
+
+    border-radius: 7px;
+
+    cursor: pointer;
+}
+
+
+.no-schedule {
+
+    color: #999;
+
+    font-size: 10px;
+
+    padding: 10px 0;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ACTIVE DELIVERY
+|--------------------------------------------------------------------------
+*/
+
+.active-delivery {
+
+    border:
+        1px solid #eee;
+
+    border-radius: 10px;
+
+    padding: 14px;
+}
+
+
+.active-order-number {
+
+    font-size: 14px;
+
+    font-weight: 800;
+
+    margin-bottom: 8px;
+}
+
+
+.active-status {
+
+    display: inline-block;
+
+    background: #fff0f3;
+
+    color: #e9003f;
+
+    border-radius: 20px;
+
+    padding:
+        5px 8px;
+
+    font-size: 8px;
+
+    font-weight: 800;
+
+    text-transform: uppercase;
+
+    margin-bottom: 14px;
+}
+
+
+.active-info {
+
+    display: grid;
+
+    gap: 10px;
+}
+
+
+.active-row {
+
+    display: flex;
+
+    gap: 9px;
+}
+
+
+.active-row i {
+
+    color: #e9003f;
+
+    width: 15px;
+
+    margin-top: 2px;
+}
+
+
+.active-row div {
+
+    font-size: 10px;
+
+    line-height: 1.5;
+}
+
+
+.active-label {
+
+    display: block;
+
+    color: #999;
+
+    font-size: 8px;
+
+    text-transform: uppercase;
+
+    font-weight: 800;
+}
+
+
+.delivery-link {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 7px;
+
+    margin-top: 15px;
+
+    padding:
+        10px 13px;
+
+    border-radius: 8px;
+
+    background: #e9003f;
+
+    color: #fff;
+
+    text-decoration: none;
+
+    font-size: 9px;
+
+    font-weight: 800;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ORDERS
+|--------------------------------------------------------------------------
+*/
+
+.order-list {
+
+    display: grid;
+
+    gap: 9px;
+}
+
+
+.order-item {
+
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    align-items: center;
+
+    gap: 10px;
+
+    padding:
+        12px;
+
+    border:
+        1px solid #eee;
+
+    border-radius: 9px;
+}
+
+
+.order-left strong {
+
+    display: block;
+
+    font-size: 11px;
+}
+
+
+.order-left span {
+
+    display: block;
+
+    color: #888;
+
+    font-size: 9px;
+
+    margin-top: 4px;
+}
+
+
+.order-right {
+
+    text-align: right;
+}
+
+
+.order-price {
+
+    font-size: 11px;
+
+    font-weight: 800;
+}
+
+
+.order-ready {
+
+    display: block;
+
+    margin-top: 4px;
+
+    color: #e9003f;
+
+    font-size: 8px;
+
+    font-weight: 800;
+}
+
+
+.view-orders {
+
+    display: inline-flex;
+
+    margin-top: 13px;
+
+    color: #e9003f;
+
+    font-size: 10px;
+
+    font-weight: 800;
+
+    text-decoration: none;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| QUICK INFO
+|--------------------------------------------------------------------------
+*/
+
+.quick-grid {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    gap: 12px;
+}
+
+
+.quick-card {
+
+    padding: 14px;
+
+    border:
+        1px solid #eee;
+
+    border-radius: 10px;
+}
+
+
+.quick-card small {
+
+    display: block;
+
+    color: #999;
+
+    font-size: 8px;
+
+    text-transform: uppercase;
+}
+
+
+.quick-card strong {
+
+    display: block;
+
+    margin-top: 5px;
+
+    font-size: 14px;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| EMPTY
+|--------------------------------------------------------------------------
+*/
+
+.empty {
+
+    padding:
+        25px 10px;
+
+    text-align: center;
+
+    color: #999;
+
+    font-size: 10px;
+}
+
+
+.empty i {
+
+    display: block;
+
+    color: #e9003f;
+
+    font-size: 25px;
+
+    margin-bottom: 9px;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RESPONSIVE
+|--------------------------------------------------------------------------
+*/
+
+@media (
+    max-width: 1050px
+) {
+
+    .rider-dashboard {
+
+        margin-left: 0;
+    }
+
+
+    .stats {
 
         grid-template-columns:
             repeat(2, 1fr);
     }
 
-    .quick-actions {
+
+    .dashboard-grid {
 
         grid-template-columns:
-            repeat(2, 1fr);
+            1fr;
     }
-
 }
 
 
-@media (max-width: 900px) {
+@media (
+    max-width: 650px
+) {
 
-    .rider-page {
+    .rider-dashboard {
 
-        padding-left: 0;
+        padding: 15px;
     }
 
-    .rider-main-grid {
 
-        grid-template-columns: 1fr;
-    }
-
-}
-
-
-@media (max-width: 650px) {
-
-    .rider-top-user {
-
-        display: none;
-    }
-
-    .rider-content {
-
-        padding: 18px 13px;
-    }
-
-    .rider-welcome {
+    .top-header {
 
         align-items:
             flex-start;
@@ -2078,35 +2269,26 @@ body {
             column;
     }
 
-    .rider-stats {
 
-        grid-template-columns:
-            1fr 1fr;
-    }
-
-    .quick-actions {
-
-        grid-template-columns:
-            1fr 1fr;
-    }
-
-}
-
-
-@media (max-width: 430px) {
-
-    .rider-stats {
+    .stats {
 
         grid-template-columns:
             1fr;
     }
 
-    .quick-actions {
+
+    .availability-form {
 
         grid-template-columns:
             1fr;
     }
 
+
+    .quick-grid {
+
+        grid-template-columns:
+            1fr;
+    }
 }
 
 </style>
@@ -2130,267 +2312,214 @@ include_once 'rider-sidebar.php';
 ?>
 
 
-<div class="rider-page">
+<main class="rider-dashboard">
 
 
-<header class="rider-topbar">
+<div class="top-header">
 
-    <div class="rider-top-title">
 
-        <div class="rider-top-title-icon">
+<div class="welcome">
 
-            <i class="fas fa-gauge-high"></i>
+    <h1>
+        Welcome,
+        <?= riderDashboardEscape(
+            $rider['full_name']
+        ) ?>
+    </h1>
 
-        </div>
+    <p>
+        Manage your deliveries and availability from here.
+    </p>
 
-        <div>
+</div>
 
-            <h2>
-                Rider Dashboard
-            </h2>
 
-            <span>
-                Manage your delivery activities
-            </span>
+<div class="profile-box">
 
-        </div>
-
-    </div>
-
-
-    <div class="rider-top-right">
-
-        <div class="rider-top-user">
-
-            <div class="rider-top-avatar">
-
-                <?= riderDashboardEscape(
-                    $initials
-                ) ?>
-
-            </div>
-
-            <?= riderDashboardEscape(
-                $rider['full_name']
-            ) ?>
-
-        </div>
-
-
-        <a
-            href="rider-dashboard.php?logout=1"
-            class="rider-logout"
-        >
-
-            <i class="fas fa-right-from-bracket"></i>
-
-            Logout
-
-        </a>
-
-    </div>
-
-</header>
-
-
-<main class="rider-content">
-
-
-<section class="rider-welcome">
-
-    <div>
-
-        <h1>
-
-            Welcome,
-            <?= riderDashboardEscape(
-                $rider['full_name']
-            ) ?>
-
-        </h1>
-
-        <p>
-            Here's your rider overview for today.
-        </p>
-
-    </div>
-
-
-    <div class="rider-date">
-
-        <i class="far fa-calendar"></i>
-
-        <?= date('l, d M Y') ?>
-
-    </div>
-
-</section>
-
-
-<section class="rider-status">
-
-    <div class="rider-status-left">
-
-        <div
-            class="
-                rider-status-icon
-                <?= $riderStatus !== 'active'
-                    ? riderDashboardEscape(
-                        $riderStatus
-                    )
-                    : ''
-                ?>
-            "
-        >
-
-            <?php if ($isApproved): ?>
-
-                <i class="fas fa-check"></i>
-
-            <?php elseif ($riderStatus === 'pending'): ?>
-
-                <i class="fas fa-clock"></i>
-
-            <?php elseif ($riderStatus === 'blocked'): ?>
-
-                <i class="fas fa-ban"></i>
-
-            <?php else: ?>
-
-                <i class="fas fa-circle-exclamation"></i>
-
-            <?php endif; ?>
-
-        </div>
-
-
-        <div class="rider-status-text">
-
-            <h3>
-                <?= riderDashboardEscape(
-                    $statusTitle
-                ) ?>
-            </h3>
-
-            <p>
-                <?= riderDashboardEscape(
-                    $statusMessage
-                ) ?>
-            </p>
-
-        </div>
-
-    </div>
-
-
-    <div
-        class="
-            rider-status-badge
-            <?= $riderStatus !== 'active'
-                ? riderDashboardEscape(
-                    $riderStatus
-                )
-                : ''
-            ?>
-        "
-    >
+    <div class="profile-avatar">
 
         <?= riderDashboardEscape(
-            strtoupper(
-                $riderStatus
-            )
+            $initials
         ) ?>
 
     </div>
 
-</section>
+
+    <div>
+
+        <div class="profile-name">
+
+            <?= riderDashboardEscape(
+                $rider['full_name']
+            ) ?>
+
+        </div>
 
 
-<section class="rider-stats">
+        <div class="profile-status">
+
+            <?= riderDashboardEscape(
+                $vehicleName
+            ) ?>
+
+        </div>
+
+    </div>
+
+</div>
 
 
-<div class="rider-stat-card">
+</div>
 
-    <div class="rider-stat-icon">
+
+<?php if ($successMessage !== ''): ?>
+
+<div class="alert success">
+
+    <i class="fas fa-circle-check"></i>
+
+    <?= riderDashboardEscape(
+        $successMessage
+    ) ?>
+
+</div>
+
+<?php endif; ?>
+
+
+<?php if ($errorMessage !== ''): ?>
+
+<div class="alert error">
+
+    <i class="fas fa-circle-exclamation"></i>
+
+    <?= riderDashboardEscape(
+        $errorMessage
+    ) ?>
+
+</div>
+
+<?php endif; ?>
+
+
+<div class="account-status">
+
+
+<div
+    class="
+        status-dot
+        <?= !$isApproved
+            ? 'inactive'
+            : ''
+        ?>
+    "
+></div>
+
+
+<div>
+
+    <strong>
+        <?= riderDashboardEscape(
+            $statusTitle
+        ) ?>
+    </strong>
+
+    <span>
+        <?= riderDashboardEscape(
+            $statusMessage
+        ) ?>
+    </span>
+
+</div>
+
+
+</div>
+
+
+<!-- =========================================================
+     STATS
+========================================================= -->
+
+
+<section class="stats">
+
+
+<div class="stat-card">
+
+    <div class="stat-icon">
 
         <i class="fas fa-box-open"></i>
 
     </div>
 
-    <div class="rider-stat-label">
+    <div class="stat-label">
         Available Orders
     </div>
 
-    <div class="rider-stat-value">
-        <?= (int)$availableOrders ?>
-    </div>
+    <div class="stat-number">
 
-    <div class="rider-stat-note">
-        Ready for pickup
+        <?= $availableOrders ?>
+
     </div>
 
 </div>
 
 
-<div class="rider-stat-card">
+<div class="stat-card">
 
-    <div class="rider-stat-icon">
+    <div class="stat-icon">
 
         <i class="fas fa-motorcycle"></i>
 
     </div>
 
-    <div class="rider-stat-label">
-        Active Delivery
+    <div class="stat-label">
+        Active Deliveries
     </div>
 
-    <div class="rider-stat-value">
-        <?= (int)$activeDeliveries ?>
-    </div>
+    <div class="stat-number">
 
-    <div class="rider-stat-note">
-        Currently assigned
+        <?= $activeDeliveries ?>
+
     </div>
 
 </div>
 
 
-<div class="rider-stat-card">
+<div class="stat-card">
 
-    <div class="rider-stat-icon">
+    <div class="stat-icon">
 
-        <i class="fas fa-circle-check"></i>
+        <i class="fas fa-check-circle"></i>
 
     </div>
 
-    <div class="rider-stat-label">
+    <div class="stat-label">
         Completed Today
     </div>
 
-    <div class="rider-stat-value">
-        <?= (int)$completedToday ?>
-    </div>
+    <div class="stat-number">
 
-    <div class="rider-stat-note">
-        Successfully delivered
+        <?= $completedToday ?>
+
     </div>
 
 </div>
 
 
-<div class="rider-stat-card">
+<div class="stat-card">
 
-    <div class="rider-stat-icon">
+    <div class="stat-icon">
 
         <i class="fas fa-wallet"></i>
 
     </div>
 
-    <div class="rider-stat-label">
+    <div class="stat-label">
         Today's Earnings
     </div>
 
-    <div class="rider-stat-value">
+    <div class="stat-number">
 
         Rs.
         <?= number_format(
@@ -2400,582 +2529,664 @@ include_once 'rider-sidebar.php';
 
     </div>
 
-    <div class="rider-stat-note">
-        Delivery earnings
-    </div>
-
 </div>
 
 
 </section>
 
 
-<div class="rider-main-grid">
+<!-- =========================================================
+     MAIN GRID
+========================================================= -->
 
 
-<section class="rider-panel">
+<div class="dashboard-grid">
 
 
-    <div class="rider-panel-header">
+<!-- =========================================================
+     AVAILABILITY
+========================================================= -->
 
-        <h2>
-            Active Delivery
-        </h2>
 
-        <span>
-            Current assignment
-        </span>
+<section class="card">
 
-    </div>
 
+<div class="card-header">
 
-    <?php if ($activeOrder): ?>
+    <h2>
+        My Availability
+    </h2>
 
+    <span>
+        Schedule your working time
+    </span>
 
-        <div class="delivery-box">
+</div>
 
 
-            <div class="delivery-header">
+<div class="card-body">
 
-                <div class="delivery-order">
 
-                    <?= riderDashboardEscape(
-                        $activeOrderNumber
-                    ) ?>
+<div class="availability-status">
 
-                </div>
 
+<div>
 
-                <div class="delivery-status">
+    <strong>
+        Availability Now
+    </strong>
 
-                    <?= riderDashboardEscape(
-                        $activeOrderStatus
-                    ) ?>
+</div>
 
-                </div>
 
-            </div>
+<span>
 
+<?php if ($isAvailableNow): ?>
 
-            <div class="delivery-body">
+    <i class="fas fa-circle"></i>
+    Available Now
 
+<?php else: ?>
 
-                <div class="delivery-row">
+    <i class="fas fa-circle"></i>
+    Not Available Now
 
-                    <div class="delivery-icon">
+<?php endif; ?>
 
-                        <i class="fas fa-store"></i>
-
-                    </div>
-
-
-                    <div>
-
-                        <div class="delivery-label">
-                            Pickup Restaurant
-                        </div>
-
-                        <div class="delivery-value">
-
-                            <?= riderDashboardEscape(
-                                $restaurantName
-                            ) ?>
-
-                            <br>
-
-                            <?= riderDashboardEscape(
-                                $restaurantAddress
-                            ) ?>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <div class="delivery-row">
-
-                    <div class="delivery-icon">
-
-                        <i class="fas fa-location-dot"></i>
-
-                    </div>
-
-
-                    <div>
-
-                        <div class="delivery-label">
-                            Customer Delivery Address
-                        </div>
-
-                        <div class="delivery-value">
-
-                            <?= riderDashboardEscape(
-                                $customerAddress
-                            ) ?>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <div class="delivery-row">
-
-                    <div class="delivery-icon">
-
-                        <i class="fas fa-credit-card"></i>
-
-                    </div>
-
-
-                    <div>
-
-                        <div class="delivery-label">
-                            Payment Method
-                        </div>
-
-                        <div class="delivery-value">
-
-                            <?= riderDashboardEscape(
-                                $activePaymentMethod
-                                ?: 'Not specified'
-                            ) ?>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-            </div>
-
-
-            <div class="delivery-footer">
-
-                <div class="delivery-total">
-
-                    Rs.
-                    <?= number_format(
-                        $activeOrderTotal,
-                        0
-                    ) ?>
-
-                </div>
-
-
-                <a
-                    href="rider-orders.php"
-                    class="delivery-btn"
-                >
-
-                    <i class="fas fa-route"></i>
-
-                    Manage Delivery
-
-                </a>
-
-            </div>
-
-
-        </div>
-
-
-    <?php else: ?>
-
-
-        <div class="no-delivery">
-
-            <div class="no-delivery-icon">
-
-                <i class="fas fa-motorcycle"></i>
-
-            </div>
-
-
-            <h3>
-
-                <?php if (!$isApproved): ?>
-
-                    Deliveries Unavailable
-
-                <?php else: ?>
-
-                    No Active Delivery
-
-                <?php endif; ?>
-
-            </h3>
-
-
-            <p>
-
-                <?php if (!$isApproved): ?>
-
-                    Your rider account must be active
-                    before you can receive delivery orders.
-
-                <?php else: ?>
-
-                    When an order is assigned to you,
-                    pickup and customer delivery details
-                    will appear here.
-
-                <?php endif; ?>
-
-            </p>
-
-        </div>
-
-
-    <?php endif; ?>
-
-
-</section>
-
-
-<section class="rider-panel">
-
-
-    <div class="rider-panel-header">
-
-        <h2>
-            Rider Profile
-        </h2>
-
-
-        <a
-            href="rider-profile.php"
-            style="
-                color:#ed0038;
-                text-decoration:none;
-                font-size:11px;
-                font-weight:800;
-            "
-        >
-            View Profile
-        </a>
-
-    </div>
-
-
-    <div class="profile-box">
-
-
-        <div class="profile-avatar">
-
-            <?= riderDashboardEscape(
-                $initials
-            ) ?>
-
-        </div>
-
-
-        <div>
-
-            <div class="profile-name">
-
-                <?= riderDashboardEscape(
-                    $rider['full_name']
-                ) ?>
-
-            </div>
-
-
-            <div class="profile-role">
-
-                Humsafar Rider
-
-            </div>
-
-        </div>
-
-
-    </div>
-
-
-    <div class="profile-row">
-
-        <span class="profile-label">
-            Rider ID
-        </span>
-
-        <span class="profile-value">
-
-            #<?= (int)$rider['id'] ?>
-
-        </span>
-
-    </div>
-
-
-    <div class="profile-row">
-
-        <span class="profile-label">
-            Phone
-        </span>
-
-        <span class="profile-value">
-
-            <?= riderDashboardEscape(
-                $rider['phone']
-                ?: 'Not added'
-            ) ?>
-
-        </span>
-
-    </div>
-
-
-    <div class="profile-row">
-
-        <span class="profile-label">
-            Vehicle
-        </span>
-
-        <span class="profile-value">
-
-            <?= riderDashboardEscape(
-                $vehicleName
-            ) ?>
-
-        </span>
-
-    </div>
-
-
-    <div class="profile-row">
-
-        <span class="profile-label">
-            Completed
-        </span>
-
-        <span class="profile-value">
-
-            <?= (int)$totalCompleted ?>
-
-        </span>
-
-    </div>
-
-
-</section>
+</span>
 
 
 </div>
 
 
-<section>
+<form
+    method="POST"
+    class="availability-form"
+>
 
-    <div
-        class="rider-panel-header"
-        style="margin-bottom:12px;"
+
+<div class="form-group">
+
+    <label>
+        Available Date
+    </label>
+
+    <input
+        type="date"
+        name="available_date"
+        min="<?= date('Y-m-d') ?>"
+        required
     >
 
-        <h2>
-            Quick Actions
-        </h2>
+</div>
 
-        <span>
-            Rider tools
-        </span>
+
+<div class="form-group">
+
+    <label>
+        Start Time
+    </label>
+
+    <input
+        type="time"
+        name="start_time"
+        required
+    >
+
+</div>
+
+
+<div class="form-group">
+
+    <label>
+        End Time
+    </label>
+
+    <input
+        type="time"
+        name="end_time"
+        required
+    >
+
+</div>
+
+
+<button
+    type="submit"
+    name="save_availability"
+    value="1"
+    class="save-btn"
+>
+
+    <i class="fas fa-calendar-plus"></i>
+
+    Save Availability
+
+</button>
+
+
+</form>
+
+
+<div class="schedule-list">
+
+
+<div class="schedule-title">
+
+    Upcoming Availability
+
+</div>
+
+
+<?php if (
+    empty($availabilityList)
+): ?>
+
+
+<div class="no-schedule">
+
+    No availability schedule added yet.
+
+</div>
+
+
+<?php else: ?>
+
+
+<?php foreach (
+    $availabilityList
+    as $schedule
+): ?>
+
+
+<div class="schedule-item">
+
+
+<div>
+
+    <div class="schedule-date">
+
+        <?= date(
+            'd M Y',
+            strtotime(
+                $schedule['available_date']
+            )
+        ) ?>
+
+    </div>
+
+
+    <div class="schedule-time">
+
+        <?= date(
+            'h:i A',
+            strtotime(
+                $schedule['start_time']
+            )
+        ) ?>
+
+        -
+
+        <?= date(
+            'h:i A',
+            strtotime(
+                $schedule['end_time']
+            )
+        ) ?>
 
     </div>
 
-
-    <div class="quick-actions">
-
-
-        <a
-            href="rider-orders.php"
-            class="quick-action"
-        >
-
-            <div class="quick-action-icon">
-
-                <i class="fas fa-box-open"></i>
-
-            </div>
+</div>
 
 
-            <div class="quick-action-text">
-
-                <strong>
-                    Available Orders
-                </strong>
-
-                <span>
-                    Find delivery orders
-                </span>
-
-            </div>
-
-        </a>
+<form
+    method="POST"
+>
 
 
-        <a
-            href="rider-deliveries.php"
-            class="quick-action"
-        >
-
-            <div class="quick-action-icon">
-
-                <i class="fas fa-route"></i>
-
-            </div>
+    <input
+        type="hidden"
+        name="availability_id"
+        value="<?= (int)$schedule['id'] ?>"
+    >
 
 
-            <div class="quick-action-text">
+    <button
+        type="submit"
+        name="delete_availability"
+        value="1"
+        class="delete-btn"
+        title="Delete"
+        onclick="
+            return confirm(
+                'Remove this availability schedule?'
+            );
+        "
+    >
 
-                <strong>
-                    My Deliveries
-                </strong>
+        <i class="fas fa-trash"></i>
 
-                <span>
-                    View delivery history
-                </span>
-
-            </div>
-
-        </a>
-
-
-        <a
-            href="rider-earnings.php"
-            class="quick-action"
-        >
-
-            <div class="quick-action-icon">
-
-                <i class="fas fa-wallet"></i>
-
-            </div>
+    </button>
 
 
-            <div class="quick-action-text">
-
-                <strong>
-                    Earnings
-                </strong>
-
-                <span>
-                    Check your earnings
-                </span>
-
-            </div>
-
-        </a>
+</form>
 
 
-        <a
-            href="rider-profile.php"
-            class="quick-action"
-        >
-
-            <div class="quick-action-icon">
-
-                <i class="fas fa-user"></i>
-
-            </div>
+</div>
 
 
-            <div class="quick-action-text">
-
-                <strong>
-                    My Profile
-                </strong>
-
-                <span>
-                    Manage your account
-                </span>
-
-            </div>
-
-        </a>
+<?php endforeach; ?>
 
 
-    </div>
+<?php endif; ?>
+
+
+</div>
+
+
+</div>
+
 
 </section>
 
 
-<section class="rider-panel">
+<!-- =========================================================
+     ACTIVE DELIVERY
+========================================================= -->
 
-    <div class="rider-panel-header">
 
-        <h2>
-            Rider Information
-        </h2>
+<section class="card">
 
-        <span>
-            Your account details
+
+<div class="card-header">
+
+    <h2>
+        Active Delivery
+    </h2>
+
+    <span>
+        Current order
+    </span>
+
+</div>
+
+
+<div class="card-body">
+
+
+<?php if (
+    !$activeOrder
+): ?>
+
+
+<div class="empty">
+
+    <i class="fas fa-motorcycle"></i>
+
+    No active delivery right now.
+
+</div>
+
+
+<?php else: ?>
+
+
+<?php
+
+$activeOrderNumber =
+    $activeOrder['order_number']
+    ?? (
+        '#' .
+        (int)(
+            $activeOrder['id']
+            ?? 0
+        )
+    );
+
+
+$activeOrderStatus =
+    $activeOrder[
+        $statusColumn
+    ]
+    ?? 'Assigned';
+
+
+$activeTotal =
+    (float)(
+        $activeOrder['total']
+        ?? 0
+    );
+
+
+$activePayment =
+    $activeOrder[
+        'payment_method'
+    ]
+    ?? 'Not specified';
+
+?>
+
+
+<div class="active-delivery">
+
+
+<div class="active-order-number">
+
+    <?= riderDashboardEscape(
+        $activeOrderNumber
+    ) ?>
+
+</div>
+
+
+<div class="active-status">
+
+    <?= riderDashboardEscape(
+        $activeOrderStatus
+    ) ?>
+
+</div>
+
+
+<div class="active-info">
+
+
+<div class="active-row">
+
+    <i class="fas fa-money-bill"></i>
+
+    <div>
+
+        <span class="active-label">
+            Order Total
         </span>
+
+        Rs.
+        <?= number_format(
+            $activeTotal,
+            0
+        ) ?>
+
+    </div>
+
+</div>
+
+
+<div class="active-row">
+
+    <i class="fas fa-credit-card"></i>
+
+    <div>
+
+        <span class="active-label">
+            Payment
+        </span>
+
+        <?= riderDashboardEscape(
+            $activePayment
+        ) ?>
+
+    </div>
+
+</div>
+
+
+</div>
+
+
+<a
+    href="rider-delivery.php?order_id=<?= (int)$activeOrder['id'] ?>"
+    class="delivery-link"
+>
+
+    <i class="fas fa-route"></i>
+
+    Manage Delivery
+
+</a>
+
+
+</div>
+
+
+<?php endif; ?>
+
+
+</div>
+
+
+</section>
+
+
+</div>
+
+
+<!-- =========================================================
+     AVAILABLE ORDERS
+========================================================= -->
+
+
+<section class="card">
+
+
+<div class="card-header">
+
+    <h2>
+        Available Orders
+    </h2>
+
+    <span>
+        Ready for Pickup
+    </span>
+
+</div>
+
+
+<div class="card-body">
+
+
+<?php if (
+    empty($availableOrderList)
+): ?>
+
+
+<div class="empty">
+
+    <i class="fas fa-box-open"></i>
+
+    No Ready for Pickup orders available right now.
+
+</div>
+
+
+<?php else: ?>
+
+
+<div class="order-list">
+
+
+<?php foreach (
+    $availableOrderList
+    as $availableOrder
+): ?>
+
+
+<div class="order-item">
+
+
+<div class="order-left">
+
+    <strong>
+
+        <?= riderDashboardEscape(
+            $availableOrder[
+                'order_number'
+            ]
+        ) ?>
+
+    </strong>
+
+
+    <span>
+
+        Restaurant ID:
+        <?= (int)(
+            $availableOrder[
+                'restaurant_id'
+            ]
+        ) ?>
+
+    </span>
+
+
+    <span>
+
+        <?= riderDashboardEscape(
+            $availableOrder[
+                'payment_method'
+            ]
+            ?? ''
+        ) ?>
+
+    </span>
+
+</div>
+
+
+<div class="order-right">
+
+    <div class="order-price">
+
+        Rs.
+        <?= number_format(
+            (float)(
+                $availableOrder[
+                    'total'
+                ]
+            ),
+            0
+        ) ?>
 
     </div>
 
 
-    <div class="profile-row">
+    <span class="order-ready">
 
-        <span class="profile-label">
-            Name
-        </span>
+        Ready for Pickup
 
-        <span class="profile-value">
+    </span>
 
-            <?= riderDashboardEscape(
-                $rider['full_name']
-            ) ?>
-
-        </span>
-
-    </div>
+</div>
 
 
-    <div class="profile-row">
-
-        <span class="profile-label">
-            Email
-        </span>
-
-        <span class="profile-value">
-
-            <?= riderDashboardEscape(
-                $rider['email']
-                ?: 'Not added'
-            ) ?>
-
-        </span>
-
-    </div>
+</div>
 
 
-    <div class="profile-row">
+<?php endforeach; ?>
 
-        <span class="profile-label">
-            Address
-        </span>
 
-        <span class="profile-value">
+</div>
 
-            <?= riderDashboardEscape(
-                $rider['address']
-                ?: 'Not added'
-            ) ?>
 
-        </span>
+<a
+    href="rider-orders.php"
+    class="view-orders"
+>
 
-    </div>
+    View All Orders
+    <i class="fas fa-arrow-right"></i>
+
+</a>
+
+
+<?php endif; ?>
+
+
+</div>
+
+
+</section>
+
+
+<br>
+
+
+<!-- =========================================================
+     QUICK INFO
+========================================================= -->
+
+
+<section class="card">
+
+
+<div class="card-header">
+
+    <h2>
+        Rider Information
+    </h2>
+
+</div>
+
+
+<div class="card-body">
+
+
+<div class="quick-grid">
+
+
+<div class="quick-card">
+
+    <small>
+        Vehicle
+    </small>
+
+    <strong>
+        <?= riderDashboardEscape(
+            $vehicleName
+        ) ?>
+    </strong>
+
+</div>
+
+
+<div class="quick-card">
+
+    <small>
+        Completed Deliveries
+    </small>
+
+    <strong>
+        <?= $totalCompleted ?>
+    </strong>
+
+</div>
+
+
+<div class="quick-card">
+
+    <small>
+        Today's Date
+    </small>
+
+    <strong>
+        <?= date(
+            'd M Y'
+        ) ?>
+    </strong>
+
+</div>
+
+
+</div>
+
+
+</div>
 
 
 </section>
 
 
 </main>
-
-</div>
 
 
 </body>
