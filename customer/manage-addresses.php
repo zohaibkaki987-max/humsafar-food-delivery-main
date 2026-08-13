@@ -1,532 +1,1046 @@
 <?php
+
 /*
 |--------------------------------------------------------------------------
-| HUMSAFAR CUSTOMER HEADER
-|--------------------------------------------------------------------------
-| File: includes/customer-header.php
-|
-| IMPORTANT:
-| This header is used on both:
-|   1. Root customer pages
-|   2. /customer/ pages
-|
-| The path system below automatically fixes links for both locations.
+| HUMSAFAR FOOD DELIVERY
+| MANAGE ADDRESSES
 |--------------------------------------------------------------------------
 */
 
+session_start();
+
 
 /*
 |--------------------------------------------------------------------------
-| SESSION
+| DATABASE CONNECTION
 |--------------------------------------------------------------------------
 */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/../includes/config.php';
 
 
 /*
 |--------------------------------------------------------------------------
-| DATABASE
-|--------------------------------------------------------------------------
-|
-| customer-header.php is inside /includes/
-| so config.php is always loaded from the same directory.
-|--------------------------------------------------------------------------
-*/
-
-if (!isset($conn)) {
-    require_once __DIR__ . '/config.php';
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER BASE PATH
-|--------------------------------------------------------------------------
-|
-| Root page:
-|     /humsafar-food-delivery-main/index.php
-|
-| Customer page:
-|     /humsafar-food-delivery-main/customer/manage-addresses.php
-|
-| Root page needs:
-|     ""
-|
-| Customer folder page needs:
-|     "../"
-|
-|--------------------------------------------------------------------------
-*/
-
-$customerBasePath = '';
-
-$scriptDirectory = str_replace(
-    '\\',
-    '/',
-    dirname($_SERVER['SCRIPT_NAME'] ?? '')
-);
-
-if (basename($scriptDirectory) === 'customer') {
-    $customerBasePath = '../';
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER LOGIN
-|--------------------------------------------------------------------------
-*/
-
-$isLoggedIn =
-    isset($_SESSION['user_id']) &&
-    (int) $_SESSION['user_id'] > 0;
-
-$userId = $isLoggedIn
-    ? (int) $_SESSION['user_id']
-    : 0;
-
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER NAME
-|--------------------------------------------------------------------------
-*/
-
-$userName =
-    $_SESSION['name']
-    ?? $_SESSION['user_name']
-    ?? 'Customer';
-
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER EMAIL
-|--------------------------------------------------------------------------
-*/
-
-$userEmail =
-    $_SESSION['email']
-    ?? '';
-
-
-/*
-|--------------------------------------------------------------------------
-| PROFILE IMAGE
-|--------------------------------------------------------------------------
-*/
-
-$profileImage = '';
-
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER DATA
+| LOGIN CHECK
 |--------------------------------------------------------------------------
 */
 
 if (
-    $userId > 0 &&
-    isset($conn) &&
-    $conn instanceof mysqli
+    !isset($_SESSION['user_id']) ||
+    (int) $_SESSION['user_id'] <= 0
 ) {
-
-    $stmt = $conn->prepare("
-        SELECT
-            full_name,
-            email,
-            profile_image
-        FROM users
-        WHERE id = ?
-        LIMIT 1
-    ");
-
-    if ($stmt) {
-
-        $stmt->bind_param(
-            "i",
-            $userId
-        );
-
-        $stmt->execute();
-
-        $result =
-            $stmt->get_result();
-
-        $userData =
-            $result
-                ? $result->fetch_assoc()
-                : null;
-
-        $stmt->close();
-
-
-        if ($userData) {
-
-            if (
-                isset($userData['full_name']) &&
-                $userData['full_name'] !== ''
-            ) {
-
-                $userName =
-                    $userData['full_name'];
-
-                $_SESSION['name'] =
-                    $userName;
-            }
-
-
-            if (
-                isset($userData['email']) &&
-                $userData['email'] !== ''
-            ) {
-
-                $userEmail =
-                    $userData['email'];
-
-                $_SESSION['email'] =
-                    $userEmail;
-            }
-
-
-            $profileImage =
-                $userData['profile_image']
-                ?? '';
-        }
-    }
+    header("Location: ../login.php");
+    exit;
 }
+
+$user_id = (int) $_SESSION['user_id'];
+
+$error = '';
+
 
 
 /*
 |--------------------------------------------------------------------------
-| CART COUNT
+| DELETE ADDRESS
 |--------------------------------------------------------------------------
 */
 
-$cartCount = 0;
+if (isset($_GET['delete'])) {
 
-if (
-    $userId > 0 &&
-    isset($conn) &&
-    $conn instanceof mysqli
-) {
+    $address_id = (int) $_GET['delete'];
 
-    $stmt = $conn->prepare("
-        SELECT
-            COALESCE(
-                SUM(quantity),
-                0
-            ) AS total
-        FROM cart
-        WHERE user_id = ?
-    ");
+    if ($address_id > 0) {
 
-    if ($stmt) {
+        $stmt = $conn->prepare("
+            DELETE FROM customer_addresses
+            WHERE id = ?
+            AND user_id = ?
+        ");
 
-        $stmt->bind_param(
-            "i",
-            $userId
-        );
+        if ($stmt) {
 
-        $stmt->execute();
-
-        $cartData =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
-
-        $stmt->close();
-
-
-        $cartCount =
-            (int) (
-                $cartData['total']
-                ?? 0
+            $stmt->bind_param(
+                "ii",
+                $address_id,
+                $user_id
             );
+
+            $stmt->execute();
+
+            $stmt->close();
+        }
     }
+
+    header("Location: manage-addresses.php");
+    exit;
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| CURRENT PAGE
-|--------------------------------------------------------------------------
-*/
-
-$currentPage =
-    basename(
-        $_SERVER['PHP_SELF']
-        ?? 'index.php'
-    );
-
 
 /*
 |--------------------------------------------------------------------------
-| ACTIVE NAVIGATION
+| SET DEFAULT ADDRESS
 |--------------------------------------------------------------------------
 */
 
-if (!function_exists('customerNavActive')) {
+if (isset($_GET['default'])) {
 
-    function customerNavActive($pages)
-    {
-        global $currentPage;
+    $address_id = (int) $_GET['default'];
 
-        if (!is_array($pages)) {
-            $pages = [$pages];
+    if ($address_id > 0) {
+
+        /*
+        | Remove default from all user's addresses
+        */
+
+        $stmt = $conn->prepare("
+            UPDATE customer_addresses
+            SET is_default = 0
+            WHERE user_id = ?
+        ");
+
+        if ($stmt) {
+
+            $stmt->bind_param(
+                "i",
+                $user_id
+            );
+
+            $stmt->execute();
+
+            $stmt->close();
         }
 
-        return in_array(
-            $currentPage,
-            $pages,
-            true
-        )
-            ? 'active'
-            : '';
+
+        /*
+        | Set selected address as default
+        */
+
+        $stmt = $conn->prepare("
+            UPDATE customer_addresses
+            SET is_default = 1
+            WHERE id = ?
+            AND user_id = ?
+        ");
+
+        if ($stmt) {
+
+            $stmt->bind_param(
+                "ii",
+                $address_id,
+                $user_id
+            );
+
+            $stmt->execute();
+
+            $stmt->close();
+        }
     }
+
+    header("Location: manage-addresses.php");
+    exit;
 }
+
 
 
 /*
 |--------------------------------------------------------------------------
-| ESCAPE FUNCTION
+| SAVE NEW ADDRESS
 |--------------------------------------------------------------------------
 */
-
-if (!function_exists('customer_h')) {
-
-    function customer_h($value)
-    {
-        return htmlspecialchars(
-            (string) $value,
-            ENT_QUOTES,
-            'UTF-8'
-        );
-    }
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER INITIALS
-|--------------------------------------------------------------------------
-*/
-
-$customerInitials = 'C';
-
-$nameParts =
-    preg_split(
-        '/\s+/',
-        trim(
-            (string) $userName
-        )
-    );
-
 
 if (
-    !empty($nameParts[0]) &&
-    strtolower($nameParts[0]) !== 'customer'
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['save_address'])
 ) {
 
-    $customerInitials =
-        strtoupper(
-            substr(
-                $nameParts[0],
-                0,
-                1
+    $address_title = trim(
+        $_POST['address_title'] ?? ''
+    );
+
+    $address_line = trim(
+        $_POST['address_line'] ?? ''
+    );
+
+    $area = trim(
+        $_POST['area'] ?? ''
+    );
+
+    $city = trim(
+        $_POST['city'] ?? ''
+    );
+
+    $phone = trim(
+        $_POST['phone'] ?? ''
+    );
+
+    $is_default = isset(
+        $_POST['is_default']
+    ) ? 1 : 0;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATION
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+        $address_title === '' ||
+        $address_line === '' ||
+        $area === '' ||
+        $city === '' ||
+        $phone === ''
+    ) {
+
+        $error =
+            "Please fill all required fields.";
+
+    } else {
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK EXISTING ADDRESSES
+        |--------------------------------------------------------------------------
+        */
+
+        $total_addresses = 0;
+
+        $stmt = $conn->prepare("
+            SELECT COUNT(*) AS total
+            FROM customer_addresses
+            WHERE user_id = ?
+        ");
+
+        if ($stmt) {
+
+            $stmt->bind_param(
+                "i",
+                $user_id
+            );
+
+            $stmt->execute();
+
+            $result =
+                $stmt->get_result();
+
+            if ($result) {
+
+                $row =
+                    $result->fetch_assoc();
+
+                $total_addresses =
+                    (int) (
+                        $row['total'] ?? 0
+                    );
+            }
+
+            $stmt->close();
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | FIRST ADDRESS WILL BE DEFAULT
+        |--------------------------------------------------------------------------
+        */
+
+        if ($total_addresses === 0) {
+
+            $is_default = 1;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | IF NEW ADDRESS IS DEFAULT
+        | REMOVE OLD DEFAULT
+        |--------------------------------------------------------------------------
+        */
+
+        if ($is_default === 1) {
+
+            $stmt = $conn->prepare("
+                UPDATE customer_addresses
+                SET is_default = 0
+                WHERE user_id = ?
+            ");
+
+            if ($stmt) {
+
+                $stmt->bind_param(
+                    "i",
+                    $user_id
+                );
+
+                $stmt->execute();
+
+                $stmt->close();
+            }
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | INSERT ADDRESS
+        |--------------------------------------------------------------------------
+        */
+
+        $stmt = $conn->prepare("
+            INSERT INTO customer_addresses
+            (
+                user_id,
+                address_title,
+                address_line,
+                area,
+                city,
+                phone,
+                is_default
             )
-        );
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
 
+        if ($stmt) {
 
-    if (!empty($nameParts[1])) {
-
-        $customerInitials .=
-            strtoupper(
-                substr(
-                    $nameParts[1],
-                    0,
-                    1
-                )
+            $stmt->bind_param(
+                "isssssi",
+                $user_id,
+                $address_title,
+                $address_line,
+                $area,
+                $city,
+                $phone,
+                $is_default
             );
+
+            if ($stmt->execute()) {
+
+                $stmt->close();
+
+                header(
+                    "Location: manage-addresses.php"
+                );
+
+                exit;
+
+            } else {
+
+                $error =
+                    "Unable to save address.";
+
+                $stmt->close();
+            }
+
+        } else {
+
+            $error =
+                "Database error. Unable to save address.";
+        }
     }
 }
 
 
+
 /*
 |--------------------------------------------------------------------------
-| PROFILE IMAGE URL
+| GET SAVED ADDRESSES
 |--------------------------------------------------------------------------
 */
 
-$profileImageUrl = '';
+$addresses = [];
 
-if (!empty($profileImage)) {
+$stmt = $conn->prepare("
+    SELECT
+        id,
+        address_title,
+        address_line,
+        area,
+        city,
+        phone,
+        is_default
+    FROM customer_addresses
+    WHERE user_id = ?
+    ORDER BY
+        is_default DESC,
+        id DESC
+");
 
-    $profileImageUrl =
-        $customerBasePath .
-        'uploads/profiles/' .
-        rawurlencode($profileImage);
+if ($stmt) {
+
+    $stmt->bind_param(
+        "i",
+        $user_id
+    );
+
+    $stmt->execute();
+
+    $result =
+        $stmt->get_result();
+
+    if ($result) {
+
+        while (
+            $row =
+            $result->fetch_assoc()
+        ) {
+
+            $addresses[] = $row;
+        }
+    }
+
+    $stmt->close();
 }
+
+
+
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER HEADER
+|--------------------------------------------------------------------------
+|
+| manage-addresses.php is inside:
+|
+| /customer/
+|
+| Header itself remains unchanged.
+|
+|--------------------------------------------------------------------------
+*/
+
+require_once __DIR__ . '/../includes/customer-header.php';
 
 ?>
 
+
 <!-- =========================================================
-     FONT AWESOME
+     FIX HEADER LINKS ONLY ON THIS PAGE
 ========================================================= -->
 
-<link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
->
+<script>
+
+document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | MANAGE-ADDRESSES.PHP IS INSIDE /CUSTOMER/
+        |
+        | Header links normally point to root pages.
+        | Fix them only on this page.
+        |--------------------------------------------------------------------------
+        */
+
+
+        const rootPages = [
+
+            'index.php',
+
+            'restaurants.php',
+
+            'deals.php',
+
+            'my_orders.php',
+
+            'cart.php',
+
+            'my-account.php',
+
+            'payment.php'
+
+        ];
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | FIND CUSTOMER HEADER LINKS
+        |--------------------------------------------------------------------------
+        */
+
+        document
+            .querySelectorAll(
+                'a[href]'
+            )
+            .forEach(
+                function (link) {
+
+
+                    let href =
+                        link.getAttribute(
+                            'href'
+                        );
+
+
+                    if (!href) {
+
+                        return;
+
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | REMOVE ./ IF PRESENT
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if (
+                        href.startsWith('./')
+                    ) {
+
+                        href =
+                            href.substring(
+                                2
+                            );
+
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | ROOT PAGE LINKS
+                    |
+                    | index.php
+                    |     ↓
+                    | ../index.php
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if (
+                        rootPages.includes(
+                            href
+                        )
+                    ) {
+
+                        link.setAttribute(
+                            'href',
+                            '../' + href
+                        );
+
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | MANAGE ADDRESS LINK
+                    |
+                    | customer/manage-addresses.php
+                    |     ↓
+                    | manage-addresses.php
+                    |--------------------------------------------------------------------------
+                    */
+
+                    if (
+                        href ===
+                        'customer/manage-addresses.php'
+                    ) {
+
+                        link.setAttribute(
+                            'href',
+                            'manage-addresses.php'
+                        );
+
+                    }
+
+                }
+            );
+
+    }
+);
+
+</script>
+
 
 
 <style>
 
 /* =========================================================
-   HUMSAFAR CUSTOMER HEADER
-   MAIN BRAND COLOR = #ed0038
+   MANAGE ADDRESS PAGE
 ========================================================= */
 
-.customer-header {
-
-    position: sticky;
-
-    top: 0;
-    left: 0;
+.manage-address-page {
 
     width: 100%;
 
-    z-index: 2000;
+    max-width: 1100px;
 
-    background: #ffffff;
+    margin: 35px auto;
 
-    border-bottom:
-        1px solid #eeeeee;
+    padding: 0 20px 60px;
 
-    box-shadow:
-        0 4px 18px
-        rgba(70, 20, 35, .08);
-}
-
-
-.customer-header,
-.customer-header * {
-
-    box-sizing: border-box;
 }
 
 
 /* =========================================================
-   TOP ROW
+   PAGE TITLE
 ========================================================= */
 
-.customer-header-top {
+.manage-address-title {
 
-    width: 100%;
+    margin-bottom: 25px;
 
-    max-width: 1500px;
+}
 
-    min-height: 78px;
+.manage-address-title h1 {
 
-    margin: 0 auto;
+    margin: 0 0 7px;
 
-    padding:
-        11px 4%;
+    color: #ed0038;
+
+    font-size: 30px;
+
+    font-weight: 800;
+
+}
+
+.manage-address-title p {
+
+    margin: 0;
+
+    color: #777;
+
+    font-size: 14px;
+
+}
+
+
+/* =========================================================
+   ERROR
+========================================================= */
+
+.address-error {
+
+    background: #fff0f3;
+
+    color: #c80035;
+
+    border: 1px solid #f5bdcb;
+
+    padding: 13px 16px;
+
+    border-radius: 10px;
+
+    margin-bottom: 20px;
+
+    font-size: 14px;
+
+}
+
+
+/* =========================================================
+   SECTION TITLE
+========================================================= */
+
+.address-section-title {
+
+    margin-bottom: 18px;
+
+}
+
+.address-section-title h2 {
+
+    margin: 0;
+
+    color: #333;
+
+    font-size: 21px;
+
+    font-weight: 800;
+
+}
+
+
+/* =========================================================
+   SAVED ADDRESS GRID
+========================================================= */
+
+.saved-addresses-grid {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(300px, 1fr)
+        );
+
+    gap: 20px;
+
+    margin-bottom: 40px;
+
+}
+
+
+/* =========================================================
+   ADDRESS CARD
+========================================================= */
+
+.saved-address-card {
+
+    background: #ffffff;
+
+    border: 1px solid #eeeeee;
+
+    border-radius: 16px;
+
+    padding: 20px;
+
+    box-shadow:
+        0 5px 18px
+        rgba(0,0,0,.06);
+
+    transition: .2s ease;
+
+}
+
+.saved-address-card:hover {
+
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 8px 22px
+        rgba(0,0,0,.09);
+
+}
+
+
+/* =========================================================
+   CARD TOP
+========================================================= */
+
+.saved-address-top {
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: flex-start;
+
+    gap: 12px;
+
+    margin-bottom: 15px;
+
+}
+
+.saved-address-name {
 
     display: flex;
 
     align-items: center;
 
-    gap: 18px;
+    gap: 8px;
+
+    color: #222;
+
+    font-size: 18px;
+
+    font-weight: 800;
+
+}
+
+.saved-address-name i {
+
+    color: #ed0038;
+
+    font-size: 18px;
+
 }
 
 
 /* =========================================================
-   LOGO
+   DEFAULT BADGE
 ========================================================= */
 
-.customer-logo {
-
-    display: inline-flex;
-
-    align-items: center;
-
-    gap: 10px;
+.address-default-badge {
 
     flex-shrink: 0;
-
-    color: #ed0038;
-
-    text-decoration: none;
-}
-
-
-.customer-logo-icon {
-
-    width: 44px;
-
-    height: 44px;
-
-    border-radius: 11px;
 
     background: #ed0038;
 
     color: #ffffff;
 
-    display: flex;
+    padding: 5px 10px;
 
-    align-items: center;
+    border-radius: 20px;
 
-    justify-content: center;
-
-    font-size: 19px;
-}
-
-
-.customer-logo-text {
-
-    color: #ed0038;
-
-    font-size: 29px;
-
-    line-height: 1;
-
-    font-weight: 900;
-
-    letter-spacing: -.6px;
-}
-
-
-.customer-logo-sub {
-
-    margin-top: 4px;
-
-    color: #777777;
-
-    font-size: 9px;
+    font-size: 10px;
 
     font-weight: 800;
 
-    letter-spacing: 1.3px;
 }
 
 
 /* =========================================================
-   LOCATION
+   ADDRESS CONTENT
 ========================================================= */
 
-.customer-location {
+.saved-address-content {
 
-    min-width: 155px;
+    color: #555;
 
-    max-width: 195px;
+    font-size: 14px;
 
-    min-height: 44px;
+    line-height: 1.6;
 
-    padding:
-        7px 11px;
+}
+
+.saved-address-content p {
+
+    margin: 0 0 6px;
+
+}
+
+.saved-address-content .phone {
+
+    margin-top: 9px;
+
+    color: #444;
+
+    font-weight: 600;
+
+}
+
+
+/* =========================================================
+   ADDRESS ACTIONS
+========================================================= */
+
+.saved-address-actions {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 15px;
+
+    border-top: 1px solid #eeeeee;
+
+    margin-top: 17px;
+
+    padding-top: 14px;
+
+}
+
+.saved-address-actions a {
+
+    text-decoration: none;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+}
+
+.set-default-address {
+
+    color: #ed0038;
+
+}
+
+.delete-address {
+
+    color: #d00000;
+
+}
+
+.saved-address-actions a:hover {
+
+    text-decoration: underline;
+
+}
+
+
+/* =========================================================
+   NO ADDRESS
+========================================================= */
+
+.no-address-box {
+
+    background: #ffffff;
+
+    border: 1px dashed #d9d9d9;
+
+    border-radius: 15px;
+
+    text-align: center;
+
+    padding: 35px 20px;
+
+    margin-bottom: 40px;
+
+    color: #777;
+
+}
+
+.no-address-box i {
+
+    display: block;
+
+    color: #ed0038;
+
+    font-size: 35px;
+
+    margin-bottom: 10px;
+
+}
+
+.no-address-box strong {
+
+    display: block;
+
+    color: #333;
+
+    font-size: 16px;
+
+    margin-bottom: 5px;
+
+}
+
+
+/* =========================================================
+   ADD ADDRESS BOX
+========================================================= */
+
+.add-address-box {
+
+    background: #ffffff;
+
+    border: 1px solid #eeeeee;
+
+    border-radius: 18px;
+
+    padding: 25px;
+
+    box-shadow:
+        0 5px 18px
+        rgba(0,0,0,.05);
+
+}
+
+.add-address-heading {
+
+    margin-bottom: 22px;
+
+}
+
+.add-address-heading h2 {
+
+    margin: 0 0 5px;
+
+    color: #333;
+
+    font-size: 21px;
+
+    font-weight: 800;
+
+}
+
+.add-address-heading p {
+
+    margin: 0;
+
+    color: #888;
+
+    font-size: 13px;
+
+}
+
+
+/* =========================================================
+   FORM
+========================================================= */
+
+.address-form {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+
+    gap: 17px;
+
+}
+
+.address-form-group {
+
+    display: flex;
+
+    flex-direction: column;
+
+}
+
+.address-form-group.full {
+
+    grid-column: 1 / -1;
+
+}
+
+.address-form-group label {
+
+    color: #333;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    margin-bottom: 7px;
+
+}
+
+.address-form-group input,
+.address-form-group textarea {
+
+    width: 100%;
+
+    border: 1px solid #dddddd;
+
+    border-radius: 10px;
+
+    background: #ffffff;
+
+    color: #333;
+
+    padding: 12px 13px;
+
+    outline: none;
+
+    font-family: inherit;
+
+    font-size: 14px;
+
+    transition: .2s ease;
+
+}
+
+.address-form-group textarea {
+
+    min-height: 100px;
+
+    resize: vertical;
+
+}
+
+.address-form-group input:focus,
+.address-form-group textarea:focus {
+
+    border-color: #ed0038;
+
+    box-shadow:
+        0 0 0 3px
+        rgba(237,0,56,.08);
+
+}
+
+
+/* =========================================================
+   DEFAULT CHECKBOX
+========================================================= */
+
+.default-address-check {
+
+    grid-column: 1 / -1;
 
     display: flex;
 
@@ -534,970 +1048,63 @@ if (!empty($profileImage)) {
 
     gap: 9px;
 
-    background: #ffffff;
+    cursor: pointer;
 
-    border:
-        1px solid #efb9ca;
-
-    border-radius: 9px;
-
-    color: #333333;
-
-    text-decoration: none;
-
-    transition: .2s ease;
-}
-
-
-.customer-location:hover {
-
-    background: #fff1f5;
-
-    border-color: #ed0038;
-}
-
-
-.customer-location-icon {
-
-    width: 31px;
-
-    height: 31px;
-
-    border-radius: 8px;
-
-    background: #fff1f5;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    flex-shrink: 0;
-
-    font-size: 15px;
-}
-
-
-.customer-location-label {
-
-    color: #888888;
-
-    font-size: 9px;
-
-    font-weight: 800;
-
-    text-transform: uppercase;
-
-    line-height: 1;
-}
-
-
-.customer-location-value {
-
-    display: block;
-
-    margin-top: 4px;
-
-    color: #333333;
-
-    font-size: 12px;
-
-    font-weight: 700;
-
-    white-space: nowrap;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-}
-
-
-/* =========================================================
-   SEARCH
-========================================================= */
-
-.customer-search {
-
-    position: relative;
-
-    flex: 1;
-
-    max-width: 590px;
-
-    margin: 0 auto;
-}
-
-
-.customer-search input {
-
-    width: 100%;
-
-    height: 46px;
-
-    padding:
-        0 50px 0 18px;
-
-    background: #ffffff;
-
-    border:
-        1px solid #dddddd;
-
-    border-radius: 25px;
-
-    outline: none;
-
-    color: #333333;
+    color: #444;
 
     font-size: 13px;
 
-    transition: .2s ease;
+    font-weight: 600;
+
 }
 
+.default-address-check input {
 
-.customer-search input::placeholder {
+    width: 17px;
 
-    color: #999999;
-}
-
-
-.customer-search input:focus {
-
-    border-color: #ed0038;
-
-    box-shadow:
-        0 0 0 3px
-        rgba(237,0,56,.08);
-}
-
-
-.customer-search button {
-
-    position: absolute;
-
-    top: 5px;
-
-    right: 5px;
-
-    width: 36px;
-
-    height: 36px;
-
-    border: 0;
-
-    border-radius: 50%;
-
-    background: #ed0038;
-
-    color: #ffffff;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    cursor: pointer;
-
-    font-size: 14px;
-}
-
-
-.customer-search button:hover {
-
-    background: #d90035;
-}
-
-
-/* =========================================================
-   HEADER ACTIONS
-========================================================= */
-
-.customer-header-actions {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 8px;
-
-    flex-shrink: 0;
-}
-
-
-.customer-action {
-
-    min-height: 41px;
-
-    padding:
-        0 13px;
-
-    border:
-        1px solid transparent;
-
-    border-radius: 8px;
-
-    display: inline-flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    gap: 7px;
-
-    background: #ffffff;
-
-    color: #333333;
-
-    text-decoration: none;
-
-    font-size: 12px;
-
-    font-weight: 800;
-
-    white-space: nowrap;
-
-    transition: .2s ease;
-}
-
-
-.customer-action i {
-
-    font-size: 15px;
-}
-
-
-.customer-action:hover {
-
-    background: #fff1f5;
-
-    color: #ed0038;
-
-    border-color: #f2bccd;
-}
-
-
-/* =========================================================
-   CART
-========================================================= */
-
-.customer-cart {
-
-    position: relative;
-
-    width: 44px;
-
-    height: 44px;
-
-    padding: 0;
-
-    border-radius: 50%;
-
-    color: #ed0038;
-}
-
-
-.customer-cart:hover {
-
-    background: #fff1f5;
-
-    color: #ed0038;
-}
-
-
-.customer-cart i {
-
-    font-size: 19px;
-}
-
-
-.customer-cart-count {
-
-    position: absolute;
-
-    top: -2px;
-
-    right: -2px;
-
-    min-width: 19px;
-
-    height: 19px;
-
-    padding:
-        0 4px;
-
-    border-radius: 20px;
-
-    background: #ed0038;
-
-    color: #ffffff;
-
-    border:
-        2px solid #ffffff;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    font-size: 8px;
-
-    font-weight: 900;
-}
-
-
-/* =========================================================
-   SIGN IN
-========================================================= */
-
-.customer-signin {
-
-    background: #ed0038;
-
-    color: #ffffff;
-
-    border-color: #ed0038;
-
-    padding:
-        0 16px;
-}
-
-
-.customer-signin:hover {
-
-    background: #d90035;
-
-    color: #ffffff;
-
-    border-color: #d90035;
-}
-
-
-/* =========================================================
-   SIGN UP
-========================================================= */
-
-.customer-signup {
-
-    background: #ffffff;
-
-    color: #ed0038;
-
-    border:
-        1px solid #ed0038;
-
-    padding:
-        0 16px;
-}
-
-
-.customer-signup:hover {
-
-    background: #fff1f5;
-
-    color: #d90035;
-
-    border-color: #d90035;
-}
-
-
-/* =========================================================
-   CUSTOMER PROFILE
-========================================================= */
-
-.customer-user {
-
-    position: relative;
-}
-
-
-.customer-user-button {
-
-    min-height: 43px;
-
-    padding:
-        4px 10px 4px 5px;
-
-    border:
-        1px solid #e8e8e8;
-
-    border-radius: 24px;
-
-    background: #ffffff;
-
-    display: inline-flex;
-
-    align-items: center;
-
-    gap: 8px;
-
-    cursor: pointer;
-}
-
-
-.customer-avatar {
-
-    width: 34px;
-
-    height: 34px;
-
-    border-radius: 50%;
-
-    background: #ed0038;
-
-    color: #ffffff;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    overflow: hidden;
-
-    flex-shrink: 0;
-
-    font-size: 10px;
-
-    font-weight: 900;
-}
-
-
-.customer-avatar img {
-
-    width: 100%;
-
-    height: 100%;
-
-    object-fit: cover;
-}
-
-
-.customer-user-name {
-
-    max-width: 150px;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-
-    white-space: nowrap;
-
-    color: #333333;
-
-    font-size: 12px;
-
-    font-weight: 800;
-}
-
-
-.customer-user-arrow {
-
-    color: #999999;
-
-    font-size: 9px;
-}
-
-
-/* =========================================================
-   PROFILE DROPDOWN
-========================================================= */
-
-.customer-user-menu {
-
-    position: absolute;
-
-    top:
-        calc(100% + 9px);
-
-    right: 0;
-
-    width: 245px;
-
-    padding: 9px;
-
-    background: #ffffff;
-
-    border:
-        1px solid #e8e8e8;
-
-    border-radius: 12px;
-
-    box-shadow:
-        0 14px 40px
-        rgba(50,20,30,.15);
-
-    opacity: 0;
-
-    visibility: hidden;
-
-    transform:
-        translateY(-7px);
-
-    transition: .18s ease;
-}
-
-
-.customer-user.open
-.customer-user-menu {
-
-    opacity: 1;
-
-    visibility: visible;
-
-    transform:
-        translateY(0);
-}
-
-
-.customer-user-menu-top {
-
-    padding:
-        12px;
-
-    background: #fff1f5;
-
-    border-radius: 9px;
-
-    margin-bottom: 6px;
-}
-
-
-.customer-user-menu-name {
-
-    color: #333333;
-
-    font-size: 14px;
-
-    font-weight: 800;
-}
-
-
-.customer-user-menu-email {
-
-    margin-top: 5px;
-
-    color: #888888;
-
-    font-size: 10px;
-
-    white-space: nowrap;
-
-    overflow: hidden;
-
-    text-overflow: ellipsis;
-}
-
-
-.customer-menu-link {
-
-    min-height: 44px;
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 11px;
-
-    padding:
-        9px 11px;
-
-    border-radius: 8px;
-
-    text-decoration: none;
-
-    color: #444444;
-
-    font-size: 13px;
-
-    font-weight: 700;
-}
-
-
-.customer-menu-link i {
-
-    width: 20px;
-
-    text-align: center;
-
-    color: #ed0038;
-
-    font-size: 14px;
-}
-
-
-.customer-menu-link:hover {
-
-    background: #fff1f5;
-
-    color: #ed0038;
-}
-
-
-.customer-menu-link.logout {
-
-    color: #cf0033;
-}
-
-
-/* =========================================================
-   LOWER NAVIGATION
-========================================================= */
-
-.customer-nav {
-
-    width: 100%;
-
-    background: #ed0038;
-}
-
-
-.customer-nav-inner {
-
-    width: 100%;
-
-    max-width: 1500px;
-
-    min-height: 49px;
-
-    margin: 0 auto;
-
-    padding:
-        0 4%;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: space-between;
-}
-
-
-.customer-nav-list {
-
-    display: flex;
-
-    align-items: center;
-
-    list-style: none;
-
-    padding: 0;
+    height: 17px;
 
     margin: 0;
+
+    accent-color: #ed0038;
+
 }
 
 
-.customer-nav-item {
+/* =========================================================
+   SAVE BUTTON
+========================================================= */
 
-    position: relative;
-}
+.save-address-button {
 
+    grid-column: 1 / -1;
 
-.customer-nav-link {
+    width: 100%;
 
-    min-height: 49px;
+    border: none;
 
-    padding:
-        0 18px;
+    border-radius: 10px;
 
-    display: flex;
-
-    align-items: center;
-
-    gap: 8px;
+    background: #ed0038;
 
     color: #ffffff;
 
-    text-decoration: none;
+    padding: 14px 20px;
 
-    font-size: 14px;
+    cursor: pointer;
+
+    font-size: 15px;
 
     font-weight: 800;
 
     transition: .2s ease;
+
 }
 
+.save-address-button:hover {
 
-.customer-nav-link i {
+    background: #d90035;
 
-    font-size: 14px;
-}
-
-
-.customer-nav-link:hover {
-
-    background:
-        rgba(255,255,255,.12);
-
-    color: #ffffff;
-}
-
-
-.customer-nav-link.active {
-
-    background:
-        rgba(255,255,255,.14);
-
-    color: #ffffff;
-}
-
-
-.customer-nav-link.active::after {
-
-    content: "";
-
-    position: absolute;
-
-    left: 18px;
-
-    right: 18px;
-
-    bottom: 0;
-
-    height: 3px;
-
-    background: #ffffff;
-
-    border-radius:
-        3px 3px 0 0;
-}
-
-
-/* =========================================================
-   BECOME RIDER
-========================================================= */
-
-.customer-nav-promo {
-
-    display: inline-flex;
-
-    align-items: center;
-
-    gap: 8px;
-
-    padding:
-        8px 14px;
-
-    background:
-        rgba(255,255,255,.13);
-
-    border:
-        1px solid
-        rgba(255,255,255,.18);
-
-    border-radius: 20px;
-
-    color: #ffffff;
-
-    text-decoration: none;
-
-    font-size: 11px;
-
-    font-weight: 800;
-}
-
-
-.customer-nav-promo i {
-
-    font-size: 14px;
-}
-
-
-.customer-nav-promo:hover {
-
-    background:
-        rgba(255,255,255,.22);
-
-    color: #ffffff;
-}
-
-
-/* =========================================================
-   MOBILE MENU BUTTON
-========================================================= */
-
-.customer-mobile-toggle {
-
-    display: none;
-
-    width: 41px;
-
-    height: 41px;
-
-    border: 0;
-
-    border-radius: 9px;
-
-    background: #fff1f5;
-
-    color: #ed0038;
-
-    align-items: center;
-
-    justify-content: center;
-
-    cursor: pointer;
-
-    font-size: 17px;
-
-    flex-shrink: 0;
-}
-
-
-/* =========================================================
-   TABLET
-========================================================= */
-
-@media (max-width: 1180px) {
-
-    .customer-location {
-
-        display: none;
-    }
-
-
-    .customer-action span {
-
-        display: none;
-    }
-
-
-    .customer-action {
-
-        width: 43px;
-
-        min-height: 43px;
-
-        padding: 0;
-    }
-
-
-    .customer-signin,
-    .customer-signup {
-
-        width: auto;
-
-        padding:
-            0 13px;
-    }
-
-
-    .customer-signin span,
-    .customer-signup span {
-
-        display: inline;
-    }
-
-
-    .customer-search {
-
-        max-width: none;
-    }
-}
-
-
-/* =========================================================
-   TABLET / MOBILE
-========================================================= */
-
-@media (max-width: 900px) {
-
-    .customer-header-top {
-
-        min-height: 70px;
-
-        padding:
-            9px 4%;
-
-        flex-wrap: wrap;
-
-        gap: 10px;
-    }
-
-
-    .customer-search {
-
-        order: 5;
-
-        flex-basis: 100%;
-
-        width: 100%;
-
-        max-width: none;
-    }
-
-
-    .customer-mobile-toggle {
-
-        display: inline-flex;
-    }
-
-
-    .customer-nav {
-
-        display: none;
-    }
-
-
-    .customer-nav.mobile-open {
-
-        display: block;
-    }
-
-
-    .customer-nav-inner {
-
-        padding:
-            7px 4% 11px;
-
-        flex-direction: column;
-
-        align-items: stretch;
-    }
-
-
-    .customer-nav-list {
-
-        flex-direction: column;
-
-        align-items: stretch;
-    }
-
-
-    .customer-nav-link {
-
-        min-height: 46px;
-
-        padding:
-            0 12px;
-
-        font-size: 14px;
-    }
-
-
-    .customer-nav-link.active::after {
-
-        left: 12px;
-
-        right: auto;
-
-        width: 32px;
-    }
-
-
-    .customer-nav-promo {
-
-        margin-top: 8px;
-
-        min-height: 40px;
-
-        justify-content: center;
-
-        font-size: 12px;
-    }
 }
 
 
@@ -1505,986 +1112,487 @@ if (!empty($profileImage)) {
    MOBILE
 ========================================================= */
 
-@media (max-width: 560px) {
+@media (max-width: 750px) {
 
-    .customer-header-top {
+    .manage-address-page {
 
-        padding:
-            9px 3.5%;
+        margin-top: 25px;
 
-        gap: 8px;
+        padding-left: 15px;
+
+        padding-right: 15px;
+
     }
 
+    .manage-address-title h1 {
 
-    .customer-logo-sub {
+        font-size: 25px;
 
-        display: none;
     }
 
+    .address-form {
 
-    .customer-logo-text {
+        grid-template-columns: 1fr;
 
-        font-size: 24px;
     }
 
+    .address-form-group.full {
 
-    .customer-logo-icon {
+        grid-column: auto;
 
-        width: 37px;
-
-        height: 37px;
-
-        font-size: 16px;
     }
 
+    .default-address-check {
 
-    .customer-search input {
+        grid-column: auto;
 
-        height: 44px;
-
-        font-size: 13px;
     }
 
+    .save-address-button {
 
-    .customer-signin,
-    .customer-signup {
+        grid-column: auto;
 
-        display: none;
     }
 
-
-    .customer-user-button {
-
-        border: 0;
-
-        background: transparent;
-
-        padding-right: 0;
-    }
-
-
-    .customer-user-name,
-    .customer-user-arrow {
-
-        display: none;
-    }
-
-
-    .customer-cart {
-
-        width: 40px;
-
-        height: 40px;
-    }
-
-
-    .customer-mobile-toggle {
-
-        width: 39px;
-
-        height: 39px;
-    }
-
-
-    .customer-user-menu {
-
-        width:
-            min(92vw, 280px);
-
-        right:
-            -4px;
-    }
-
-
-    .customer-user-menu-name {
-
-        font-size: 14px;
-    }
-
-
-    .customer-menu-link {
-
-        min-height: 45px;
-
-        font-size: 13px;
-    }
-}
-
-
-/* =========================================================
-   SMALL PHONES
-========================================================= */
-
-@media (max-width: 400px) {
-
-    .customer-logo-text {
-
-        font-size: 21px;
-    }
-
-
-    .customer-logo-icon {
-
-        width: 34px;
-
-        height: 34px;
-    }
-
-
-    .customer-header-actions {
-
-        gap: 3px;
-    }
-
-
-    .customer-cart {
-
-        width: 37px;
-
-        height: 37px;
-    }
-
-
-    .customer-mobile-toggle {
-
-        width: 36px;
-
-        height: 36px;
-    }
-
-
-    .customer-search input {
-
-        font-size: 12px;
-    }
 }
 
 </style>
 
 
+
 <!-- =========================================================
-     CUSTOMER HEADER
+     MANAGE ADDRESSES CONTENT
 ========================================================= -->
 
-<header
-    class="customer-header"
-    id="customerHeader"
->
+<main class="manage-address-page">
+
+
+    <!-- PAGE TITLE -->
+
+    <div class="manage-address-title">
+
+        <h1>
+            Delivery Address
+        </h1>
+
+        <p>
+            Manage your saved delivery addresses
+        </p>
+
+    </div>
+
+
+    <!-- ERROR MESSAGE -->
+
+    <?php if ($error !== ''): ?>
+
+        <div class="address-error">
+
+            <?php
+
+            echo htmlspecialchars(
+                $error,
+                ENT_QUOTES,
+                'UTF-8'
+            );
+
+            ?>
+
+        </div>
+
+    <?php endif; ?>
 
 
     <!-- =====================================================
-         TOP ROW
+         SAVED ADDRESSES
     ====================================================== -->
 
-    <div
-        class="customer-header-top"
-    >
+    <div class="address-section-title">
 
+        <h2>
+            Saved Addresses
+        </h2>
 
-        <!-- =================================================
-             LOGO
-        ================================================== -->
+    </div>
 
-        <a
-            href="<?= $customerBasePath ?>index.php"
-            class="customer-logo"
-            aria-label="Humsafar Home"
-        >
 
-            <div
-                class="customer-logo-icon"
-            >
+    <?php if (!empty($addresses)): ?>
 
-                <i
-                    class="fas fa-utensils"
-                ></i>
 
-            </div>
+        <div class="saved-addresses-grid">
 
 
-            <div>
+            <?php foreach ($addresses as $address): ?>
 
-                <div
-                    class="customer-logo-text"
-                >
-                    Humsafar
-                </div>
 
-                <div
-                    class="customer-logo-sub"
-                >
-                    FOOD DELIVERY
-                </div>
+                <div class="saved-address-card">
 
-            </div>
 
-        </a>
+                    <!-- CARD HEADER -->
 
+                    <div class="saved-address-top">
 
-        <!-- =================================================
-             LOCATION
-        ================================================== -->
 
-        <a
-            href="<?= $customerBasePath ?>customer/manage-addresses.php"
-            class="customer-location"
-            title="Manage delivery address"
-        >
+                        <div class="saved-address-name">
 
-            <div
-                class="customer-location-icon"
-            >
+                            <i class="fa-solid fa-location-dot"></i>
 
-                <i
-                    class="fas fa-location-dot"
-                ></i>
+                            <?php
 
-            </div>
+                            echo htmlspecialchars(
+                                $address['address_title'],
+                                ENT_QUOTES,
+                                'UTF-8'
+                            );
 
-
-            <div>
-
-                <div
-                    class="customer-location-label"
-                >
-                    Deliver to
-                </div>
-
-
-                <span
-                    class="customer-location-value"
-                >
-                    Choose your address
-                </span>
-
-            </div>
-
-        </a>
-
-
-        <!-- =================================================
-             SEARCH
-        ================================================== -->
-
-        <form
-            action="<?= $customerBasePath ?>restaurants.php"
-            method="GET"
-            class="customer-search"
-            role="search"
-        >
-
-            <input
-                type="search"
-                name="search"
-                placeholder="Search restaurants or food..."
-                aria-label="Search restaurants or food"
-                autocomplete="off"
-            >
-
-
-            <button
-                type="submit"
-                aria-label="Search"
-            >
-
-                <i
-                    class="fas fa-search"
-                ></i>
-
-            </button>
-
-        </form>
-
-
-        <!-- =================================================
-             MOBILE MENU
-        ================================================== -->
-
-        <button
-            type="button"
-            class="customer-mobile-toggle"
-            id="customerMobileToggle"
-            aria-label="Open Menu"
-            aria-expanded="false"
-        >
-
-            <i
-                class="fas fa-bars"
-            ></i>
-
-        </button>
-
-
-        <!-- =================================================
-             RIGHT ACTIONS
-        ================================================== -->
-
-        <div
-            class="customer-header-actions"
-        >
-
-
-            <?php if ($isLoggedIn): ?>
-
-
-                <!-- =========================================
-                     MY ORDERS
-                ========================================== -->
-
-                <a
-                    href="<?= $customerBasePath ?>my_orders.php"
-                    class="customer-action"
-                    title="My Orders"
-                >
-
-                    <i
-                        class="fas fa-receipt"
-                    ></i>
-
-                    <span>
-                        Orders
-                    </span>
-
-                </a>
-
-
-                <!-- =========================================
-                     CART
-                ========================================== -->
-
-                <a
-                    href="<?= $customerBasePath ?>cart.php"
-                    class="customer-action customer-cart"
-                    title="Shopping Cart"
-                    aria-label="Shopping Cart"
-                >
-
-                    <i
-                        class="fas fa-shopping-cart"
-                    ></i>
-
-
-                    <?php if ($cartCount > 0): ?>
-
-                        <span
-                            class="customer-cart-count"
-                        >
-
-                            <?= (int) $cartCount ?>
-
-                        </span>
-
-                    <?php endif; ?>
-
-                </a>
-
-
-                <!-- =========================================
-                     CUSTOMER PROFILE
-                ========================================== -->
-
-                <div
-                    class="customer-user"
-                    id="customerUser"
-                >
-
-
-                    <button
-                        type="button"
-                        class="customer-user-button"
-                        id="customerUserButton"
-                        aria-expanded="false"
-                    >
-
-
-                        <div
-                            class="customer-avatar"
-                        >
-
-                            <?php if ($profileImageUrl !== ''): ?>
-
-                                <img
-                                    src="<?= customer_h($profileImageUrl) ?>"
-                                    alt="<?= customer_h($userName) ?>"
-                                >
-
-                            <?php else: ?>
-
-                                <?= customer_h(
-                                    $customerInitials
-                                ) ?>
-
-                            <?php endif; ?>
+                            ?>
 
                         </div>
 
 
-                        <span
-                            class="customer-user-name"
-                        >
+                        <?php
 
-                            <?= customer_h(
-                                $userName
-                            ) ?>
+                        if (
+                            (int)
+                            $address['is_default']
+                            === 1
+                        ):
 
-                        </span>
+                        ?>
 
-
-                        <span
-                            class="customer-user-arrow"
-                        >
-
-                            <i
-                                class="fas fa-chevron-down"
-                            ></i>
-
-                        </span>
-
-
-                    </button>
-
-
-                    <!-- =====================================
-                         PROFILE DROPDOWN
-                    ====================================== -->
-
-                    <div
-                        class="customer-user-menu"
-                    >
-
-
-                        <div
-                            class="customer-user-menu-top"
-                        >
-
-                            <div
-                                class="customer-user-menu-name"
+                            <span
+                                class="address-default-badge"
                             >
 
-                                <?= customer_h(
-                                    $userName
-                                ) ?>
+                                Default
 
-                            </div>
+                            </span>
+
+                        <?php endif; ?>
 
 
-                            <div
-                                class="customer-user-menu-email"
+                    </div>
+
+
+                    <!-- ADDRESS DETAILS -->
+
+                    <div class="saved-address-content">
+
+
+                        <p>
+
+                            <?php
+
+                            echo nl2br(
+                                htmlspecialchars(
+                                    $address['address_line'],
+                                    ENT_QUOTES,
+                                    'UTF-8'
+                                )
+                            );
+
+                            ?>
+
+                        </p>
+
+
+                        <p>
+
+                            <?php
+
+                            echo htmlspecialchars(
+                                $address['area'],
+                                ENT_QUOTES,
+                                'UTF-8'
+                            );
+
+                            ?>,
+
+                            <?php
+
+                            echo htmlspecialchars(
+                                $address['city'],
+                                ENT_QUOTES,
+                                'UTF-8'
+                            );
+
+                            ?>
+
+                        </p>
+
+
+                        <p class="phone">
+
+                            <i
+                                class="fa-solid fa-phone"
+                            ></i>
+
+                            <?php
+
+                            echo htmlspecialchars(
+                                $address['phone'],
+                                ENT_QUOTES,
+                                'UTF-8'
+                            );
+
+                            ?>
+
+                        </p>
+
+
+                    </div>
+
+
+                    <!-- ACTIONS -->
+
+                    <div class="saved-address-actions">
+
+
+                        <?php
+
+                        if (
+                            (int)
+                            $address['is_default']
+                            !== 1
+                        ):
+
+                        ?>
+
+                            <a
+                                href="manage-addresses.php?default=<?php echo (int) $address['id']; ?>"
+                                class="set-default-address"
                             >
 
-                                <?= customer_h(
-                                    $userEmail !== ''
-                                        ? $userEmail
-                                        : 'Customer Account'
-                                ) ?>
+                                Set as Default
 
-                            </div>
+                            </a>
 
-                        </div>
+                        <?php endif; ?>
 
-
-                        <!-- MY ACCOUNT -->
 
                         <a
-                            href="<?= $customerBasePath ?>my-account.php"
-                            class="customer-menu-link"
+                            href="manage-addresses.php?delete=<?php echo (int) $address['id']; ?>"
+                            class="delete-address"
+                            onclick="return confirm('Are you sure you want to delete this address?');"
                         >
 
-                            <i
-                                class="fas fa-user"
-                            ></i>
-
-                            My Account
-
-                        </a>
-
-
-                        <!-- MY ORDERS -->
-
-                        <a
-                            href="<?= $customerBasePath ?>my_orders.php"
-                            class="customer-menu-link"
-                        >
-
-                            <i
-                                class="fas fa-receipt"
-                            ></i>
-
-                            My Orders
-
-                        </a>
-
-
-                        <!-- MY ADDRESS -->
-
-                        <a
-                            href="<?= $customerBasePath ?>customer/manage-addresses.php"
-                            class="customer-menu-link"
-                        >
-
-                            <i
-                                class="fas fa-location-dot"
-                            ></i>
-
-                            My Address
-
-                        </a>
-
-
-                        <!-- MY CART -->
-
-                        <a
-                            href="<?= $customerBasePath ?>cart.php"
-                            class="customer-menu-link"
-                        >
-
-                            <i
-                                class="fas fa-cart-shopping"
-                            ></i>
-
-                            My Cart
-
-                        </a>
-
-
-                        <!-- LOGOUT -->
-
-                        <a
-                            href="<?= $customerBasePath ?>logout.php"
-                            class="customer-menu-link logout"
-                        >
-
-                            <i
-                                class="fas fa-right-from-bracket"
-                            ></i>
-
-                            Logout
+                            Delete
 
                         </a>
 
 
                     </div>
 
+
                 </div>
 
 
-            <?php else: ?>
-
-
-                <!-- =========================================
-                     SIGN IN
-                ========================================== -->
-
-                <a
-                    href="<?= $customerBasePath ?>login.php"
-                    class="customer-action customer-signin"
-                >
-
-                    <i
-                        class="fas fa-right-to-bracket"
-                    ></i>
-
-                    <span>
-                        Sign In
-                    </span>
-
-                </a>
-
-
-                <!-- =========================================
-                     SIGN UP
-                ========================================== -->
-
-                <a
-                    href="<?= $customerBasePath ?>register.php"
-                    class="customer-action customer-signup"
-                >
-
-                    <i
-                        class="fas fa-user-plus"
-                    ></i>
-
-                    <span>
-                        Sign Up
-                    </span>
-
-                </a>
-
-
-            <?php endif; ?>
+            <?php endforeach; ?>
 
 
         </div>
+
+
+    <?php else: ?>
+
+
+        <!-- NO ADDRESSES -->
+
+        <div class="no-address-box">
+
+            <i
+                class="fa-solid fa-location-dot"
+            ></i>
+
+            <strong>
+                No Saved Addresses
+            </strong>
+
+            <p>
+                Add your delivery address below
+                to place an order.
+            </p>
+
+        </div>
+
+
+    <?php endif; ?>
+
+
+    <!-- =====================================================
+         ADD NEW ADDRESS
+    ====================================================== -->
+
+    <div class="add-address-box">
+
+
+        <div class="add-address-heading">
+
+            <h2>
+                Add New Address
+            </h2>
+
+            <p>
+                Enter your delivery details below.
+            </p>
+
+        </div>
+
+
+        <form
+            method="POST"
+            action="manage-addresses.php"
+            class="address-form"
+        >
+
+
+            <!-- ADDRESS TITLE -->
+
+            <div class="address-form-group">
+
+                <label for="address_title">
+
+                    Address Title
+
+                </label>
+
+                <input
+                    type="text"
+                    id="address_title"
+                    name="address_title"
+                    placeholder="Home / Office"
+                    maxlength="100"
+                    required
+                >
+
+            </div>
+
+
+            <!-- PHONE -->
+
+            <div class="address-form-group">
+
+                <label for="phone">
+
+                    Phone Number
+
+                </label>
+
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    placeholder="03XXXXXXXXX"
+                    maxlength="20"
+                    required
+                >
+
+            </div>
+
+
+            <!-- COMPLETE ADDRESS -->
+
+            <div class="address-form-group full">
+
+                <label for="address_line">
+
+                    Complete Address
+
+                </label>
+
+                <textarea
+                    id="address_line"
+                    name="address_line"
+                    placeholder="House No, Street No, Block, Building, etc."
+                    maxlength="500"
+                    required
+                ></textarea>
+
+            </div>
+
+
+            <!-- AREA -->
+
+            <div class="address-form-group">
+
+                <label for="area">
+
+                    Area
+
+                </label>
+
+                <input
+                    type="text"
+                    id="area"
+                    name="area"
+                    placeholder="Latifabad"
+                    maxlength="100"
+                    required
+                >
+
+            </div>
+
+
+            <!-- CITY -->
+
+            <div class="address-form-group">
+
+                <label for="city">
+
+                    City
+
+                </label>
+
+                <input
+                    type="text"
+                    id="city"
+                    name="city"
+                    placeholder="Hyderabad"
+                    maxlength="100"
+                    required
+                >
+
+            </div>
+
+
+            <!-- DEFAULT -->
+
+            <label class="default-address-check">
+
+                <input
+                    type="checkbox"
+                    name="is_default"
+                    value="1"
+                >
+
+                <span>
+                    Set this address as my default delivery address
+                </span>
+
+            </label>
+
+
+            <!-- SAVE -->
+
+            <button
+                type="submit"
+                name="save_address"
+                class="save-address-button"
+            >
+
+                <i
+                    class="fa-solid fa-location-dot"
+                ></i>
+
+                Save Address
+
+            </button>
+
+
+        </form>
+
 
     </div>
 
 
-    <!-- =====================================================
-         LOWER NAVIGATION
-    ====================================================== -->
-
-    <nav
-        class="customer-nav"
-        id="customerNav"
-    >
-
-        <div
-            class="customer-nav-inner"
-        >
-
-
-            <ul
-                class="customer-nav-list"
-            >
-
-
-                <!-- =========================================
-                     HOME
-                ========================================== -->
-
-                <li
-                    class="customer-nav-item"
-                >
-
-                    <a
-                        href="<?= $customerBasePath ?>index.php"
-                        class="customer-nav-link
-                        <?= customerNavActive(
-                            'index.php'
-                        ) ?>"
-                    >
-
-                        <i
-                            class="fas fa-house"
-                        ></i>
-
-                        Home
-
-                    </a>
-
-                </li>
-
-
-                <!-- =========================================
-                     RESTAURANTS
-                ========================================== -->
-
-                <li
-                    class="customer-nav-item"
-                >
-
-                    <a
-                        href="<?= $customerBasePath ?>restaurants.php"
-                        class="customer-nav-link
-                        <?= customerNavActive(
-                            'restaurants.php'
-                        ) ?>"
-                    >
-
-                        <i
-                            class="fas fa-store"
-                        ></i>
-
-                        Restaurants
-
-                    </a>
-
-                </li>
-
-
-                <!-- =========================================
-                     DEALS
-                ========================================== -->
-
-                <li
-                    class="customer-nav-item"
-                >
-
-                    <a
-                        href="<?= $customerBasePath ?>deals.php"
-                        class="customer-nav-link
-                        <?= customerNavActive(
-                            'deals.php'
-                        ) ?>"
-                    >
-
-                        <i
-                            class="fas fa-tags"
-                        ></i>
-
-                        Deals
-
-                    </a>
-
-                </li>
-
-
-                <?php if ($isLoggedIn): ?>
-
-
-                    <!-- =====================================
-                         MY ORDERS
-                    ====================================== -->
-
-                    <li
-                        class="customer-nav-item"
-                    >
-
-                        <a
-                            href="<?= $customerBasePath ?>my_orders.php"
-                            class="customer-nav-link
-                            <?= customerNavActive(
-                                [
-                                    'my_orders.php',
-                                    'order_success.php'
-                                ]
-                            ) ?>"
-                        >
-
-                            <i
-                                class="fas fa-bag-shopping"
-                            ></i>
-
-                            My Orders
-
-                        </a>
-
-                    </li>
-
-
-                    <!-- =====================================
-                         MY ACCOUNT
-                    ====================================== -->
-
-                    <li
-                        class="customer-nav-item"
-                    >
-
-                        <a
-                            href="<?= $customerBasePath ?>my-account.php"
-                            class="customer-nav-link
-                            <?= customerNavActive(
-                                'my-account.php'
-                            ) ?>"
-                        >
-
-                            <i
-                                class="fas fa-user"
-                            ></i>
-
-                            My Account
-
-                        </a>
-
-                    </li>
-
-
-                <?php endif; ?>
-
-
-            </ul>
-
-
-            <!-- =============================================
-                 BECOME RIDER
-            ============================================== -->
-
-            <a
-                href="<?= $customerBasePath ?>rider/register.php"
-                class="customer-nav-promo"
-            >
-
-                <i
-                    class="fas fa-motorcycle"
-                ></i>
-
-                Become a Rider
-
-            </a>
-
-
-        </div>
-
-    </nav>
-
-</header>
-
-
-<script>
-
-/*
-|--------------------------------------------------------------------------
-| CUSTOMER HEADER JAVASCRIPT
-|--------------------------------------------------------------------------
-*/
-
-(function () {
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | MOBILE MENU
-    |--------------------------------------------------------------------------
-    */
-
-    const mobileButton =
-        document.getElementById(
-            'customerMobileToggle'
-        );
-
-
-    const customerNav =
-        document.getElementById(
-            'customerNav'
-        );
-
-
-    if (
-        mobileButton &&
-        customerNav
-    ) {
-
-        mobileButton.addEventListener(
-            'click',
-            function () {
-
-                const opened =
-                    customerNav.classList.toggle(
-                        'mobile-open'
-                    );
-
-
-                mobileButton.setAttribute(
-                    'aria-expanded',
-                    opened
-                        ? 'true'
-                        : 'false'
-                );
-
-
-                mobileButton.setAttribute(
-                    'aria-label',
-                    opened
-                        ? 'Close Menu'
-                        : 'Open Menu'
-                );
-
-
-                const icon =
-                    mobileButton.querySelector(
-                        'i'
-                    );
-
-
-                if (icon) {
-
-                    icon.classList.toggle(
-                        'fa-bars',
-                        !opened
-                    );
-
-
-                    icon.classList.toggle(
-                        'fa-xmark',
-                        opened
-                    );
-
-                }
-
-            }
-        );
-
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CUSTOMER PROFILE DROPDOWN
-    |--------------------------------------------------------------------------
-    */
-
-    const customerUser =
-        document.getElementById(
-            'customerUser'
-        );
-
-
-    const customerUserButton =
-        document.getElementById(
-            'customerUserButton'
-        );
-
-
-    if (
-        customerUser &&
-        customerUserButton
-    ) {
-
-
-        customerUserButton.addEventListener(
-            'click',
-            function (event) {
-
-                event.stopPropagation();
-
-
-                const opened =
-                    customerUser.classList.toggle(
-                        'open'
-                    );
-
-
-                customerUserButton.setAttribute(
-                    'aria-expanded',
-                    opened
-                        ? 'true'
-                        : 'false'
-                );
-
-            }
-        );
-
-
-        document.addEventListener(
-            'click',
-            function () {
-
-                customerUser.classList.remove(
-                    'open'
-                );
-
-
-                customerUserButton.setAttribute(
-                    'aria-expanded',
-                    'false'
-                );
-
-            }
-        );
-
-
-        const customerMenu =
-            customerUser.querySelector(
-                '.customer-user-menu'
-            );
-
-
-        if (customerMenu) {
-
-            customerMenu.addEventListener(
-                'click',
-                function (event) {
-
-                    event.stopPropagation();
-
-                }
-            );
-
-        }
-
-    }
-
-
-})();
-
-</script>
+</main>

@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/session.php';
-
+require_once __DIR__ . '/includes/customer-header.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -896,6 +896,7 @@ function dealImage($image)
                 height: 220px;
             }
 
+            
         }
 
     </style>
@@ -906,20 +907,7 @@ function dealImage($image)
 <body>
 
 
-<?php
 
-/*
-|--------------------------------------------------------------------------
-| EXISTING CUSTOMER HEADER
-|--------------------------------------------------------------------------
-|
-| Same header as customer pages.
-|
-*/
-
-require_once __DIR__ . '/includes/customer-header.php';
-
-?>
 
 
 <!-- =========================================================

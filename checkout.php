@@ -1,26 +1,34 @@
 <?php
-
 /*
 |--------------------------------------------------------------------------
 | HUMSAFAR FOOD DELIVERY
 | CUSTOMER CHECKOUT
 |--------------------------------------------------------------------------
-*/
-
-/*
+| Root file:
+|   checkout.php
+|
+| IMPORTANT:
+| - Cart item image path is copied from cart.php:
+|   assets/images/restaurants/
+|
+| - Only ONE payment method is shown.
+|
+| - payment.php should save the selected method in:
+|   $_SESSION['selected_payment_method']
 |--------------------------------------------------------------------------
-| VERIFIED PROJECT INCLUDES
-|--------------------------------------------------------------------------
-| Same pattern used by my-account.php
 */
 
 require_once __DIR__ . '/includes/config.php';
-require_once __DIR__ . '/includes/customer-header.php';
+require_once __DIR__ . '/includes/session.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 
 /*
 |--------------------------------------------------------------------------
-| LOGIN
+| LOGIN CHECK
 |--------------------------------------------------------------------------
 */
 
@@ -32,9 +40,7 @@ if (
     exit;
 }
 
-
-$userId =
-    (int)$_SESSION['user_id'];
+$userId = (int)$_SESSION['user_id'];
 
 
 /*
@@ -55,18 +61,71 @@ function checkout_h($value)
 
 /*
 |--------------------------------------------------------------------------
-| IMAGE HELPERS
+| MENU ITEM IMAGE
 |--------------------------------------------------------------------------
-| Same paths used by cart.php
+| EXACT SAME LOGIC AS cart.php
+|--------------------------------------------------------------------------
+*/
+
+function checkoutMenuImage($image)
+{
+    $image = trim((string)$image);
+
+    if ($image === '') {
+        return '';
+    }
+
+    /*
+    | Full URL / absolute path / data URI
+    */
+    if (
+        preg_match(
+            '/^(https?:\/\/|data:|\/)/i',
+            $image
+        )
+    ) {
+        return $image;
+    }
+
+    /*
+    | Database already contains complete assets path
+    */
+    if (
+        strpos(
+            $image,
+            'assets/'
+        ) === 0
+    ) {
+        return $image;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORTANT
+    |--------------------------------------------------------------------------
+    | This is the SAME path used by cart.php.
+    |
+    | Menu item images are also saved by the project inside:
+    |
+    | assets/images/restaurants/
+    |--------------------------------------------------------------------------
+    */
+
+    return
+        'assets/images/restaurants/' .
+        basename($image);
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT IMAGE
 |--------------------------------------------------------------------------
 */
 
 function checkoutRestaurantImage($image)
 {
-    $image =
-        trim(
-            (string)$image
-        );
+    $image = trim((string)$image);
 
     if ($image === '') {
         return '';
@@ -96,51 +155,13 @@ function checkoutRestaurantImage($image)
 }
 
 
-function checkoutMenuImage($image)
-{
-    $image =
-        trim(
-            (string)$image
-        );
-
-    if ($image === '') {
-        return '';
-    }
-
-    if (
-        preg_match(
-            '/^(https?:\/\/|data:|\/)/i',
-            $image
-        )
-    ) {
-        return $image;
-    }
-
-    if (
-        strpos(
-            $image,
-            'assets/'
-        ) === 0
-    ) {
-        return $image;
-    }
-
-    return
-        'assets/images/menu/' .
-        basename($image);
-}
-
-
 /*
 |--------------------------------------------------------------------------
-| GET CART
-|--------------------------------------------------------------------------
-| Same query structure as cart.php
+| LOAD CART
 |--------------------------------------------------------------------------
 */
 
 $cartItems = [];
-
 
 $cartSql = "
     SELECT
@@ -192,7 +213,7 @@ if (!$cartStmt) {
 
 
 $cartStmt->bind_param(
-    "i",
+    'i',
     $userId
 );
 
@@ -258,6 +279,8 @@ if (
 |--------------------------------------------------------------------------
 | RESTAURANT CHECK
 |--------------------------------------------------------------------------
+| Same restaurant only.
+|--------------------------------------------------------------------------
 */
 
 $restaurantIds = [];
@@ -271,6 +294,7 @@ foreach (
         (int)$item[
             'restaurant_id'
         ];
+
 }
 
 
@@ -282,14 +306,6 @@ $restaurantIds =
     );
 
 
-/*
-|--------------------------------------------------------------------------
-| SAME RESTAURANT ONLY
-|--------------------------------------------------------------------------
-| Existing checkout follows this rule.
-|--------------------------------------------------------------------------
-*/
-
 if (
     count($restaurantIds) !== 1
 ) {
@@ -298,6 +314,7 @@ if (
         'Your cart contains items from multiple restaurants. ' .
         'Please keep items from one restaurant in the cart.'
     );
+
 }
 
 
@@ -334,9 +351,13 @@ $restaurantAddress =
 
 
 $deliveryTime =
-    $firstItem[
-        'delivery_time'
-    ] ?? '';
+    trim(
+        (string)(
+            $firstItem[
+                'delivery_time'
+            ] ?? ''
+        )
+    );
 
 
 $deliveryFee =
@@ -349,12 +370,11 @@ $deliveryFee =
 
 /*
 |--------------------------------------------------------------------------
-| TOTALS
+| CART TOTALS
 |--------------------------------------------------------------------------
 */
 
 $subtotal = 0;
-
 $totalItems = 0;
 
 
@@ -371,6 +391,7 @@ foreach (
         (int)$item[
             'quantity'
         ];
+
 }
 
 
@@ -387,15 +408,12 @@ $total =
 |--------------------------------------------------------------------------
 | CUSTOMER ADDRESSES
 |--------------------------------------------------------------------------
-| EXACTLY the working structure used by cart.php
-|--------------------------------------------------------------------------
 */
 
 $addresses = [];
 
 
 $addressSql = "
-
     SELECT
 
         id,
@@ -436,7 +454,7 @@ if (!$addressStmt) {
 
 
 $addressStmt->bind_param(
-    "i",
+    'i',
     $userId
 );
 
@@ -455,6 +473,7 @@ while (
 
     $addresses[] =
         $addressRow;
+
 }
 
 
@@ -471,9 +490,7 @@ $selectedAddressId = 0;
 
 
 /*
-|--------------------------------------------------------------------------
-| ADDRESS FROM CART / URL
-|--------------------------------------------------------------------------
+| URL address selection
 */
 
 if (
@@ -486,8 +503,13 @@ if (
 
     $selectedAddressId =
         (int)$_GET['address_id'];
+
 }
 
+
+/*
+| POST address selection
+*/
 
 if (
     isset(
@@ -499,45 +521,43 @@ if (
 
     $selectedAddressId =
         (int)$_POST['address_id'];
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| VERIFY SELECTED ADDRESS
+| VERIFY ADDRESS
 |--------------------------------------------------------------------------
 */
 
-if (
-    $selectedAddressId > 0
+$addressExists = false;
+
+
+foreach (
+    $addresses as $address
 ) {
 
-    $addressExists = false;
-
-
-    foreach (
-        $addresses as $address
-    ) {
-
-        if (
-            (int)$address['id']
-            ===
-            $selectedAddressId
-        ) {
-
-            $addressExists = true;
-
-            break;
-        }
-    }
-
-
     if (
-        !$addressExists
+        (int)$address['id']
+        ===
+        $selectedAddressId
     ) {
 
-        $selectedAddressId = 0;
+        $addressExists = true;
+
+        break;
     }
+
+}
+
+
+if (
+    !$addressExists
+) {
+
+    $selectedAddressId = 0;
+
 }
 
 
@@ -566,7 +586,9 @@ if (
 
             break;
         }
+
     }
+
 }
 
 
@@ -584,35 +606,25 @@ if (
 
     $selectedAddressId =
         (int)$addresses[0]['id'];
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| PAYMENT METHOD
+| PAYMENT
 |--------------------------------------------------------------------------
-| Same values used by existing checkout flow.
+|
+| Checkout par koi payment selector nahi hoga.
+|
+| Sirf payment.php se selected/default payment show hogi.
+|
+| payment.php ko selected method is session key mein save karna hoga:
+|
+| $_SESSION['selected_payment_method']
+|
 |--------------------------------------------------------------------------
 */
-
-$paymentMethod =
-    'cash_on_delivery';
-
-
-if (
-    isset(
-        $_POST['payment_method']
-    )
-) {
-
-    $paymentMethod =
-        trim(
-            $_POST[
-                'payment_method'
-            ]
-        );
-}
-
 
 $allowedPayments = [
 
@@ -621,6 +633,36 @@ $allowedPayments = [
     'online'
 
 ];
+
+
+$paymentMethod =
+    'cash_on_delivery';
+
+
+if (
+    isset(
+        $_SESSION[
+            'selected_payment_method'
+        ]
+    )
+    &&
+    trim(
+        (string)
+        $_SESSION[
+            'selected_payment_method'
+        ]
+    ) !== ''
+) {
+
+    $paymentMethod =
+        trim(
+            (string)
+            $_SESSION[
+                'selected_payment_method'
+            ]
+        );
+
+}
 
 
 if (
@@ -633,6 +675,57 @@ if (
 
     $paymentMethod =
         'cash_on_delivery';
+
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| PAYMENT DISPLAY
+|--------------------------------------------------------------------------
+*/
+
+$paymentTitle =
+    'Cash on Delivery';
+
+
+$paymentDescription =
+    'Pay when your order arrives.';
+
+
+$paymentIcon =
+    'fa-money-bill-wave';
+
+
+if (
+    $paymentMethod === 'card'
+) {
+
+    $paymentTitle =
+        'Debit / Credit Card';
+
+    $paymentDescription =
+        'Pay securely by card.';
+
+    $paymentIcon =
+        'fa-credit-card';
+
+}
+
+
+elseif (
+    $paymentMethod === 'online'
+) {
+
+    $paymentTitle =
+        'Online Payment';
+
+    $paymentDescription =
+        'Your selected online payment method.';
+
+    $paymentIcon =
+        'fa-mobile-screen';
+
 }
 
 
@@ -661,6 +754,65 @@ if (
     )
 ) {
 
+    /*
+    |--------------------------------------------------------------------------
+    | PAYMENT
+    |--------------------------------------------------------------------------
+    | Do not trust payment value coming from browser.
+    | Read it from session again.
+    |--------------------------------------------------------------------------
+    */
+
+    $paymentMethod =
+        'cash_on_delivery';
+
+
+    if (
+        isset(
+            $_SESSION[
+                'selected_payment_method'
+            ]
+        )
+        &&
+        trim(
+            (string)
+            $_SESSION[
+                'selected_payment_method'
+            ]
+        ) !== ''
+    ) {
+
+        $paymentMethod =
+            trim(
+                (string)
+                $_SESSION[
+                    'selected_payment_method'
+                ]
+            );
+
+    }
+
+
+    if (
+        !in_array(
+            $paymentMethod,
+            $allowedPayments,
+            true
+        )
+    ) {
+
+        $paymentMethod =
+            'cash_on_delivery';
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ADDRESS
+    |--------------------------------------------------------------------------
+    */
+
     $selectedAddressId =
         isset(
             $_POST['address_id']
@@ -671,19 +823,11 @@ if (
         0;
 
 
-    $paymentMethod =
-        isset(
-            $_POST['payment_method']
-        )
-        ?
-        trim(
-            $_POST[
-                'payment_method'
-            ]
-        )
-        :
-        'cash_on_delivery';
-
+    /*
+    |--------------------------------------------------------------------------
+    | CUSTOMER NOTE
+    |--------------------------------------------------------------------------
+    */
 
     $customerNote =
         isset(
@@ -691,31 +835,10 @@ if (
         )
         ?
         trim(
-            $_POST[
-                'customer_note'
-            ]
+            $_POST['customer_note']
         )
         :
         '';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDATE PAYMENT
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-        !in_array(
-            $paymentMethod,
-            $allowedPayments,
-            true
-        )
-    ) {
-
-        $orderError =
-            'Please select a valid payment method.';
-    }
 
 
     /*
@@ -725,77 +848,85 @@ if (
     */
 
     if (
+        $selectedAddressId <= 0
+    ) {
+
+        $orderError =
+            'Please select a delivery address.';
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VERIFY ADDRESS BELONGS TO USER
+    |--------------------------------------------------------------------------
+    */
+
+    if (
         $orderError === ''
     ) {
 
+        $verifyAddress =
+            $conn->prepare("
+                SELECT id
+
+                FROM customer_addresses
+
+                WHERE id = ?
+                AND user_id = ?
+
+                LIMIT 1
+            ");
+
+
         if (
-            $selectedAddressId <= 0
+            !$verifyAddress
         ) {
 
             $orderError =
-                'Please select a delivery address.';
+                'Unable to verify address.';
 
-        } else {
+        }
 
-            $verifyAddress =
-                $conn->prepare("
+        else {
 
-                    SELECT id
-
-                    FROM customer_addresses
-
-                    WHERE id = ?
-
-                    AND user_id = ?
-
-                    LIMIT 1
-
-                ");
+            $verifyAddress->bind_param(
+                'ii',
+                $selectedAddressId,
+                $userId
+            );
 
 
-            if (!$verifyAddress) {
+            $verifyAddress->execute();
+
+
+            $verifyResult =
+                $verifyAddress->get_result();
+
+
+            if (
+                $verifyResult->num_rows
+                ===
+                0
+            ) {
 
                 $orderError =
-                    'Unable to verify address.';
+                    'Please select a valid delivery address.';
 
-            } else {
-
-                $verifyAddress->bind_param(
-                    "ii",
-                    $selectedAddressId,
-                    $userId
-                );
-
-
-                $verifyAddress->execute();
-
-
-                $verifyResult =
-                    $verifyAddress->get_result();
-
-
-                if (
-                    $verifyResult->num_rows
-                    ===
-                    0
-                ) {
-
-                    $orderError =
-                        'Please select a valid delivery address.';
-                }
-
-
-                $verifyAddress->close();
             }
+
+
+            $verifyAddress->close();
+
         }
+
     }
 
 
     /*
     |--------------------------------------------------------------------------
     | RE-CHECK CART
-    |--------------------------------------------------------------------------
-    | Prices and delivery fee are read again from DB.
     |--------------------------------------------------------------------------
     */
 
@@ -805,7 +936,6 @@ if (
 
         $freshCartStmt =
             $conn->prepare("
-
                 SELECT
 
                     c.id AS cart_id,
@@ -828,18 +958,23 @@ if (
 
                 WHERE c.user_id = ?
 
+                ORDER BY c.id ASC
             ");
 
 
-        if (!$freshCartStmt) {
+        if (
+            !$freshCartStmt
+        ) {
 
             $orderError =
                 'Unable to verify cart.';
 
-        } else {
+        }
+
+        else {
 
             $freshCartStmt->bind_param(
-                "i",
+                'i',
                 $userId
             );
 
@@ -863,9 +998,7 @@ if (
                 $freshResult->fetch_assoc()
             ) {
 
-                $freshItem[
-                    'quantity'
-                ] =
+                $freshItem['quantity'] =
                     max(
                         1,
                         (int)$freshItem[
@@ -874,17 +1007,13 @@ if (
                     );
 
 
-                $freshItem[
-                    'price'
-                ] =
+                $freshItem['price'] =
                     (float)$freshItem[
                         'price'
                     ];
 
 
-                $freshItem[
-                    'subtotal'
-                ] =
+                $freshItem['subtotal'] =
                     $freshItem[
                         'price'
                     ]
@@ -914,7 +1043,9 @@ if (
                         (int)$freshItem[
                             'restaurant_id'
                         ];
+
                 }
+
             }
 
 
@@ -922,13 +1053,18 @@ if (
 
 
             if (
-                empty($freshCart)
+                empty(
+                    $freshCart
+                )
             ) {
 
                 $orderError =
                     'Your cart is empty.';
 
-            } elseif (
+            }
+
+
+            elseif (
                 $freshRestaurantId
                 !==
                 $restaurantId
@@ -937,32 +1073,34 @@ if (
                 $orderError =
                     'Your cart has changed. Please refresh the page.';
 
-            } else {
+            }
+
+
+            else {
 
                 $subtotal =
                     $freshSubtotal;
 
 
                 $deliveryFee =
-                    isset(
+                    (float)(
                         $freshCart[0][
                             'delivery_fee'
                         ]
-                    )
-                    ?
-                    (float)$freshCart[0][
-                        'delivery_fee'
-                    ]
-                    :
-                    $deliveryFee;
+                        ??
+                        0
+                    );
 
 
                 $total =
                     $subtotal +
                     $deliveryFee -
                     $discount;
+
             }
+
         }
+
     }
 
 
@@ -980,6 +1118,146 @@ if (
 
 
         try {
+
+            /*
+            |--------------------------------------------------------------------------
+            | FINAL CART ITEMS
+            |--------------------------------------------------------------------------
+            */
+
+            $finalCartStmt =
+                $conn->prepare("
+                    SELECT
+
+                        c.menu_item_id,
+                        c.quantity,
+
+                        m.name AS item_name,
+                        m.price AS item_price,
+                        m.restaurant_id
+
+                    FROM cart c
+
+                    INNER JOIN menu_items m
+                        ON c.menu_item_id = m.id
+
+                    WHERE c.user_id = ?
+
+                    ORDER BY c.id ASC
+                ");
+
+
+            if (
+                !$finalCartStmt
+            ) {
+
+                throw new Exception(
+                    $conn->error
+                );
+
+            }
+
+
+            $finalCartStmt->bind_param(
+                'i',
+                $userId
+            );
+
+
+            $finalCartStmt->execute();
+
+
+            $finalResult =
+                $finalCartStmt->get_result();
+
+
+            $finalCartItems = [];
+
+
+            while (
+                $item =
+                $finalResult->fetch_assoc()
+            ) {
+
+                $item['menu_item_id'] =
+                    (int)$item[
+                        'menu_item_id'
+                    ];
+
+
+                $item['quantity'] =
+                    max(
+                        1,
+                        (int)$item[
+                            'quantity'
+                        ]
+                    );
+
+
+                $item['item_price'] =
+                    (float)$item[
+                        'item_price'
+                    ];
+
+
+                $item['item_subtotal'] =
+                    $item[
+                        'item_price'
+                    ]
+                    *
+                    $item[
+                        'quantity'
+                    ];
+
+
+                $finalCartItems[] =
+                    $item;
+
+            }
+
+
+            $finalCartStmt->close();
+
+
+            if (
+                empty(
+                    $finalCartItems
+                )
+            ) {
+
+                throw new Exception(
+                    'Cart is empty.'
+                );
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | FINAL SUBTOTAL
+            |--------------------------------------------------------------------------
+            */
+
+            $subtotal = 0;
+
+
+            foreach (
+                $finalCartItems as $item
+            ) {
+
+                $subtotal +=
+                    (float)$item[
+                        'item_subtotal'
+                    ];
+
+            }
+
+
+            $total =
+                $subtotal +
+                $deliveryFee -
+                $discount;
+
 
             /*
             |--------------------------------------------------------------------------
@@ -1005,7 +1283,6 @@ if (
 
             $orderCheck =
                 $conn->prepare("
-
                     SELECT id
 
                     FROM orders
@@ -1013,20 +1290,22 @@ if (
                     WHERE order_number = ?
 
                     LIMIT 1
-
                 ");
 
 
-            if (!$orderCheck) {
+            if (
+                !$orderCheck
+            ) {
 
                 throw new Exception(
                     $conn->error
                 );
+
             }
 
 
             $orderCheck->bind_param(
-                "s",
+                's',
                 $orderNumber
             );
 
@@ -1040,7 +1319,8 @@ if (
 
             if (
                 $orderCheckResult->num_rows
-                > 0
+                >
+                0
             ) {
 
                 $orderNumber =
@@ -1051,6 +1331,7 @@ if (
                         1000,
                         9999
                     );
+
             }
 
 
@@ -1061,16 +1342,11 @@ if (
             |--------------------------------------------------------------------------
             | INSERT ORDER
             |--------------------------------------------------------------------------
-            | Same order columns used by
-            | the project's existing checkout.
-            |--------------------------------------------------------------------------
             */
 
             $orderStmt =
                 $conn->prepare("
-
                     INSERT INTO orders
-
                     (
                         order_number,
                         user_id,
@@ -1086,7 +1362,6 @@ if (
                     )
 
                     VALUES
-
                     (
                         ?,
                         ?,
@@ -1100,21 +1375,22 @@ if (
                         'pending',
                         ?
                     )
-
                 ");
 
 
-            if (!$orderStmt) {
+            if (
+                !$orderStmt
+            ) {
 
                 throw new Exception(
                     $conn->error
                 );
+
             }
 
 
             $orderStmt->bind_param(
-
-                "siiisdddds",
+                'siiisdddds',
 
                 $orderNumber,
                 $userId,
@@ -1126,7 +1402,6 @@ if (
                 $discount,
                 $total,
                 $customerNote
-
             );
 
 
@@ -1137,6 +1412,7 @@ if (
                 throw new Exception(
                     $orderStmt->error
                 );
+
             }
 
 
@@ -1155,9 +1431,7 @@ if (
 
             $itemStmt =
                 $conn->prepare("
-
                     INSERT INTO order_items
-
                     (
                         order_id,
                         menu_item_id,
@@ -1168,7 +1442,6 @@ if (
                     )
 
                     VALUES
-
                     (
                         ?,
                         ?,
@@ -1177,20 +1450,22 @@ if (
                         ?,
                         ?
                     )
-
                 ");
 
 
-            if (!$itemStmt) {
+            if (
+                !$itemStmt
+            ) {
 
                 throw new Exception(
                     $conn->error
                 );
+
             }
 
 
             foreach (
-                $cartItems as $item
+                $finalCartItems as $item
             ) {
 
                 $menuItemId =
@@ -1200,7 +1475,7 @@ if (
 
 
                 $itemName =
-                    $item[
+                    (string)$item[
                         'item_name'
                     ];
 
@@ -1223,8 +1498,7 @@ if (
 
 
                 $itemStmt->bind_param(
-
-                    "iisdid",
+                    'iisdid',
 
                     $orderId,
                     $menuItemId,
@@ -1232,7 +1506,6 @@ if (
                     $itemPrice,
                     $quantity,
                     $itemSubtotal
-
                 );
 
 
@@ -1243,7 +1516,9 @@ if (
                     throw new Exception(
                         $itemStmt->error
                     );
+
                 }
+
             }
 
 
@@ -1258,24 +1533,24 @@ if (
 
             $deleteCart =
                 $conn->prepare("
-
                     DELETE FROM cart
-
                     WHERE user_id = ?
-
                 ");
 
 
-            if (!$deleteCart) {
+            if (
+                !$deleteCart
+            ) {
 
                 throw new Exception(
                     $conn->error
                 );
+
             }
 
 
             $deleteCart->bind_param(
-                "i",
+                'i',
                 $userId
             );
 
@@ -1287,6 +1562,7 @@ if (
                 throw new Exception(
                     $deleteCart->error
                 );
+
             }
 
 
@@ -1304,7 +1580,7 @@ if (
 
             /*
             |--------------------------------------------------------------------------
-            | EXISTING PROJECT SUCCESS PAGE
+            | SUCCESS PAGE
             |--------------------------------------------------------------------------
             */
 
@@ -1316,7 +1592,9 @@ if (
             exit;
 
 
-        } catch (
+        }
+
+        catch (
             Throwable $e
         ) {
 
@@ -1325,8 +1603,11 @@ if (
 
             $orderError =
                 'Unable to place your order. Please try again.';
+
         }
+
     }
+
 }
 
 
@@ -1353,15 +1634,32 @@ foreach (
             $address;
 
         break;
+
     }
+
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| PAGE
+| IMAGE
 |--------------------------------------------------------------------------
 */
+
+$restaurantImagePath =
+    checkoutRestaurantImage(
+        $restaurantImage
+    );
+
+
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER HEADER
+|--------------------------------------------------------------------------
+*/
+
+require_once __DIR__ .
+    '/includes/customer-header.php';
 
 ?>
 
@@ -1376,6 +1674,11 @@ foreach (
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Humsafar Food Delivery Checkout"
     >
 
     <title>
@@ -1399,956 +1702,1096 @@ foreach (
     >
 
 
-<style>
+    <style>
 
-* {
-    box-sizing: border-box;
-}
+        * {
+            box-sizing: border-box;
+        }
 
 
-body {
+        html {
+            scroll-behavior: smooth;
+        }
 
-    margin: 0;
 
-    background: #f8f8f9;
+        body {
+            margin: 0;
 
-    color: #222;
+            background: #f8f8f9;
 
-    font-family:
-        "Segoe UI",
-        Arial,
-        Helvetica,
-        sans-serif;
-}
+            color: #222;
 
+            font-family:
+                "Segoe UI",
+                Arial,
+                Helvetica,
+                sans-serif;
+        }
 
-a {
-    text-decoration: none;
-}
 
+        a {
+            text-decoration: none;
+        }
 
-.checkout-page {
 
-    width: 100%;
+        button,
+        input,
+        textarea {
+            font-family: inherit;
+        }
 
-    min-height:
-        calc(
-            100vh - 100px
-        );
 
-    padding:
-        35px 4%
-        70px;
+        /* PAGE */
 
-    background:
-        linear-gradient(
-            180deg,
-            #fff7fa 0,
-            #ffffff 330px
-        );
-}
+        .checkout-page {
 
+            width: 100%;
 
-.checkout-wrapper {
+            min-height:
+                calc(100vh - 100px);
 
-    width: 100%;
+            padding:
+                35px 4%
+                70px;
 
-    max-width: 1250px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #fff7fa 0,
+                    #ffffff 330px
+                );
 
-    margin: 0 auto;
-}
+        }
 
 
-/*
-|--------------------------------------------------------------------------
-| HEADING
-|--------------------------------------------------------------------------
-*/
+        .checkout-wrapper {
 
-.checkout-heading {
+            width: 100%;
 
-    display: flex;
+            max-width: 1250px;
 
-    align-items: flex-end;
+            margin: 0 auto;
 
-    justify-content: space-between;
+        }
 
-    gap: 20px;
 
-    margin-bottom: 25px;
-}
+        /* HEADING */
 
+        .checkout-heading {
 
-.checkout-heading h1 {
+            display: flex;
 
-    margin: 0;
+            align-items: flex-end;
 
-    color: #ed0038;
+            justify-content:
+                space-between;
 
-    font-size: 32px;
+            gap: 20px;
 
-    font-weight: 800;
-}
+            margin-bottom: 25px;
 
+        }
 
-.checkout-heading p {
 
-    margin:
-        7px 0 0;
+        .checkout-heading h1 {
 
-    color: #777;
+            margin: 0;
 
-    font-size: 13px;
-}
+            color: #ed0038;
 
+            font-size: 32px;
 
-.back-cart {
+            font-weight: 800;
 
-    color: #ed0038;
+        }
 
-    font-size: 13px;
 
-    font-weight: 600;
-}
+        .checkout-heading p {
 
+            margin:
+                7px 0 0;
 
-/*
-|--------------------------------------------------------------------------
-| MESSAGE
-|--------------------------------------------------------------------------
-*/
+            color: #777;
 
-.message {
+            font-size: 13px;
 
-    padding: 13px 16px;
+        }
 
-    margin-bottom: 20px;
 
-    border-radius: 10px;
+        .back-cart {
 
-    font-size: 13px;
-}
+            display: inline-flex;
 
+            align-items: center;
 
-.error-message {
+            gap: 7px;
 
-    background: #fff0f3;
+            color: #ed0038;
 
-    color: #c51e43;
+            font-size: 13px;
 
-    border:
-        1px solid #ffd2dc;
-}
+            font-weight: 700;
 
+        }
 
-/*
-|--------------------------------------------------------------------------
-| GRID
-|--------------------------------------------------------------------------
-*/
 
-.checkout-grid {
+        /* ERROR */
 
-    display: grid;
+        .message {
 
-    grid-template-columns:
-        minmax(0, 1fr)
-        380px;
+            padding:
+                13px 16px;
 
-    gap: 24px;
+            margin-bottom: 20px;
 
-    align-items: start;
-}
+            border-radius: 10px;
 
+            background: #fff0f3;
 
-.checkout-card {
+            color: #c51e43;
 
-    background: #fff;
+            border:
+                1px solid #ffd2dc;
 
-    border:
-        1px solid #eeeeee;
+            font-size: 13px;
 
-    border-radius: 16px;
+        }
 
-    padding: 22px;
 
-    margin-bottom: 18px;
+        /* GRID */
 
-    box-shadow:
-        0 8px 30px
-        rgba(
-            40,
-            15,
-            25,
-            .06
-        );
-}
+        .checkout-grid {
 
+            display: grid;
 
-.card-title {
+            grid-template-columns:
+                minmax(0, 1fr)
+                380px;
 
-    display: flex;
+            gap: 24px;
 
-    align-items: center;
+            align-items: start;
 
-    gap: 9px;
+        }
 
-    margin-bottom: 18px;
-}
 
+        /* CARD */
 
-.card-title i {
+        .checkout-card {
 
-    color: #ed0038;
+            background: #fff;
 
-    font-size: 17px;
-}
+            border:
+                1px solid #eeeeee;
 
+            border-radius: 16px;
 
-.card-title h2 {
+            padding: 22px;
 
-    margin: 0;
+            margin-bottom: 18px;
 
-    color: #222;
+            box-shadow:
+                0 8px 30px
+                rgba(
+                    40,
+                    15,
+                    25,
+                    .06
+                );
 
-    font-size: 19px;
+        }
 
-    font-weight: 700;
-}
 
+        .card-title {
 
-/*
-|--------------------------------------------------------------------------
-| RESTAURANT
-|--------------------------------------------------------------------------
-*/
+            display: flex;
 
-.restaurant-box {
+            align-items: center;
 
-    display: flex;
+            gap: 9px;
 
-    align-items: center;
+            margin-bottom: 18px;
 
-    gap: 14px;
+        }
 
-    padding-bottom: 16px;
 
-    border-bottom:
-        1px solid #eeeeee;
-}
+        .card-title i {
 
+            color: #ed0038;
 
-.restaurant-image {
+            font-size: 17px;
 
-    width: 68px;
+        }
 
-    height: 68px;
 
-    flex-shrink: 0;
+        .card-title h2 {
 
-    overflow: hidden;
+            margin: 0;
 
-    border-radius: 13px;
+            color: #222;
 
-    background: #fff0f4;
+            font-size: 19px;
 
-    border:
-        2px solid #ed0038;
-}
+            font-weight: 700;
 
+        }
 
-.restaurant-image img {
 
-    width: 100%;
+        /* RESTAURANT */
 
-    height: 100%;
+        .restaurant-box {
 
-    object-fit: cover;
-}
+            display: flex;
 
+            align-items: center;
 
-.restaurant-placeholder {
+            gap: 14px;
 
-    width: 100%;
+        }
 
-    height: 100%;
 
-    display: flex;
+        .restaurant-image {
 
-    align-items: center;
+            width: 62px;
 
-    justify-content: center;
+            height: 62px;
 
-    color: #ed0038;
+            flex: 0 0 62px;
 
-    font-size: 22px;
-}
+            overflow: hidden;
 
+            border-radius: 13px;
 
-.restaurant-info h3 {
+            background: #fff0f4;
 
-    margin: 0 0 5px;
+            display: flex;
 
-    color: #222;
+            align-items: center;
 
-    font-size: 18px;
-}
+            justify-content: center;
 
+            color: #ed0038;
 
-.restaurant-info p {
+            font-size: 21px;
 
-    margin: 4px 0;
+        }
 
-    color: #777;
 
-    font-size: 12px;
-}
+        .restaurant-image img {
 
+            width: 100%;
 
-/*
-|--------------------------------------------------------------------------
-| ITEMS
-|--------------------------------------------------------------------------
-*/
+            height: 100%;
 
-.checkout-item {
+            object-fit: cover;
 
-    display: grid;
+        }
 
-    grid-template-columns:
-        70px
-        minmax(0, 1fr)
-        auto;
 
-    gap: 13px;
+        .restaurant-info {
 
-    align-items: center;
+            min-width: 0;
 
-    padding:
-        14px 0;
+        }
 
-    border-bottom:
-        1px solid #eeeeee;
-}
 
+        .restaurant-info h3 {
 
-.checkout-item:last-child {
+            margin:
+                0 0 6px;
 
-    border-bottom: 0;
-}
+            color: #222;
 
+            font-size: 17px;
 
-.checkout-item-image {
+            font-weight: 700;
 
-    width: 70px;
+        }
 
-    height: 65px;
 
-    overflow: hidden;
+        .restaurant-info p {
 
-    border-radius: 10px;
+            margin:
+                4px 0;
 
-    background: #fff0f4;
-}
+            color: #777;
 
+            font-size: 11px;
 
-.checkout-item-image img {
+        }
 
-    width: 100%;
 
-    height: 100%;
+        .restaurant-info p i {
 
-    object-fit: cover;
-}
+            color: #ed0038;
 
+            width: 15px;
 
-.item-placeholder {
+        }
 
-    width: 100%;
 
-    height: 100%;
+        /* ITEMS */
 
-    display: flex;
+        .checkout-item {
 
-    align-items: center;
+            display: grid;
 
-    justify-content: center;
+            grid-template-columns:
+                78px
+                minmax(0, 1fr)
+                auto;
 
-    color: #ed0038;
+            align-items: center;
 
-    font-size: 20px;
-}
+            gap: 14px;
 
+            padding:
+                13px 0;
 
-.checkout-item-details h3 {
+            border-bottom:
+                1px solid #eeeeee;
 
-    margin: 0 0 5px;
+        }
 
-    color: #222;
 
-    font-size: 14px;
+        .checkout-item:last-child {
 
-    font-weight: 700;
-}
+            border-bottom: 0;
 
+        }
 
-.checkout-item-details p {
 
-    margin: 3px 0;
+        .item-image {
 
-    color: #888;
+            width: 78px;
 
-    font-size: 12px;
-}
+            height: 70px;
 
+            overflow: hidden;
 
-.checkout-item-price {
+            border-radius: 11px;
 
-    color: #222;
+            background:
+                linear-gradient(
+                    135deg,
+                    #fff0f4,
+                    #ffffff
+                );
 
-    font-size: 13px;
+            display: flex;
 
-    font-weight: 700;
+            align-items: center;
 
-    white-space: nowrap;
-}
+            justify-content: center;
 
+            color: #ed0038;
 
-/*
-|--------------------------------------------------------------------------
-| ADDRESS
-|--------------------------------------------------------------------------
-*/
+            font-size: 22px;
 
-.address-list {
+        }
 
-    display: flex;
 
-    flex-direction: column;
+        .item-image img {
 
-    gap: 10px;
-}
+            width: 100%;
 
+            height: 100%;
 
-.address-option {
+            object-fit: cover;
 
-    display: flex;
+        }
 
-    align-items: flex-start;
 
-    gap: 11px;
+        .item-details {
 
-    padding: 14px;
+            min-width: 0;
 
-    border:
-        2px solid #eeeeee;
+        }
 
-    border-radius: 11px;
 
-    cursor: pointer;
+        .item-details h3 {
 
-    transition: .2s;
-}
+            margin:
+                0 0 5px;
 
+            color: #222;
 
-.address-option:hover {
+            font-size: 14px;
 
-    border-color: #ed0038;
+            font-weight: 700;
 
-    background: #fff8fa;
-}
+        }
 
 
-.address-option.selected {
+        .item-description {
 
-    border-color: #ed0038;
+            margin: 0;
 
-    background: #fff5f8;
-}
+            color: #888;
 
+            font-size: 11px;
 
-.address-option input {
+            line-height: 1.45;
 
-    margin-top: 4px;
+            display:
+                -webkit-box;
 
-    accent-color: #ed0038;
-}
+            -webkit-line-clamp: 2;
 
+            -webkit-box-orient:
+                vertical;
 
-.address-details {
+            overflow: hidden;
 
-    flex: 1;
-}
+        }
 
 
-.address-details h4 {
+        .item-price {
 
-    margin:
-        0 0 5px;
+            margin-top: 7px;
 
-    color: #222;
+            color: #ed0038;
 
-    font-size: 14px;
-}
+            font-size: 12px;
 
+        }
 
-.address-details p {
 
-    margin: 4px 0;
+        .item-total {
 
-    color: #777;
+            text-align: right;
 
-    font-size: 12px;
+            white-space: nowrap;
 
-    line-height: 1.5;
-}
+        }
 
 
-.default-badge {
+        .item-total-label {
 
-    display: inline-block;
+            margin-bottom: 4px;
 
-    margin-left: 6px;
+            color: #999;
 
-    padding:
-        3px 7px;
+            font-size: 10px;
 
-    border-radius: 12px;
+        }
 
-    background: #ed0038;
 
-    color: #fff;
+        .item-total-value {
 
-    font-size: 9px;
-}
+            color: #222;
 
+            font-size: 14px;
 
-.manage-address {
+            font-weight: 700;
 
-    display: inline-flex;
+        }
 
-    align-items: center;
 
-    gap: 6px;
+        /* ADDRESS */
 
-    margin-top: 12px;
+        .address-list {
 
-    color: #ed0038;
+            display: flex;
 
-    font-size: 12px;
+            flex-direction: column;
 
-    font-weight: 600;
-}
+            gap: 10px;
 
+        }
 
-.no-address {
 
-    padding: 15px;
+        .address-option {
 
-    border-radius: 10px;
+            position: relative;
 
-    background: #fff5f7;
+            display: flex;
 
-    color: #777;
+            align-items: flex-start;
 
-    font-size: 13px;
+            gap: 10px;
 
-    line-height: 1.6;
-}
+            padding: 14px;
 
+            border:
+                2px solid #eeeeee;
 
-/*
-|--------------------------------------------------------------------------
-| PAYMENT
-|--------------------------------------------------------------------------
-*/
+            border-radius: 11px;
 
-.payment-list {
+            background: #fff;
 
-    display: flex;
+            cursor: pointer;
 
-    flex-direction: column;
+            transition: .2s ease;
 
-    gap: 10px;
-}
+        }
 
 
-.payment-option {
+        .address-option:hover {
 
-    display: flex;
+            border-color: #ed0038;
 
-    align-items: center;
+            background: #fff8fa;
 
-    gap: 11px;
+        }
 
-    padding: 14px;
 
-    border:
-        2px solid #eeeeee;
+        .address-option.selected {
 
-    border-radius: 11px;
+            border-color: #ed0038;
 
-    cursor: pointer;
+            background: #fff5f8;
 
-    transition: .2s;
-}
+        }
 
 
-.payment-option:hover {
+        .address-option input {
 
-    border-color: #ed0038;
+            margin-top: 4px;
 
-    background: #fff8fa;
-}
+            accent-color: #ed0038;
 
+        }
 
-.payment-option.selected {
 
-    border-color: #ed0038;
+        .address-details {
 
-    background: #fff5f8;
-}
+            flex: 1;
 
+            min-width: 0;
 
-.payment-option input {
+        }
 
-    accent-color: #ed0038;
-}
 
+        .address-title-row {
 
-.payment-icon {
+            display: flex;
 
-    width: 38px;
+            align-items: center;
 
-    height: 38px;
+            flex-wrap: wrap;
 
-    flex-shrink: 0;
+            gap: 8px;
 
-    display: flex;
+            margin-bottom: 5px;
 
-    align-items: center;
+        }
 
-    justify-content: center;
 
-    border-radius: 9px;
+        .address-title-row h4 {
 
-    background: #fff0f4;
+            margin: 0;
 
-    color: #ed0038;
-}
+            color: #222;
 
+            font-size: 14px;
 
-.payment-text strong {
+            font-weight: 750;
 
-    display: block;
+        }
 
-    color: #222;
 
-    font-size: 13px;
-}
+        .address-title-row h4 i {
 
+            margin-right: 4px;
 
-.payment-text small {
+            color: #222;
 
-    display: block;
+        }
 
-    margin-top: 3px;
 
-    color: #888;
+        .default-badge {
 
-    font-size: 11px;
-}
+            display: inline-flex;
 
+            align-items: center;
 
-/*
-|--------------------------------------------------------------------------
-| SUMMARY
-|--------------------------------------------------------------------------
-*/
+            min-height: 20px;
 
-.summary-card {
+            padding:
+                0 8px;
 
-    position: sticky;
+            border-radius: 12px;
 
-    top: 25px;
-}
+            background: #ed0038;
 
+            color: #fff;
 
-.summary-row {
+            font-size: 9px;
 
-    display: flex;
+            font-weight: 800;
 
-    align-items: center;
+        }
 
-    justify-content: space-between;
 
-    gap: 15px;
+        .address-details p {
 
-    margin-bottom: 13px;
+            margin:
+                4px 0;
 
-    color: #666;
+            color: #777;
 
-    font-size: 13px;
-}
+            font-size: 12px;
 
+            line-height: 1.45;
 
-.summary-row strong {
+        }
 
-    color: #222;
 
-    font-weight: 600;
-}
+        .address-details .phone i {
 
+            width: 15px;
 
-.summary-divider {
+        }
 
-    height: 1px;
 
-    margin:
-        17px 0;
+        .manage-address {
 
-    background: #eeeeee;
-}
+            display: inline-flex;
 
+            align-items: center;
 
-.summary-total {
+            gap: 7px;
 
-    display: flex;
+            margin-top: 13px;
 
-    align-items: center;
+            color: #ed0038;
 
-    justify-content: space-between;
+            font-size: 12px;
 
-    color: #222;
+            font-weight: 700;
 
-    font-size: 18px;
+        }
 
-    font-weight: 700;
-}
 
+        .manage-address:hover {
 
-.summary-total strong {
+            color: #c90032;
 
-    color: #ed0038;
+        }
 
-    font-size: 21px;
-}
 
+        .no-address {
 
-/*
-|--------------------------------------------------------------------------
-| NOTE
-|--------------------------------------------------------------------------
-*/
+            padding: 14px;
 
-.note-box {
+            border:
+                1px dashed #efb9ca;
 
-    margin-top: 18px;
-}
+            border-radius: 10px;
 
+            background: #fff7f9;
 
-.note-box label {
+            color: #777;
 
-    display: block;
+            font-size: 12px;
 
-    margin-bottom: 7px;
+            line-height: 1.5;
 
-    color: #333;
+        }
 
-    font-size: 13px;
 
-    font-weight: 600;
-}
+        /* PAYMENT */
 
+        .payment-display {
 
-.note-box textarea {
+            display: flex;
 
-    width: 100%;
+            align-items: center;
 
-    min-height: 75px;
+            gap: 11px;
 
-    resize: vertical;
+            padding: 14px;
 
-    padding: 10px;
+            border:
+                2px solid #ed0038;
 
-    border:
-        1px solid #ddd;
+            border-radius: 11px;
 
-    border-radius: 9px;
+            background: #fff5f8;
 
-    outline: none;
+        }
 
-    font-family: inherit;
 
-    font-size: 12px;
-}
+        .payment-icon {
 
+            width: 40px;
 
-.note-box textarea:focus {
+            height: 40px;
 
-    border-color: #ed0038;
+            flex:
+                0 0 40px;
 
-    box-shadow:
-        0 0 0 3px
-        rgba(
-            237,
-            0,
-            56,
-            .08
-        );
-}
+            display: flex;
 
+            align-items: center;
 
-/*
-|--------------------------------------------------------------------------
-| BUTTON
-|--------------------------------------------------------------------------
-*/
+            justify-content: center;
 
-.place-order-btn {
+            border-radius: 9px;
 
-    width: 100%;
+            background: #fff0f4;
 
-    margin-top: 18px;
+            color: #ed0038;
 
-    padding: 14px;
+            font-size: 16px;
 
-    border: 0;
+        }
 
-    border-radius: 9px;
 
-    background: #ed0038;
+        .payment-text {
 
-    color: #fff;
+            min-width: 0;
 
-    font-size: 14px;
+        }
 
-    font-weight: 700;
 
-    cursor: pointer;
+        .payment-text strong {
 
-    transition: .2s;
-}
+            display: block;
 
+            color: #222;
 
-.place-order-btn:hover {
+            font-size: 13px;
 
-    background: #d90034;
+            font-weight: 750;
 
-    transform:
-        translateY(-1px);
-}
+        }
 
 
-.place-order-btn:disabled {
+        .payment-text small {
 
-    opacity: .5;
+            display: block;
 
-    cursor: not-allowed;
+            margin-top: 3px;
 
-    transform: none;
-}
+            color: #888;
 
+            font-size: 11px;
 
-.security-note {
+        }
 
-    margin-top: 12px;
 
-    text-align: center;
+        .manage-payment {
 
-    color: #888;
+            display: inline-flex;
 
-    font-size: 10px;
-}
+            align-items: center;
 
+            gap: 7px;
 
-/*
-|--------------------------------------------------------------------------
-| MOBILE
-|--------------------------------------------------------------------------
-*/
+            margin-top: 13px;
 
-@media (
-    max-width: 900px
-) {
+            color: #ed0038;
 
-    .checkout-grid {
+            font-size: 12px;
 
-        grid-template-columns: 1fr;
-    }
+            font-weight: 700;
 
+        }
 
-    .summary-card {
 
-        position: relative;
+        .manage-payment:hover {
 
-        top: 0;
-    }
+            color: #c90032;
 
-}
+        }
 
 
-@media (
-    max-width: 600px
-) {
+        /* SUMMARY */
 
-    .checkout-page {
+        .summary-card {
 
-        padding:
-            25px 12px
-            50px;
-    }
+            position: sticky;
 
+            top: 20px;
 
-    .checkout-heading {
+        }
 
-        align-items: flex-start;
 
-        flex-direction: column;
-    }
+        .summary-row {
 
+            display: flex;
 
-    .checkout-heading h1 {
+            align-items: center;
 
-        font-size: 27px;
-    }
+            justify-content:
+                space-between;
 
+            gap: 15px;
 
-    .checkout-card {
+            margin-bottom: 12px;
 
-        padding: 17px;
+            color: #666;
 
-        border-radius: 13px;
-    }
+            font-size: 13px;
 
+        }
 
-    .checkout-item {
 
-        grid-template-columns:
-            60px
-            minmax(0, 1fr);
+        .summary-row strong {
 
-    }
+            color: #222;
 
+            font-weight: 650;
 
-    .checkout-item-image {
+        }
 
-        width: 60px;
 
-        height: 58px;
-    }
+        .summary-divider {
 
+            height: 1px;
 
-    .checkout-item-price {
+            margin:
+                16px 0;
 
-        grid-column: 2;
+            background: #eeeeee;
 
-        text-align: left;
-    }
+        }
 
-}
 
-</style>
+        .summary-total {
+
+            display: flex;
+
+            align-items: center;
+
+            justify-content:
+                space-between;
+
+            color: #222;
+
+            font-size: 18px;
+
+            font-weight: 800;
+
+        }
+
+
+        .summary-total strong {
+
+            color: #ed0038;
+
+            font-size: 21px;
+
+        }
+
+
+        .note-box {
+
+            margin-top: 17px;
+
+        }
+
+
+        .note-box label {
+
+            display: block;
+
+            margin-bottom: 7px;
+
+            color: #333;
+
+            font-size: 12px;
+
+            font-weight: 700;
+
+        }
+
+
+        .note-box textarea {
+
+            width: 100%;
+
+            min-height: 78px;
+
+            padding: 10px;
+
+            resize: vertical;
+
+            border:
+                1px solid #ddd;
+
+            border-radius: 9px;
+
+            outline: none;
+
+            color: #333;
+
+            font-size: 12px;
+
+        }
+
+
+        .note-box textarea:focus {
+
+            border-color: #ed0038;
+
+            box-shadow:
+                0 0 0 3px
+                rgba(
+                    237,
+                    0,
+                    56,
+                    .08
+                );
+
+        }
+
+
+        .place-order-btn {
+
+            width: 100%;
+
+            margin-top: 17px;
+
+            padding: 14px;
+
+            border: 0;
+
+            border-radius: 9px;
+
+            background: #ed0038;
+
+            color: #fff;
+
+            font-size: 14px;
+
+            font-weight: 750;
+
+            cursor: pointer;
+
+            transition: .2s ease;
+
+        }
+
+
+        .place-order-btn:hover {
+
+            background: #d90035;
+
+            transform:
+                translateY(-1px);
+
+        }
+
+
+        .place-order-btn:disabled {
+
+            background: #cfcfcf;
+
+            cursor: not-allowed;
+
+            transform: none;
+
+        }
+
+
+        .security-note {
+
+            margin-top: 10px;
+
+            text-align: center;
+
+            color: #999;
+
+            font-size: 10px;
+
+        }
+
+
+        /* RESPONSIVE */
+
+        @media (
+            max-width: 900px
+        ) {
+
+            .checkout-grid {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+
+            .summary-card {
+
+                position: relative;
+
+                top: 0;
+
+            }
+
+        }
+
+
+        @media (
+            max-width: 600px
+        ) {
+
+            .checkout-page {
+
+                padding:
+                    25px 12px
+                    50px;
+
+            }
+
+
+            .checkout-heading {
+
+                align-items:
+                    flex-start;
+
+                flex-direction:
+                    column;
+
+            }
+
+
+            .checkout-heading h1 {
+
+                font-size: 27px;
+
+            }
+
+
+            .checkout-card {
+
+                padding: 16px;
+
+            }
+
+
+            .checkout-item {
+
+                grid-template-columns:
+                    64px
+                    minmax(0, 1fr);
+
+            }
+
+
+            .item-image {
+
+                width: 64px;
+
+                height: 60px;
+
+            }
+
+
+            .item-total {
+
+                grid-column: 2;
+
+                text-align: left;
+
+            }
+
+        }
+
+    </style>
 
 </head>
 
@@ -2356,29 +2799,25 @@ a {
 <body>
 
 
-<main
-    class="checkout-page"
->
-
-    <div
-        class="checkout-wrapper"
-    >
+<main class="checkout-page">
 
 
-        <!-- =====================================================
-             HEADING
-        ====================================================== -->
+    <div class="checkout-wrapper">
 
-        <div
-            class="checkout-heading"
-        >
+
+        <!-- HEADING -->
+
+        <div class="checkout-heading">
 
             <div>
 
                 <h1>
 
                     <i
-                        class="fas fa-bag-shopping"
+                        class="
+                            fas
+                            fa-bag-shopping
+                        "
                     ></i>
 
                     Checkout
@@ -2387,7 +2826,8 @@ a {
 
 
                 <p>
-                    Review your order before placing it.
+                    Review your order before
+                    placing it.
                 </p>
 
             </div>
@@ -2399,7 +2839,10 @@ a {
             >
 
                 <i
-                    class="fas fa-arrow-left"
+                    class="
+                        fas
+                        fa-arrow-left
+                    "
                 ></i>
 
                 Back to Cart
@@ -2409,16 +2852,13 @@ a {
         </div>
 
 
+        <!-- ERROR -->
+
         <?php if (
             $orderError !== ''
         ): ?>
 
-            <div
-                class="
-                    message
-                    error-message
-                "
-            >
+            <div class="message">
 
                 <i
                     class="
@@ -2427,13 +2867,9 @@ a {
                     "
                 ></i>
 
-                &nbsp;
-
-                <?php
-                    echo checkout_h(
-                        $orderError
-                    );
-                ?>
+                <?= checkout_h(
+                    $orderError
+                ) ?>
 
             </div>
 
@@ -2446,14 +2882,11 @@ a {
             id="checkoutForm"
         >
 
-            <div
-                class="checkout-grid"
-            >
+
+            <div class="checkout-grid">
 
 
-                <!-- =================================================
-                     LEFT SIDE
-                ================================================== -->
+                <!-- LEFT -->
 
                 <div>
 
@@ -2475,7 +2908,6 @@ a {
                                 "
                             ></i>
 
-
                             <h2>
                                 Restaurant
                             </h2>
@@ -2487,44 +2919,42 @@ a {
                             class="restaurant-box"
                         >
 
+
                             <div
-                                class="restaurant-image"
+                                class="
+                                    restaurant-image
+                                "
                             >
 
-                                <?php
-
-                                $restaurantImagePath =
-                                    checkoutRestaurantImage(
-                                        $restaurantImage
-                                    );
-
-                                ?>
-
-
                                 <?php if (
-                                    $restaurantImagePath
-                                    !==
-                                    ''
+                                    $restaurantImagePath !== ''
                                 ): ?>
 
                                     <img
-                                        src="<?php
-                                            echo checkout_h(
+                                        src="<?=
+                                            checkout_h(
                                                 $restaurantImagePath
-                                            );
+                                            )
                                         ?>"
-                                        alt="<?php
-                                            echo checkout_h(
+                                        alt="<?=
+                                            checkout_h(
                                                 $restaurantName
-                                            );
+                                            )
                                         ?>"
+                                        loading="lazy"
+                                        onerror="
+                                            this.style.display='none';
+                                            this.nextElementSibling.style.display='flex';
+                                        "
                                     >
 
-                                <?php else: ?>
-
                                     <div
-                                        class="
-                                            restaurant-placeholder
+                                        style="
+                                            display:none;
+                                            width:100%;
+                                            height:100%;
+                                            align-items:center;
+                                            justify-content:center;
                                         "
                                     >
 
@@ -2537,33 +2967,37 @@ a {
 
                                     </div>
 
+                                <?php else: ?>
+
+                                    <i
+                                        class="
+                                            fas
+                                            fa-store
+                                        "
+                                    ></i>
+
                                 <?php endif; ?>
 
                             </div>
 
 
                             <div
-                                class="restaurant-info"
+                                class="
+                                    restaurant-info
+                                "
                             >
 
                                 <h3>
 
-                                    <?php
-                                        echo checkout_h(
-                                            $restaurantName
-                                        );
-                                    ?>
+                                    <?= checkout_h(
+                                        $restaurantName
+                                    ) ?>
 
                                 </h3>
 
 
                                 <?php if (
-                                    trim(
-                                        (string)
-                                        $restaurantAddress
-                                    )
-                                    !==
-                                    ''
+                                    $restaurantAddress !== ''
                                 ): ?>
 
                                     <p>
@@ -2575,13 +3009,9 @@ a {
                                             "
                                         ></i>
 
-                                        &nbsp;
-
-                                        <?php
-                                            echo checkout_h(
-                                                $restaurantAddress
-                                            );
-                                        ?>
+                                        <?= checkout_h(
+                                            $restaurantAddress
+                                        ) ?>
 
                                     </p>
 
@@ -2589,12 +3019,7 @@ a {
 
 
                                 <?php if (
-                                    trim(
-                                        (string)
-                                        $deliveryTime
-                                    )
-                                    !==
-                                    ''
+                                    $deliveryTime !== ''
                                 ): ?>
 
                                     <p>
@@ -2606,15 +3031,11 @@ a {
                                             "
                                         ></i>
 
-                                        &nbsp;
-
                                         Delivery:
 
-                                        <?php
-                                            echo checkout_h(
-                                                $deliveryTime
-                                            );
-                                        ?>
+                                        <?= checkout_h(
+                                            $deliveryTime
+                                        ) ?>
 
                                     </p>
 
@@ -2627,7 +3048,7 @@ a {
                     </section>
 
 
-                    <!-- ITEMS -->
+                    <!-- CART ITEMS -->
 
                     <section
                         class="checkout-card"
@@ -2656,14 +3077,9 @@ a {
                                         font-weight:400;
                                     "
                                 >
-
                                     (
-                                    <?php
-                                        echo
-                                        $totalItems;
-                                    ?>
+                                    <?= (int)$totalItems ?>
                                     )
-
                                 </span>
 
                             </h2>
@@ -2679,11 +3095,17 @@ a {
 
                             <?php
 
-                            $itemImagePath =
+                            /*
+                            |--------------------------------------------------------------------------
+                            | EXACT CART.PHP IMAGE PATH
+                            |--------------------------------------------------------------------------
+                            */
+
+                            $itemImage =
                                 checkoutMenuImage(
                                     $item[
                                         'item_image'
-                                    ]
+                                    ] ?? ''
                                 );
 
                             ?>
@@ -2698,36 +3120,43 @@ a {
 
                                 <div
                                     class="
-                                        checkout-item-image
+                                        item-image
                                     "
                                 >
 
+
                                     <?php if (
-                                        $itemImagePath
-                                        !==
-                                        ''
+                                        $itemImage !== ''
                                     ): ?>
 
                                         <img
-                                            src="<?php
-                                                echo checkout_h(
-                                                    $itemImagePath
-                                                );
+                                            src="<?=
+                                                checkout_h(
+                                                    $itemImage
+                                                )
                                             ?>"
-                                            alt="<?php
-                                                echo checkout_h(
+                                            alt="<?=
+                                                checkout_h(
                                                     $item[
                                                         'item_name'
                                                     ]
-                                                );
+                                                )
                                             ?>"
+                                            loading="lazy"
+                                            onerror="
+                                                this.style.display='none';
+                                                this.nextElementSibling.style.display='flex';
+                                            "
                                         >
 
-                                    <?php else: ?>
 
                                         <div
-                                            class="
-                                                item-placeholder
+                                            style="
+                                                display:none;
+                                                width:100%;
+                                                height:100%;
+                                                align-items:center;
+                                                justify-content:center;
                                             "
                                         >
 
@@ -2740,101 +3169,125 @@ a {
 
                                         </div>
 
+
+                                    <?php else: ?>
+
+                                        <i
+                                            class="
+                                                fas
+                                                fa-utensils
+                                            "
+                                        ></i>
+
                                     <?php endif; ?>
+
 
                                 </div>
 
 
                                 <div
                                     class="
-                                        checkout-item-details
+                                        item-details
                                     "
                                 >
 
                                     <h3>
 
-                                        <?php
-                                            echo checkout_h(
-                                                $item[
-                                                    'item_name'
-                                                ]
-                                            );
-                                        ?>
+                                        <?= checkout_h(
+                                            $item[
+                                                'item_name'
+                                            ]
+                                        ) ?>
 
                                     </h3>
 
 
-                                    <p>
-
-                                        Qty:
-
-                                        <?php
-                                            echo
-                                            (int)
-                                            $item[
-                                                'quantity'
-                                            ];
-                                        ?>
-
-                                        × Rs.
-
-                                        <?php
-                                            echo
-                                            number_format(
-                                                (float)
-                                                $item[
-                                                    'item_price'
-                                                ],
-                                                0
-                                            );
-                                        ?>
-
-                                    </p>
-
-
                                     <?php if (
-                                        !empty(
-                                            $item[
-                                                'item_description'
-                                            ]
-                                        )
+                                        trim(
+                                            (string)(
+                                                $item[
+                                                    'item_description'
+                                                ]
+                                                ??
+                                                ''
+                                            )
+                                        ) !== ''
                                     ): ?>
 
-                                        <p>
+                                        <p
+                                            class="
+                                                item-description
+                                            "
+                                        >
 
-                                            <?php
-                                                echo checkout_h(
-                                                    $item[
-                                                        'item_description'
-                                                    ]
-                                                );
-                                            ?>
+                                            <?= checkout_h(
+                                                $item[
+                                                    'item_description'
+                                                ]
+                                            ) ?>
 
                                         </p>
 
                                     <?php endif; ?>
+
+
+                                    <div
+                                        class="
+                                            item-price
+                                        "
+                                    >
+
+                                        Rs.
+
+                                        <?= number_format(
+                                            (float)$item[
+                                                'item_price'
+                                            ],
+                                            0
+                                        ) ?>
+
+                                        ×
+
+                                        <?= (int)$item[
+                                            'quantity'
+                                        ] ?>
+
+                                    </div>
 
                                 </div>
 
 
                                 <div
                                     class="
-                                        checkout-item-price
+                                        item-total
                                     "
                                 >
 
-                                    Rs.
+                                    <div
+                                        class="
+                                            item-total-label
+                                        "
+                                    >
+                                        Item Total
+                                    </div>
 
-                                    <?php
-                                        echo
-                                        number_format(
-                                            (float)
-                                            $item[
+
+                                    <div
+                                        class="
+                                            item-total-value
+                                        "
+                                    >
+
+                                        Rs.
+
+                                        <?= number_format(
+                                            (float)$item[
                                                 'item_subtotal'
                                             ],
                                             0
-                                        );
-                                    ?>
+                                        ) ?>
+
+                                    </div>
 
                                 </div>
 
@@ -2844,17 +3297,22 @@ a {
 
                         <?php endforeach; ?>
 
+
                     </section>
 
 
-                    <!-- ADDRESS -->
+                    <!-- DELIVERY ADDRESS -->
 
                     <section
-                        class="checkout-card"
+                        class="
+                            checkout-card
+                        "
                     >
 
                         <div
-                            class="card-title"
+                            class="
+                                card-title
+                            "
                         >
 
                             <i
@@ -2864,7 +3322,6 @@ a {
                                 "
                             ></i>
 
-
                             <h2>
                                 Delivery Address
                             </h2>
@@ -2873,12 +3330,16 @@ a {
 
 
                         <?php if (
-                            empty($addresses)
+                            empty(
+                                $addresses
+                            )
                         ): ?>
 
 
                             <div
-                                class="no-address"
+                                class="
+                                    no-address
+                                "
                             >
 
                                 <i
@@ -2888,32 +3349,9 @@ a {
                                     "
                                 ></i>
 
-                                &nbsp;
-
-                                You don't have a saved delivery
-                                address yet.
-
-
-                                <br><br>
-
-
-                                <a
-                                    href="customer/manage-addresses.php"
-                                    class="
-                                        manage-address
-                                    "
-                                >
-
-                                    <i
-                                        class="
-                                            fas
-                                            fa-location-dot
-                                        "
-                                    ></i>
-
-                                    Manage Addresses
-
-                                </a>
+                                Please add a delivery
+                                address before
+                                placing your order.
 
                             </div>
 
@@ -2922,8 +3360,11 @@ a {
 
 
                             <div
-                                class="address-list"
+                                class="
+                                    address-list
+                                "
                             >
+
 
                                 <?php foreach (
                                     $addresses
@@ -2934,18 +3375,91 @@ a {
                                     <?php
 
                                     $addressId =
-                                        (int)
-                                        $address[
+                                        (int)$address[
                                             'id'
                                         ];
 
 
                                     $isSelected =
-                                        (
-                                            $addressId
-                                            ===
-                                            $selectedAddressId
+                                        $addressId
+                                        ===
+                                        $selectedAddressId;
+
+
+                                    $addressTitle =
+                                        trim(
+                                            (string)(
+                                                $address[
+                                                    'address_title'
+                                                ]
+                                                ??
+                                                'Home'
+                                            )
                                         );
+
+
+                                    if (
+                                        $addressTitle
+                                        ===
+                                        ''
+                                    ) {
+
+                                        $addressTitle =
+                                            'Home';
+
+                                    }
+
+
+                                    $locationParts =
+                                        [];
+
+
+                                    if (
+                                        !empty(
+                                            $address[
+                                                'address_line'
+                                            ]
+                                        )
+                                    ) {
+
+                                        $locationParts[] =
+                                            $address[
+                                                'address_line'
+                                            ];
+
+                                    }
+
+
+                                    if (
+                                        !empty(
+                                            $address[
+                                                'area'
+                                            ]
+                                        )
+                                    ) {
+
+                                        $locationParts[] =
+                                            $address[
+                                                'area'
+                                            ];
+
+                                    }
+
+
+                                    if (
+                                        !empty(
+                                            $address[
+                                                'city'
+                                            ]
+                                        )
+                                    ) {
+
+                                        $locationParts[] =
+                                            $address[
+                                                'city'
+                                            ];
+
+                                    }
 
                                     ?>
 
@@ -2953,27 +3467,24 @@ a {
                                     <label
                                         class="
                                             address-option
-                                            <?php
-                                            echo
-                                            $isSelected
+                                            <?= $isSelected
                                                 ? 'selected'
-                                                : '';
+                                                : ''
                                             ?>
                                         "
                                     >
 
+
                                         <input
                                             type="radio"
                                             name="address_id"
-                                            value="<?php
-                                                echo
-                                                $addressId;
+                                            value="<?=
+                                                $addressId
                                             ?>"
-                                            <?php
-                                            echo
-                                            $isSelected
+                                            <?=
+                                                $isSelected
                                                 ? 'checked'
-                                                : '';
+                                                : ''
                                             ?>
                                             required
                                         >
@@ -2985,35 +3496,37 @@ a {
                                             "
                                         >
 
-                                            <h4>
 
-                                                <i
-                                                    class="
-                                                        fas
-                                                        fa-location-dot
-                                                    "
-                                                ></i>
+                                            <div
+                                                class="
+                                                    address-title-row
+                                                "
+                                            >
 
-                                                <?php
-                                                    echo checkout_h(
-                                                        $address[
-                                                            'address_title'
-                                                        ]
-                                                        ??
-                                                        'Address'
-                                                    );
-                                                ?>
+
+                                                <h4>
+
+                                                    <i
+                                                        class="
+                                                            fas
+                                                            fa-location-dot
+                                                        "
+                                                    ></i>
+
+                                                    <?= checkout_h(
+                                                        $addressTitle
+                                                    ) ?>
+
+                                                </h4>
 
 
                                                 <?php if (
-                                                    (int)
-                                                    $address[
+                                                    (int)$address[
                                                         'is_default'
                                                     ]
                                                     ===
                                                     1
                                                 ): ?>
-
 
                                                     <span
                                                         class="
@@ -3023,74 +3536,30 @@ a {
                                                         Default
                                                     </span>
 
-
                                                 <?php endif; ?>
 
-                                            </h4>
+
+                                            </div>
 
 
-                                            <p>
+                                            <?php if (
+                                                !empty(
+                                                    $locationParts
+                                                )
+                                            ): ?>
 
-                                                <?php
-                                                    echo checkout_h(
-                                                        $address[
-                                                            'address_line'
-                                                        ]
-                                                        ??
-                                                        ''
-                                                    );
-                                                ?>
+                                                <p>
 
-                                            </p>
+                                                    <?= checkout_h(
+                                                        implode(
+                                                            ', ',
+                                                            $locationParts
+                                                        )
+                                                    ) ?>
 
+                                                </p>
 
-                                            <p>
-
-                                                <?php
-
-                                                $locationParts = [];
-
-
-                                                if (
-                                                    !empty(
-                                                        $address[
-                                                            'area'
-                                                        ]
-                                                    )
-                                                ) {
-
-                                                    $locationParts[] =
-                                                        $address[
-                                                            'area'
-                                                        ];
-                                                }
-
-
-                                                if (
-                                                    !empty(
-                                                        $address[
-                                                            'city'
-                                                        ]
-                                                    )
-                                                ) {
-
-                                                    $locationParts[] =
-                                                        $address[
-                                                            'city'
-                                                        ];
-                                                }
-
-
-                                                echo checkout_h(
-                                                    implode(
-                                                        ', ',
-                                                        $locationParts
-                                                    )
-                                                );
-
-                                                ?>
-
-                                            </p>
+                                            <?php endif; ?>
 
 
                                             <?php if (
@@ -3101,7 +3570,9 @@ a {
                                                 )
                                             ): ?>
 
-                                                <p>
+                                                <p
+                                                    class="phone"
+                                                >
 
                                                     <i
                                                         class="
@@ -3110,50 +3581,52 @@ a {
                                                         "
                                                     ></i>
 
-                                                    &nbsp;
-
-                                                    <?php
-                                                        echo checkout_h(
-                                                            $address[
-                                                                'phone'
-                                                            ]
-                                                        );
-                                                    ?>
+                                                    <?= checkout_h(
+                                                        $address[
+                                                            'phone'
+                                                        ]
+                                                    ) ?>
 
                                                 </p>
 
                                             <?php endif; ?>
 
+
                                         </div>
+
 
                                     </label>
 
 
                                 <?php endforeach; ?>
 
+
                             </div>
 
 
-                            <a
-                                href="customer/manage-addresses.php"
-                                class="
-                                    manage-address
-                                "
-                            >
-
-                                <i
-                                    class="
-                                        fas
-                                        fa-location-dot
-                                    "
-                                ></i>
-
-                                Manage Addresses
-
-                            </a>
-
-
                         <?php endif; ?>
+
+
+                        <a
+                            href="
+                                customer/manage-addresses.php
+                            "
+                            class="
+                                manage-address
+                            "
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-location-dot
+                                "
+                            ></i>
+
+                            Manage Addresses
+
+                        </a>
+
 
                     </section>
 
@@ -3161,11 +3634,15 @@ a {
                     <!-- PAYMENT -->
 
                     <section
-                        class="checkout-card"
+                        class="
+                            checkout-card
+                        "
                     >
 
                         <div
-                            class="card-title"
+                            class="
+                                card-title
+                            "
                         >
 
                             <i
@@ -3183,214 +3660,109 @@ a {
                         </div>
 
 
+                        <!--
+                        ----------------------------------------------------------
+                        ONLY ONE PAYMENT METHOD IS DISPLAYED
+                        ----------------------------------------------------------
+                        -->
+
                         <div
-                            class="payment-list"
+                            class="
+                                payment-display
+                            "
                         >
 
 
-                            <label
+                            <div
                                 class="
-                                    payment-option
-                                    <?php
-                                    echo
-                                    $paymentMethod
-                                    ===
-                                    'cash_on_delivery'
-                                        ? 'selected'
-                                        : '';
-                                    ?>
+                                    payment-icon
                                 "
                             >
 
-                                <input
-                                    type="radio"
-                                    name="payment_method"
-                                    value="cash_on_delivery"
-                                    <?php
-                                    echo
-                                    $paymentMethod
-                                    ===
-                                    'cash_on_delivery'
-                                        ? 'checked'
-                                        : '';
-                                    ?>
-                                    required
-                                >
-
-
-                                <span
+                                <i
                                     class="
-                                        payment-icon
+                                        fas
+                                        <?= checkout_h(
+                                            $paymentIcon
+                                        )
+                                        ?>
                                     "
-                                >
+                                ></i>
 
-                                    <i
-                                        class="
-                                            fas
-                                            fa-money-bill-wave
-                                        "
-                                    ></i>
-
-                                </span>
+                            </div>
 
 
-                                <span
-                                    class="
-                                        payment-text
-                                    "
-                                >
-
-                                    <strong>
-                                        Cash on Delivery
-                                    </strong>
-
-                                    <small>
-                                        Pay when your order arrives.
-                                    </small>
-
-                                </span>
-
-                            </label>
-
-
-                            <label
+                            <div
                                 class="
-                                    payment-option
-                                    <?php
-                                    echo
-                                    $paymentMethod
-                                    ===
-                                    'card'
-                                        ? 'selected'
-                                        : '';
-                                    ?>
+                                    payment-text
                                 "
                             >
 
-                                <input
-                                    type="radio"
-                                    name="payment_method"
-                                    value="card"
-                                    <?php
-                                    echo
-                                    $paymentMethod
-                                    ===
-                                    'card'
-                                        ? 'checked'
-                                        : '';
-                                    ?>
-                                >
+                                <strong>
+
+                                    <?= checkout_h(
+                                        $paymentTitle
+                                    ) ?>
+
+                                </strong>
 
 
-                                <span
-                                    class="
-                                        payment-icon
-                                    "
-                                >
+                                <small>
 
-                                    <i
-                                        class="
-                                            fas
-                                            fa-credit-card
-                                        "
-                                    ></i>
+                                    <?= checkout_h(
+                                        $paymentDescription
+                                    ) ?>
 
-                                </span>
+                                </small>
 
-
-                                <span
-                                    class="
-                                        payment-text
-                                    "
-                                >
-
-                                    <strong>
-                                        Debit / Credit Card
-                                    </strong>
-
-                                    <small>
-                                        Card payment option.
-                                    </small>
-
-                                </span>
-
-                            </label>
-
-
-                            <label
-                                class="
-                                    payment-option
-                                    <?php
-                                    echo
-                                    $paymentMethod
-                                    ===
-                                    'online'
-                                        ? 'selected'
-                                        : '';
-                                    ?>
-                                "
-                            >
-
-                                <input
-                                    type="radio"
-                                    name="payment_method"
-                                    value="online"
-                                    <?php
-                                    echo
-                                    $paymentMethod
-                                    ===
-                                    'online'
-                                        ? 'checked'
-                                        : '';
-                                    ?>
-                                >
-
-
-                                <span
-                                    class="
-                                        payment-icon
-                                    "
-                                >
-
-                                    <i
-                                        class="
-                                            fas
-                                            fa-mobile-screen
-                                        "
-                                    ></i>
-
-                                </span>
-
-
-                                <span
-                                    class="
-                                        payment-text
-                                    "
-                                >
-
-                                    <strong>
-                                        Online Payment
-                                    </strong>
-
-                                    <small>
-                                        Online payment option.
-                                    </small>
-
-                                </span>
-
-                            </label>
+                            </div>
 
 
                         </div>
 
+
+                        <a
+                            href="payments.php"
+                            class="
+                                manage-payment
+                            "
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-credit-card
+                                "
+                            ></i>
+
+                            Manage Payment
+
+                        </a>
+
+
+                        <!--
+                        Payment is controlled by session.
+                        No payment radio buttons are shown.
+                        -->
+
+                        <input
+                            type="hidden"
+                            name="payment_method"
+                            value="<?=
+                                checkout_h(
+                                    $paymentMethod
+                                )
+                            ?>"
+                        >
+
+
                     </section>
+
 
                 </div>
 
 
-                <!-- =================================================
-                     RIGHT SIDE
-                ================================================== -->
+                <!-- RIGHT / ORDER SUMMARY -->
 
                 <aside>
 
@@ -3402,8 +3774,11 @@ a {
                         "
                     >
 
+
                         <div
-                            class="card-title"
+                            class="
+                                card-title
+                            "
                         >
 
                             <i
@@ -3413,7 +3788,6 @@ a {
                                 "
                             ></i>
 
-
                             <h2>
                                 Order Summary
                             </h2>
@@ -3422,46 +3796,40 @@ a {
 
 
                         <div
-                            class="summary-row"
+                            class="
+                                summary-row
+                            "
                         >
 
                             <span>
                                 Items
                             </span>
 
-
                             <strong>
-
-                                <?php
-                                    echo
-                                    $totalItems;
-                                ?>
-
+                                <?= (int)$totalItems ?>
                             </strong>
 
                         </div>
 
 
                         <div
-                            class="summary-row"
+                            class="
+                                summary-row
+                            "
                         >
 
                             <span>
                                 Subtotal
                             </span>
 
-
                             <strong>
 
                                 Rs.
 
-                                <?php
-                                    echo
-                                    number_format(
-                                        $subtotal,
-                                        0
-                                    );
-                                ?>
+                                <?= number_format(
+                                    $subtotal,
+                                    0
+                                ) ?>
 
                             </strong>
 
@@ -3469,7 +3837,9 @@ a {
 
 
                         <div
-                            class="summary-row"
+                            class="
+                                summary-row
+                            "
                         >
 
                             <span>
@@ -3480,20 +3850,15 @@ a {
                             <strong>
 
                                 <?php if (
-                                    $deliveryFee
-                                    >
-                                    0
+                                    $deliveryFee > 0
                                 ): ?>
 
                                     Rs.
 
-                                    <?php
-                                        echo
-                                        number_format(
-                                            $deliveryFee,
-                                            0
-                                        );
-                                    ?>
+                                    <?= number_format(
+                                        $deliveryFee,
+                                        0
+                                    ) ?>
 
                                 <?php else: ?>
 
@@ -3504,6 +3869,39 @@ a {
                             </strong>
 
                         </div>
+
+
+                        <?php if (
+                            $discount > 0
+                        ): ?>
+
+
+                            <div
+                                class="
+                                    summary-row
+                                "
+                            >
+
+                                <span>
+                                    Discount
+                                </span>
+
+
+                                <strong>
+
+                                    - Rs.
+
+                                    <?= number_format(
+                                        $discount,
+                                        0
+                                    ) ?>
+
+                                </strong>
+
+                            </div>
+
+
+                        <?php endif; ?>
 
 
                         <div
@@ -3528,21 +3926,22 @@ a {
 
                                 Rs.
 
-                                <?php
-                                    echo
-                                    number_format(
-                                        $total,
-                                        0
-                                    );
-                                ?>
+                                <?= number_format(
+                                    $total,
+                                    0
+                                ) ?>
 
                             </strong>
 
                         </div>
 
 
+                        <!-- ORDER NOTE -->
+
                         <div
-                            class="note-box"
+                            class="
+                                note-box
+                            "
                         >
 
                             <label
@@ -3550,6 +3949,7 @@ a {
                             >
 
                                 Order Note
+
                                 <span
                                     style="
                                         color:#999;
@@ -3565,11 +3965,20 @@ a {
                             <textarea
                                 id="customer_note"
                                 name="customer_note"
-                                placeholder="Any special instructions..."
-                            ></textarea>
+                                placeholder="
+                                    Add delivery instructions...
+                                "
+                            ><?= checkout_h(
+                                $_POST[
+                                    'customer_note'
+                                ] ?? ''
+                            ) ?></textarea>
+
 
                         </div>
 
+
+                        <!-- PLACE ORDER -->
 
                         <button
                             type="submit"
@@ -3578,13 +3987,10 @@ a {
                             class="
                                 place-order-btn
                             "
-                            <?php
-                            echo
-                            empty($addresses)
-                                ?
-                                'disabled'
-                                :
-                                '';
+                            <?=
+                                empty($addresses)
+                                ? 'disabled'
+                                : ''
                             ?>
                         >
 
@@ -3595,7 +4001,7 @@ a {
                                 "
                             ></i>
 
-                            Complete Order
+                            Place Order
 
                         </button>
 
@@ -3613,7 +4019,8 @@ a {
                                 "
                             ></i>
 
-                            Your order information is secure.
+                            Your checkout information
+                            is handled securely.
 
                         </div>
 
@@ -3626,9 +4033,12 @@ a {
 
             </div>
 
+
         </form>
 
+
     </div>
+
 
 </main>
 
@@ -3637,29 +4047,29 @@ a {
 
 /*
 |--------------------------------------------------------------------------
-| ADDRESS SELECTION
+| ADDRESS SELECTOR UI
 |--------------------------------------------------------------------------
 */
 
 document
     .querySelectorAll(
-        '.address-option'
+        '.address-option input'
     )
     .forEach(
-        function(option) {
+        function (radio) {
 
-            option.addEventListener(
-                'click',
-                function() {
+            radio.addEventListener(
+                'change',
+                function () {
 
                     document
                         .querySelectorAll(
                             '.address-option'
                         )
                         .forEach(
-                            function(item) {
+                            function (option) {
 
-                                item.classList.remove(
+                                option.classList.remove(
                                     'selected'
                                 );
 
@@ -3667,64 +4077,18 @@ document
                         );
 
 
-                    option.classList.add(
-                        'selected'
-                    );
-
-                }
-            );
-
-        }
-    );
-
-
-/*
-|--------------------------------------------------------------------------
-| PAYMENT SELECTION
-|--------------------------------------------------------------------------
-*/
-
-document
-    .querySelectorAll(
-        '.payment-option'
-    )
-    .forEach(
-        function(option) {
-
-            option.addEventListener(
-                'click',
-                function() {
-
-                    document
-                        .querySelectorAll(
-                            '.payment-option'
-                        )
-                        .forEach(
-                            function(item) {
-
-                                item.classList.remove(
-                                    'selected'
-                                );
-
-                            }
+                    var parent =
+                        this.closest(
+                            '.address-option'
                         );
 
 
-                    option.classList.add(
-                        'selected'
-                    );
+                    if (parent) {
 
-
-                    var radio =
-                        option.querySelector(
-                            'input[type="radio"]'
+                        parent.classList.add(
+                            'selected'
                         );
 
-
-                    if (radio) {
-
-                        radio.checked =
-                            true;
                     }
 
                 }
@@ -3732,65 +4096,6 @@ document
 
         }
     );
-
-
-/*
-|--------------------------------------------------------------------------
-| FORM VALIDATION
-|--------------------------------------------------------------------------
-*/
-
-var checkoutForm =
-    document.getElementById(
-        'checkoutForm'
-    );
-
-
-if (checkoutForm) {
-
-    checkoutForm.addEventListener(
-        'submit',
-        function(event) {
-
-            var address =
-                document.querySelector(
-                    'input[name="address_id"]:checked'
-                );
-
-
-            var payment =
-                document.querySelector(
-                    'input[name="payment_method"]:checked'
-                );
-
-
-            if (!address) {
-
-                event.preventDefault();
-
-                alert(
-                    'Please select a delivery address.'
-                );
-
-                return;
-            }
-
-
-            if (!payment) {
-
-                event.preventDefault();
-
-                alert(
-                    'Please select a payment method.'
-                );
-
-                return;
-            }
-
-        }
-    );
-
-}
 
 </script>
 
