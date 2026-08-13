@@ -1031,7 +1031,7 @@ if (
 
                     $uploadDirectory =
                         __DIR__ .
-                        '/../uploads/restaurants/';
+                        '/../assets/images/restaurants/';
 
 
                     if (
@@ -1082,9 +1082,7 @@ if (
                         |--------------------------------------------------------------------------
                         */
 
-                        $imageDatabasePath =
-                            'uploads/restaurants/' .
-                            $fileName;
+                       $imageDatabasePath = $fileName;
 
 
                         $stmt = safePrepare(
@@ -1178,12 +1176,14 @@ $imageUrl = '';
 if ($restaurantImage !== '') {
 
     /*
-     * Existing database image path
+     * Restaurant images are stored in:
+     * /assets/images/restaurants/
      */
+
     $imageUrl =
-        '../' .
+        '../assets/images/restaurants/' .
         ltrim(
-            $restaurantImage,
+            basename($restaurantImage),
             '/'
         );
 
