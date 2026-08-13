@@ -1722,7 +1722,7 @@ if ($customerId > 0) {
                 ================================================== -->
 
                 <a
-                    href="checkout.php"
+                    href="payments.php"
                     class="action"
                 >
 
