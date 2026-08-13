@@ -1562,9 +1562,15 @@ require_once __DIR__ .
                 0 8px 30px
                 rgba(40,15,25,.05);
         }
-
-        .empty-cart i {
+.empty-cart z {
             color: #ed0038;
+
+            font-size: 55px;
+
+            margin-bottom: 15px;
+        }
+        .empty-cart i {
+            color: #fff;
 
             font-size: 55px;
 
@@ -1969,7 +1975,7 @@ require_once __DIR__ .
 
         <div class="empty-cart">
 
-            <i class="fas fa-cart-shopping"></i>
+            <z class="fas fa-cart-shopping"></z>
 
             <h2>
                 Your cart is empty
