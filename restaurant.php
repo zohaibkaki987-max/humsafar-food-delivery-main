@@ -1,97 +1,335 @@
 <?php
 
-/* =========================================================
-   HUMSAFAR - RESTAURANT DETAIL PAGE
-   Complete standalone restaurant.php
-========================================================= */
-
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/session.php';
 
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-/* =========================================================
-   HELPER
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| HELPER
+|--------------------------------------------------------------------------
+*/
 
-function h($value)
+function restaurant_h($value)
 {
     return htmlspecialchars(
-        (string)$value,
+        (string) $value,
         ENT_QUOTES,
         'UTF-8'
     );
 }
 
 
-/* =========================================================
-   SESSION / USER
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| USER
+|--------------------------------------------------------------------------
+*/
 
 $userId = isset($_SESSION['user_id'])
-    ? (int)$_SESSION['user_id']
+    ? (int) $_SESSION['user_id']
     : 0;
 
-$userName = $_SESSION['name'] ?? '';
+
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT ID
+|--------------------------------------------------------------------------
+*/
+
+$restaurantId = isset($_GET['id'])
+    ? (int) $_GET['id']
+    : 0;
 
 
-/* =========================================================
-   CART COUNT
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| INVALID RESTAURANT ID
+|--------------------------------------------------------------------------
+*/
 
-$cartCount = 0;
+if ($restaurantId <= 0) {
 
-if ($userId > 0) {
+    http_response_code(404);
 
-    $cartCountSql = "
-        SELECT COALESCE(SUM(quantity), 0) AS total
-        FROM cart
-        WHERE user_id = ?
-    ";
+    ?>
+    <!DOCTYPE html>
+    <html lang="en">
 
-    $cartStmt = $conn->prepare($cartCountSql);
+    <head>
 
-    if ($cartStmt) {
+        <meta charset="UTF-8">
 
-        $cartStmt->bind_param(
-            "i",
-            $userId
-        );
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
 
-        $cartStmt->execute();
+        <title>Restaurant Not Found - Humsafar</title>
 
-        $cartResult =
-            $cartStmt->get_result();
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+        >
 
-        if ($cartRow =
-            $cartResult->fetch_assoc()
-        ) {
+        <style>
 
-            $cartCount =
-                (int)$cartRow['total'];
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #f8f8f8;
+                font-family: Arial, sans-serif;
+            }
 
-        }
+            .error-box {
+                width: 90%;
+                max-width: 480px;
+                padding: 45px 30px;
+                text-align: center;
+                background: #ffffff;
+                border-radius: 18px;
+                box-shadow: 0 10px 35px rgba(0,0,0,.08);
+            }
 
-        $cartStmt->close();
-    }
+            .error-box i {
+                color: #ed0038;
+                font-size: 50px;
+                margin-bottom: 15px;
+            }
+
+            .error-box h1 {
+                margin: 0 0 10px;
+                color: #222222;
+            }
+
+            .error-box p {
+                color: #777777;
+                margin-bottom: 25px;
+            }
+
+            .error-box a {
+                display: inline-block;
+                padding: 12px 22px;
+                background: #ed0038;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 700;
+            }
+
+        </style>
+
+    </head>
+
+    <body>
+
+        <div class="error-box">
+
+            <i class="fas fa-store-slash"></i>
+
+            <h1>
+                Restaurant Not Found
+            </h1>
+
+            <p>
+                The restaurant you are looking for
+                is not available.
+            </p>
+
+            <a href="restaurants.php">
+                <i class="fas fa-arrow-left"></i>
+                Back to Restaurants
+            </a>
+
+        </div>
+
+    </body>
+
+    </html>
+
+    <?php
+
+    exit;
 }
 
 
-/* =========================================================
-   RESTAURANT ID
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| GET RESTAURANT
+|--------------------------------------------------------------------------
+*/
 
-$restaurantId =
-    isset($_GET['id'])
-        ? (int)$_GET['id']
-        : 0;
+$restaurant = null;
+
+$sql = "
+    SELECT
+        id,
+        name,
+        description,
+        image,
+        address,
+        latitude,
+        longitude,
+        phone,
+        rating,
+        delivery_time,
+        delivery_fee,
+        status
+    FROM restaurants
+    WHERE id = ?
+      AND status = 1
+    LIMIT 1
+";
+
+$stmt = $conn->prepare($sql);
+
+if ($stmt) {
+
+    $stmt->bind_param(
+        "i",
+        $restaurantId
+    );
+
+    $stmt->execute();
+
+    $result = $stmt->get_result();
+
+    $restaurant = $result->fetch_assoc();
+
+    $stmt->close();
+}
 
 
-/* =========================================================
-   ADD TO CART
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT NOT AVAILABLE
+|--------------------------------------------------------------------------
+*/
 
-$cartMessage = '';
-$cartError = '';
+if (!$restaurant) {
+
+    http_response_code(404);
+
+    ?>
+
+    <!DOCTYPE html>
+    <html lang="en">
+
+    <head>
+
+        <meta charset="UTF-8">
+
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
+
+        <title>
+            Restaurant Not Available - Humsafar
+        </title>
+
+        <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+        >
+
+        <style>
+
+            body {
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #f8f8f8;
+                font-family: Arial, sans-serif;
+            }
+
+            .error-box {
+                width: 90%;
+                max-width: 480px;
+                padding: 45px 30px;
+                text-align: center;
+                background: #ffffff;
+                border-radius: 18px;
+                box-shadow: 0 10px 35px rgba(0,0,0,.08);
+            }
+
+            .error-box i {
+                color: #ed0038;
+                font-size: 50px;
+                margin-bottom: 15px;
+            }
+
+            .error-box h1 {
+                margin: 0 0 10px;
+                color: #222222;
+            }
+
+            .error-box p {
+                color: #777777;
+                margin-bottom: 25px;
+            }
+
+            .error-box a {
+                display: inline-block;
+                padding: 12px 22px;
+                background: #ed0038;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: 700;
+            }
+
+        </style>
+
+    </head>
+
+    <body>
+
+        <div class="error-box">
+
+            <i class="fas fa-store-slash"></i>
+
+            <h1>
+                Restaurant Not Available
+            </h1>
+
+            <p>
+                This restaurant is currently unavailable.
+            </p>
+
+            <a href="restaurants.php">
+                <i class="fas fa-arrow-left"></i>
+                Back to Restaurants
+            </a>
+
+        </div>
+
+    </body>
+
+    </html>
+
+    <?php
+
+    exit;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| ADD TO CART
+|--------------------------------------------------------------------------
+*/
+
+$message = '';
+$error = '';
 
 if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
@@ -99,45 +337,54 @@ if (
     isset($_POST['add_to_cart'])
 ) {
 
+    /*
+    |--------------------------------------------------------------------------
+    | LOGIN CHECK
+    |--------------------------------------------------------------------------
+    */
+
     if ($userId <= 0) {
 
         header(
-            "Location: login.php"
+            'Location: login.php'
         );
 
         exit;
     }
 
 
-    $menuItemId =
-        isset($_POST['menu_item_id'])
-            ? (int)$_POST['menu_item_id']
-            : 0;
+    $menuItemId = isset($_POST['menu_item_id'])
+        ? (int) $_POST['menu_item_id']
+        : 0;
 
 
-    $quantity =
-        isset($_POST['quantity'])
-            ? (int)$_POST['quantity']
-            : 1;
+    $quantity = isset($_POST['quantity'])
+        ? (int) $_POST['quantity']
+        : 1;
 
 
     if ($quantity < 1) {
-
         $quantity = 1;
+    }
 
+    if ($quantity > 99) {
+        $quantity = 99;
     }
 
 
-    /* -----------------------------------------
-       Verify menu item
-    ----------------------------------------- */
+    /*
+    |--------------------------------------------------------------------------
+    | VERIFY ITEM BELONGS TO THIS RESTAURANT
+    |--------------------------------------------------------------------------
+    */
 
     $itemSql = "
         SELECT
             id,
             restaurant_id,
             name,
-            price
+            price,
+            status
         FROM menu_items
         WHERE id = ?
           AND restaurant_id = ?
@@ -145,9 +392,7 @@ if (
         LIMIT 1
     ";
 
-    $itemStmt =
-        $conn->prepare($itemSql);
-
+    $itemStmt = $conn->prepare($itemSql);
 
     if ($itemStmt) {
 
@@ -159,63 +404,60 @@ if (
 
         $itemStmt->execute();
 
-        $itemResult =
-            $itemStmt->get_result();
+        $itemResult = $itemStmt->get_result();
 
-        $menuItem =
-            $itemResult->fetch_assoc();
+        $item = $itemResult->fetch_assoc();
 
         $itemStmt->close();
 
 
-        if ($menuItem) {
+        if ($item) {
 
-            /* -----------------------------------------
-               Check existing cart item
-            ----------------------------------------- */
+            /*
+            |--------------------------------------------------------------------------
+            | CHECK EXISTING CART ITEM
+            |--------------------------------------------------------------------------
+            */
 
-            $existingSql = "
-                SELECT id, quantity
+            $checkSql = "
+                SELECT
+                    id,
+                    quantity
                 FROM cart
                 WHERE user_id = ?
                   AND menu_item_id = ?
                 LIMIT 1
             ";
 
-            $existingStmt =
-                $conn->prepare(
-                    $existingSql
-                );
+            $checkStmt = $conn->prepare($checkSql);
 
+            if ($checkStmt) {
 
-            if ($existingStmt) {
-
-                $existingStmt->bind_param(
+                $checkStmt->bind_param(
                     "ii",
                     $userId,
                     $menuItemId
                 );
 
-                $existingStmt->execute();
+                $checkStmt->execute();
 
-                $existingResult =
-                    $existingStmt->get_result();
+                $checkResult = $checkStmt->get_result();
 
-                $existing =
-                    $existingResult->fetch_assoc();
+                $existing = $checkResult->fetch_assoc();
 
-                $existingStmt->close();
+                $checkStmt->close();
 
 
                 if ($existing) {
 
-                    /* -------------------------------
-                       UPDATE QUANTITY
-                    ------------------------------- */
-
                     $newQuantity =
-                        (int)$existing['quantity']
+                        (int) $existing['quantity']
                         + $quantity;
+
+
+                    if ($newQuantity > 99) {
+                        $newQuantity = 99;
+                    }
 
 
                     $updateSql = "
@@ -226,9 +468,7 @@ if (
                     ";
 
                     $updateStmt =
-                        $conn->prepare(
-                            $updateSql
-                        );
+                        $conn->prepare($updateSql);
 
 
                     if ($updateStmt) {
@@ -240,21 +480,28 @@ if (
                             $userId
                         );
 
-                        $updateStmt->execute();
+                        if ($updateStmt->execute()) {
+
+                            $message =
+                                $item['name']
+                                . ' added to cart.';
+
+                        } else {
+
+                            $error =
+                                'Unable to update cart.';
+                        }
 
                         $updateStmt->close();
-
-                        $cartMessage =
-                            $menuItem['name']
-                            . ' added to cart.';
-
                     }
 
                 } else {
 
-                    /* -------------------------------
-                       INSERT NEW CART ITEM
-                    ------------------------------- */
+                    /*
+                    |--------------------------------------------------------------------------
+                    | INSERT NEW CART ITEM
+                    |--------------------------------------------------------------------------
+                    */
 
                     $insertSql = "
                         INSERT INTO cart
@@ -268,9 +515,7 @@ if (
                     ";
 
                     $insertStmt =
-                        $conn->prepare(
-                            $insertSql
-                        );
+                        $conn->prepare($insertSql);
 
 
                     if ($insertStmt) {
@@ -282,289 +527,217 @@ if (
                             $quantity
                         );
 
-                        $insertStmt->execute();
+
+                        if ($insertStmt->execute()) {
+
+                            $message =
+                                $item['name']
+                                . ' added to cart.';
+
+                        } else {
+
+                            $error =
+                                'Unable to add item to cart.';
+                        }
 
                         $insertStmt->close();
-
-                        $cartMessage =
-                            $menuItem['name']
-                            . ' added to cart.';
-
                     }
-
                 }
-
             }
 
         } else {
 
-            $cartError =
-                'This menu item is not available.';
-
+            $error =
+                'This item is not available.';
         }
 
     } else {
 
-        $cartError =
-            'Unable to add item to cart.';
-
-    }
-
-
-    /* -----------------------------------------
-       Refresh cart count
-    ----------------------------------------- */
-
-    $cartCountSql = "
-        SELECT COALESCE(SUM(quantity), 0) AS total
-        FROM cart
-        WHERE user_id = ?
-    ";
-
-    $cartStmt =
-        $conn->prepare(
-            $cartCountSql
-        );
-
-    if ($cartStmt) {
-
-        $cartStmt->bind_param(
-            "i",
-            $userId
-        );
-
-        $cartStmt->execute();
-
-        $cartResult =
-            $cartStmt->get_result();
-
-        if ($cartRow =
-            $cartResult->fetch_assoc()
-        ) {
-
-            $cartCount =
-                (int)$cartRow['total'];
-
-        }
-
-        $cartStmt->close();
+        $error =
+            'Unable to process your request.';
     }
 }
 
 
-/* =========================================================
-   GET RESTAURANT
-========================================================= */
-
-$restaurant = null;
-
-
-if ($restaurantId > 0) {
-
-    $restaurantSql = "
-        SELECT
-            id,
-            name,
-            description,
-            image,
-            address,
-            phone,
-            rating,
-            delivery_time,
-            delivery_fee
-        FROM restaurants
-        WHERE id = ?
-          AND status = 1
-        LIMIT 1
-    ";
-
-
-    $restaurantStmt =
-        $conn->prepare(
-            $restaurantSql
-        );
-
-
-    if ($restaurantStmt) {
-
-        $restaurantStmt->bind_param(
-            "i",
-            $restaurantId
-        );
-
-        $restaurantStmt->execute();
-
-        $restaurantResult =
-            $restaurantStmt->get_result();
-
-        $restaurant =
-            $restaurantResult->fetch_assoc();
-
-        $restaurantStmt->close();
-    }
-}
-
-
-/* =========================================================
-   RESTAURANT NOT FOUND
-========================================================= */
-
-if (!$restaurant) {
-
-    http_response_code(404);
-
-}
-
-
-/* =========================================================
-   MENU ITEMS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| GET MENU ITEMS
+|--------------------------------------------------------------------------
+*/
 
 $menuItems = [];
 
+$menuSql = "
+    SELECT
+        id,
+        restaurant_id,
+        name,
+        description,
+        price,
+        image,
+        category,
+        status
+    FROM menu_items
+    WHERE restaurant_id = ?
+      AND status = 1
+    ORDER BY
+        category ASC,
+        id ASC
+";
 
-if ($restaurant) {
+$menuStmt = $conn->prepare($menuSql);
 
-    $menuSql = "
-        SELECT
-            id,
-            restaurant_id,
-            name,
-            description,
-            price,
-            image,
-            category
-        FROM menu_items
-        WHERE restaurant_id = ?
-          AND status = 1
-        ORDER BY
-            category ASC,
-            id ASC
-    ";
+if ($menuStmt) {
 
+    $menuStmt->bind_param(
+        "i",
+        $restaurantId
+    );
 
-    $menuStmt =
-        $conn->prepare(
-            $menuSql
-        );
+    $menuStmt->execute();
 
-
-    if ($menuStmt) {
-
-        $menuStmt->bind_param(
-            "i",
-            $restaurantId
-        );
-
-        $menuStmt->execute();
-
-        $menuResult =
-            $menuStmt->get_result();
+    $menuResult =
+        $menuStmt->get_result();
 
 
-        while (
-            $menuRow =
-            $menuResult->fetch_assoc()
-        ) {
+    while ($row = $menuResult->fetch_assoc()) {
 
-            $menuItems[] =
-                $menuRow;
-
-        }
-
-
-        $menuStmt->close();
+        $menuItems[] = $row;
     }
+
+
+    $menuStmt->close();
 }
 
 
-/* =========================================================
-   MENU CATEGORIES
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| GROUP ITEMS BY CATEGORY
+|--------------------------------------------------------------------------
+*/
 
-$menuCategories = [];
-
+$categories = [];
 
 foreach ($menuItems as $item) {
 
     $category =
         trim(
-            $item['category'] ?? ''
+            (string)
+            ($item['category'] ?? '')
         );
 
 
     if ($category === '') {
-
         $category = 'Menu';
-
     }
 
 
-    if (
-        !in_array(
-            $category,
-            $menuCategories,
-            true
-        )
-    ) {
-
-        $menuCategories[] =
-            $category;
-
+    if (!isset($categories[$category])) {
+        $categories[$category] = [];
     }
 
+
+    $categories[$category][] = $item;
 }
 
 
-/* =========================================================
-   RESTAURANT VARIABLES
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT INFORMATION
+|--------------------------------------------------------------------------
+*/
 
 $restaurantName =
-    $restaurant['name']
-    ?? 'Restaurant';
+    $restaurant['name'] ?? 'Restaurant';
 
 
 $restaurantDescription =
-    $restaurant['description']
-    ?? 'Delicious food and great service.';
-
-
-$restaurantImage =
-    $restaurant['image']
-    ?? '';
+    trim(
+        (string)
+        ($restaurant['description'] ?? '')
+    );
 
 
 $restaurantAddress =
-    $restaurant['address']
-    ?? '';
+    trim(
+        (string)
+        ($restaurant['address'] ?? '')
+    );
 
 
 $restaurantPhone =
-    $restaurant['phone']
-    ?? '';
+    trim(
+        (string)
+        ($restaurant['phone'] ?? '')
+    );
 
 
 $restaurantRating =
-    (float)(
-        $restaurant['rating']
-        ?? 0
-    );
+    (float)
+    ($restaurant['rating'] ?? 0);
 
 
 $deliveryTime =
-    $restaurant['delivery_time']
-    ?? '';
-
-
-$deliveryFee =
-    (float)(
-        $restaurant['delivery_fee']
-        ?? 0
+    trim(
+        (string)
+        ($restaurant['delivery_time'] ?? '')
     );
 
 
+$deliveryFee =
+    (float)
+    ($restaurant['delivery_fee'] ?? 0);
+
+
+/*
+|--------------------------------------------------------------------------
+| RESTAURANT IMAGE
+|--------------------------------------------------------------------------
+*/
+
+$restaurantImage =
+    trim(
+        (string)
+        ($restaurant['image'] ?? '')
+    );
+
+
+$restaurantImageUrl = '';
+
+if ($restaurantImage !== '') {
+
+    if (
+        preg_match(
+            '/^(https?:\/\/|\/|data:)/i',
+            $restaurantImage
+        )
+    ) {
+
+        $restaurantImageUrl =
+            $restaurantImage;
+
+    } elseif (
+        strpos(
+            $restaurantImage,
+            'assets/'
+        ) === 0
+    ) {
+
+        $restaurantImageUrl =
+            $restaurantImage;
+
+    } else {
+
+        $restaurantImageUrl =
+            'assets/images/restaurants/'
+            . basename(
+                $restaurantImage
+            );
+    }
+}
+
 ?>
+
 <!DOCTYPE html>
 
 <html lang="en">
@@ -579,8 +752,15 @@ $deliveryFee =
     >
 
     <title>
-        <?php echo h($restaurantName); ?>
+
+        <?php
+        echo restaurant_h(
+            $restaurantName
+        );
+        ?>
+
         - Humsafar
+
     </title>
 
 
@@ -589,10 +769,6 @@ $deliveryFee =
         href="css/style.css"
     >
 
-    <link
-        rel="stylesheet"
-        href="css/css_header.css"
-    >
 
     <link
         rel="stylesheet"
@@ -600,1866 +776,1017 @@ $deliveryFee =
     >
 
 
-<style>
+    <style>
 
-/* =========================================================
-   HUMSAFAR RESTAURANT DETAIL
-   Pink Gradient Theme
-========================================================= */
-
-*{
-    box-sizing:border-box;
-}
-
-
-html{
-    scroll-behavior:smooth;
-}
-
-
-body{
-
-    margin:0;
-
-    padding:0;
-
-    background:#f5f6fa;
-
-    color:#222;
-
-    font-family:
-        'Segoe UI',
-        Tahoma,
-        Geneva,
-        Verdana,
-        sans-serif;
-
-}
-
-
-a{
-    text-decoration:none;
-}
-
-
-/* =========================================================
-   TOP HEADER
-========================================================= */
-
-.hf-header{
-
-    background:#fff;
-
-    box-shadow:
-        0 2px 12px rgba(0,0,0,.06);
-
-    position:relative;
-
-    z-index:100;
-
-}
-
-
-.hf-top{
-
-    max-width:1250px;
-
-    min-height:64px;
-
-    margin:auto;
-
-    padding:0 20px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:space-between;
-
-    gap:25px;
-
-}
-
-
-.hf-logo{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:8px;
-
-    color:#ed1747;
-
-    font-size:22px;
-
-    font-weight:800;
-
-    white-space:nowrap;
-
-}
-
-
-.hf-logo i{
-
-    font-size:20px;
-
-}
-
-
-.hf-search{
-
-    width:360px;
-
-    height:40px;
-
-    position:relative;
-
-}
-
-
-.hf-search input{
-
-    width:100%;
-
-    height:100%;
-
-    border:1px solid #ddd;
-
-    border-radius:22px;
-
-    padding:
-        0 42px 0 18px;
-
-    outline:none;
-
-    color:#444;
-
-    background:#fff;
-
-    font-size:13px;
-
-}
-
-
-.hf-search input:focus{
-
-    border-color:#f03b73;
-
-    box-shadow:
-        0 0 0 3px
-        rgba(240,59,115,.10);
-
-}
-
-
-.hf-search i{
-
-    position:absolute;
-
-    right:15px;
-
-    top:50%;
-
-    transform:
-        translateY(-50%);
-
-    color:#888;
-
-}
-
-
-.hf-actions{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:18px;
-
-}
-
-
-.hf-actions a{
-
-    color:#333;
-
-    font-size:13px;
-
-    font-weight:600;
-
-}
-
-
-.hf-actions .cart-link{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:5px;
-
-}
-
-
-.cart-count{
-
-    min-width:20px;
-
-    height:20px;
-
-    padding:0 6px;
-
-    display:inline-flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    border-radius:20px;
-
-    background:#ffca05;
-
-    color:#222;
-
-    font-size:11px;
-
-    font-weight:800;
-
-}
-
-
-.hf-user{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:6px;
-
-}
-
-
-.hf-logout{
-
-    background:#ffca05;
-
-    color:#222 !important;
-
-    padding:
-        8px 16px;
-
-    border-radius:20px;
-
-    font-size:12px !important;
-
-    font-weight:700 !important;
-
-}
-
-
-/* =========================================================
-   NAVIGATION
-========================================================= */
-
-.hf-nav{
-
-    background:
-        linear-gradient(
-            90deg,
-            #ed0a3f 0%,
-            #f62d67 50%,
-            #ff6294 100%
-        );
-
-}
-
-
-.hf-nav-inner{
-
-    max-width:1250px;
-
-    margin:auto;
-
-    padding:0 20px;
-
-    min-height:43px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-}
-
-
-.hf-nav ul{
-
-    list-style:none;
-
-    padding:0;
-
-    margin:0;
-
-    display:flex;
-
-    align-items:center;
-
-    gap:32px;
-
-}
-
-
-.hf-nav a{
-
-    color:#fff;
-
-    font-size:12px;
-
-    font-weight:700;
-
-    padding:
-        14px 0;
-
-    display:block;
-
-}
-
-
-.hf-nav a:hover{
-
-    opacity:.85;
-
-}
-
-
-/* =========================================================
+/* ==========================================================
    PAGE
-========================================================= */
+========================================================== */
 
-.restaurant-page{
+.restaurant-detail-page {
 
-    max-width:1250px;
+    max-width: 1500px;
 
-    margin:35px auto;
+    margin: 0 auto;
 
     padding:
-        0 20px 60px;
-
+        25px 4%
+        70px;
 }
 
 
-/* =========================================================
-   BREADCRUMB
-========================================================= */
+/* ==========================================================
+   BACK BUTTON
+========================================================== */
 
-.breadcrumb{
+.restaurant-back {
 
-    margin-bottom:18px;
+    display: inline-flex;
 
-    font-size:13px;
+    align-items: center;
 
-    color:#888;
+    gap: 8px;
 
+    color: #ed0038;
+
+    text-decoration: none;
+
+    font-size: 13px;
+
+    font-weight: 700;
+
+    margin-bottom: 18px;
+}
+
+.restaurant-back:hover {
+    color: #c90031;
 }
 
 
-.breadcrumb a{
+/* ==========================================================
+   HERO
+========================================================== */
 
-    color:#ed1747;
+.restaurant-detail-hero {
 
-    font-weight:600;
+    position: relative;
 
-}
-
-
-.breadcrumb i{
-
-    margin:
-        0 7px;
-
-    font-size:10px;
-
-}
-
-
-/* =========================================================
-   RESTAURANT HERO
-========================================================= */
-
-.restaurant-hero{
-
-    background:#fff;
-
-    border-radius:20px;
-
-    overflow:hidden;
-
-    box-shadow:
-        0 10px 30px rgba(0,0,0,.07);
+    background: #ffffff;
 
     border:
-        1px solid #eee;
+        1px solid #eeeeee;
 
-    display:grid;
+    border-radius: 18px;
 
-    grid-template-columns:
-        43% 57%;
+    overflow: hidden;
 
-    min-height:330px;
-
+    box-shadow:
+        0 8px 28px
+        rgba(40,10,20,.07);
 }
 
 
-.restaurant-hero-image{
+/* ==========================================================
+   TOP RESTAURANT COVER
+========================================================== */
 
-    min-height:330px;
+.restaurant-main-image {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 360px;
+
+    overflow: hidden;
 
     background:
         linear-gradient(
             135deg,
-            #ffe3ed,
-            #fff
+            #fff0f5,
+            #ffffff
         );
-
-    overflow:hidden;
-
 }
 
 
-.restaurant-hero-image img{
+.restaurant-main-image img {
 
-    width:100%;
+    width: 100%;
 
-    height:100%;
+    height: 100%;
 
-    min-height:330px;
+    object-fit: cover;
 
-    object-fit:cover;
-
-    display:block;
-
+    display: block;
 }
 
 
-.restaurant-image-placeholder{
+/*
+|--------------------------------------------------------------------------
+| IMAGE OVERLAY
+|--------------------------------------------------------------------------
+*/
 
-    width:100%;
+.restaurant-main-image::after {
 
-    height:100%;
+    content: "";
 
-    min-height:330px;
+    position: absolute;
 
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    color:#ed1747;
-
-    font-size:70px;
+    inset: 0;
 
     background:
         linear-gradient(
-            135deg,
-            #ffe1eb,
-            #fff
+            to bottom,
+            rgba(0,0,0,.03),
+            rgba(0,0,0,.08) 35%,
+            rgba(0,0,0,.58) 100%
         );
 
+    pointer-events: none;
 }
 
 
-.restaurant-hero-info{
+/* ==========================================================
+   EMPTY IMAGE
+========================================================== */
+
+.restaurant-image-empty {
+
+    width: 100%;
+
+    height: 100%;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    color: #ed0038;
+
+    font-size: 75px;
+}
+
+
+/* ==========================================================
+   RESTAURANT INFO
+========================================================== */
+
+.restaurant-main-info {
+
+    position: relative;
 
     padding:
-        38px 40px;
+        28px 40px 35px;
 
-    display:flex;
-
-    flex-direction:column;
-
-    justify-content:center;
-
+    background: #ffffff;
 }
 
 
-.restaurant-badge{
+/* ==========================================================
+   LABEL
+========================================================== */
 
-    display:inline-flex;
+.restaurant-label {
 
-    align-items:center;
+    display: inline-flex;
 
-    gap:7px;
+    align-items: center;
 
-    width:max-content;
+    gap: 7px;
 
     padding:
         7px 12px;
 
-    border-radius:20px;
+    border-radius: 20px;
 
-    background:#fff0f5;
+    background: #fff0f5;
 
-    color:#ed1747;
+    color: #ed0038;
 
-    font-size:12px;
+    font-size: 11px;
 
-    font-weight:700;
+    font-weight: 800;
 
-    margin-bottom:12px;
-
+    margin-bottom: 12px;
 }
 
 
-.restaurant-hero-info h1{
+/* ==========================================================
+   NAME
+========================================================== */
 
-    margin:0;
+.restaurant-main-info h1 {
 
-    color:#222;
+    margin: 0;
 
-    font-size:38px;
+    color: #222222;
 
-    line-height:1.15;
+    font-size: 34px;
 
-    font-weight:800;
+    line-height: 1.15;
 
+    font-weight: 800;
 }
 
 
-.restaurant-description{
+/* ==========================================================
+   DESCRIPTION
+========================================================== */
+
+.restaurant-description {
 
     margin:
         12px 0 20px;
 
-    color:#666;
+    color: #666666;
 
-    font-size:15px;
+    font-size: 14px;
 
-    line-height:1.6;
+    line-height: 1.65;
 
-    max-width:620px;
-
+    max-width: 900px;
 }
 
 
-.restaurant-stats{
+/* ==========================================================
+   STATS
+========================================================== */
 
-    display:flex;
+.restaurant-stats {
 
-    flex-wrap:wrap;
+    display: flex;
 
-    gap:10px;
+    flex-wrap: wrap;
 
-    margin-bottom:22px;
+    gap: 10px;
 
+    margin-bottom: 18px;
 }
 
 
-.restaurant-stat{
+.restaurant-stat {
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    gap:7px;
+    gap: 7px;
 
     padding:
         9px 12px;
 
-    background:#f8f9fb;
+    background: #fafafa;
 
     border:
-        1px solid #eee;
+        1px solid #eeeeee;
 
-    border-radius:10px;
+    border-radius: 9px;
 
-    color:#555;
+    color: #555555;
 
-    font-size:12px;
+    font-size: 12px;
 
-    font-weight:600;
-
+    font-weight: 600;
 }
 
 
-.restaurant-stat i{
-
-    color:#ed1747;
-
+.restaurant-stat i {
+    color: #ed0038;
 }
 
 
-.restaurant-stat.rating i{
-
-    color:#f5a623;
-
+.restaurant-stat.rating i {
+    color: #f5a623;
 }
 
 
-.restaurant-details-row{
+/* ==========================================================
+   ADDRESS
+========================================================== */
 
-    display:flex;
+.restaurant-address {
 
-    flex-wrap:wrap;
+    display: flex;
 
-    gap:18px;
+    align-items: flex-start;
 
-    color:#666;
+    gap: 8px;
 
-    font-size:13px;
+    color: #666666;
 
+    font-size: 13px;
+
+    line-height: 1.5;
 }
 
 
-.restaurant-detail{
+.restaurant-address i {
 
-    display:flex;
+    color: #ed0038;
 
-    align-items:center;
-
-    gap:7px;
-
+    margin-top: 3px;
 }
 
 
-.restaurant-detail i{
+/* ==========================================================
+   DELIVERY FEE
+========================================================== */
 
-    color:#ed1747;
+.delivery-fee-box {
 
-}
-
-
-/* =========================================================
-   MENU AREA
-========================================================= */
-
-.menu-section{
-
-    margin-top:35px;
-
-}
-
-
-.menu-heading{
-
-    display:flex;
-
-    align-items:end;
-
-    justify-content:space-between;
-
-    gap:20px;
-
-    margin-bottom:18px;
-
-}
-
-
-.menu-heading h2{
-
-    margin:0;
-
-    color:#222;
-
-    font-size:28px;
-
-    font-weight:800;
-
-}
-
-
-.menu-heading p{
-
-    margin:5px 0 0;
-
-    color:#777;
-
-    font-size:13px;
-
-}
-
-
-.menu-categories{
-
-    display:flex;
-
-    gap:8px;
-
-    flex-wrap:wrap;
-
-    margin-bottom:20px;
-
-}
-
-
-.category-tab{
-
-    border:1px solid #eee;
-
-    background:#fff;
-
-    color:#555;
+    margin-top: 18px;
 
     padding:
-        9px 16px;
+        13px 15px;
 
-    border-radius:20px;
-
-    font-size:12px;
-
-    font-weight:700;
-
-    cursor:pointer;
-
-    transition:.2s;
-
-}
-
-
-.category-tab:hover,
-.category-tab.active{
-
-    background:
-        linear-gradient(
-            90deg,
-            #ed0a3f,
-            #ff6294
-        );
-
-    color:#fff;
-
-    border-color:transparent;
-
-}
-
-
-/* =========================================================
-   MENU GRID
-========================================================= */
-
-.menu-grid{
-
-    display:grid;
-
-    grid-template-columns:
-        repeat(2,1fr);
-
-    gap:18px;
-
-}
-
-
-.menu-card{
-
-    background:#fff;
-
-    border-radius:16px;
+    background: #fff7f9;
 
     border:
-        1px solid #eee;
+        1px solid #f5ccd8;
 
-    box-shadow:
-        0 7px 22px rgba(0,0,0,.05);
+    border-radius: 10px;
 
-    padding:14px;
+    display: flex;
 
-    display:grid;
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 15px;
+}
+
+
+.delivery-fee-label {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    color: #555555;
+
+    font-size: 13px;
+
+    font-weight: 600;
+}
+
+
+.delivery-fee-label i {
+    color: #ed0038;
+}
+
+
+.delivery-fee-value {
+
+    color: #ed0038;
+
+    font-size: 14px;
+
+    font-weight: 800;
+}
+
+
+/* ==========================================================
+   ALERT
+========================================================== */
+
+.restaurant-alert {
+
+    margin-bottom: 18px;
+
+    padding:
+        12px 15px;
+
+    border-radius: 9px;
+
+    font-size: 13px;
+
+    font-weight: 600;
+}
+
+
+.restaurant-alert.success {
+
+    color: #16743d;
+
+    background: #eafaf0;
+
+    border:
+        1px solid #c9efd8;
+}
+
+
+.restaurant-alert.error {
+
+    color: #b4233a;
+
+    background: #fff0f2;
+
+    border:
+        1px solid #ffd2da;
+}
+
+
+/* ==========================================================
+   MENU SECTION
+========================================================== */
+
+.restaurant-menu-section {
+
+    margin-top: 38px;
+}
+
+
+.restaurant-menu-header {
+
+    display: flex;
+
+    align-items: flex-end;
+
+    justify-content: space-between;
+
+    margin-bottom: 20px;
+}
+
+
+.restaurant-menu-header h2 {
+
+    margin: 0;
+
+    color: #222222;
+
+    font-size: 28px;
+
+    font-weight: 800;
+}
+
+
+.restaurant-menu-header p {
+
+    margin:
+        5px 0 0;
+
+    color: #777777;
+
+    font-size: 13px;
+}
+
+
+/* ==========================================================
+   CATEGORY
+========================================================== */
+
+.menu-category-section {
+
+    margin-bottom: 30px;
+}
+
+
+.menu-category-title {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    margin-bottom: 14px;
+}
+
+
+.menu-category-title h3 {
+
+    margin: 0;
+
+    color: #333333;
+
+    font-size: 20px;
+
+    font-weight: 800;
+}
+
+
+.menu-category-line {
+
+    flex: 1;
+
+    height: 1px;
+
+    background: #eeeeee;
+}
+
+
+/* ==========================================================
+   MENU GRID
+========================================================== */
+
+.menu-items-grid {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, minmax(0,1fr));
+
+    gap: 16px;
+}
+
+
+/* ==========================================================
+   ITEM CARD
+========================================================== */
+
+.menu-item-card {
+
+    background: #ffffff;
+
+    border:
+        1px solid #eeeeee;
+
+    border-radius: 15px;
+
+    padding: 13px;
+
+    display: grid;
 
     grid-template-columns:
         125px 1fr;
 
-    gap:16px;
-
-    transition:
-        transform .2s,
-        box-shadow .2s;
-
-}
-
-
-.menu-card:hover{
-
-    transform:
-        translateY(-3px);
+    gap: 15px;
 
     box-shadow:
-        0 12px 28px rgba(0,0,0,.08);
+        0 5px 20px
+        rgba(40,10,20,.045);
 
+    transition:
+        .2s ease;
 }
 
 
-.menu-image{
+.menu-item-card:hover {
 
-    width:125px;
+    transform:
+        translateY(-2px);
 
-    height:125px;
+    box-shadow:
+        0 9px 25px
+        rgba(40,10,20,.08);
+}
 
-    border-radius:12px;
 
-    overflow:hidden;
+/* ==========================================================
+   ITEM IMAGE
+========================================================== */
+
+.menu-item-image {
+
+    width: 125px;
+
+    height: 125px;
+
+    border-radius: 11px;
+
+    overflow: hidden;
 
     background:
         linear-gradient(
             135deg,
-            #ffe2ec,
-            #fff
+            #fff0f5,
+            #ffffff
         );
 
-    display:flex;
+    display: flex;
 
-    align-items:center;
+    align-items: center;
 
-    justify-content:center;
-
+    justify-content: center;
 }
 
 
-.menu-image img{
+.menu-item-image img {
 
-    width:100%;
+    width: 100%;
 
-    height:100%;
+    height: 100%;
 
-    object-fit:cover;
+    object-fit: cover;
 
+    display: block;
 }
 
 
-.menu-placeholder{
+.menu-item-placeholder {
 
-    color:#ed1747;
+    color: #ed0038;
 
-    font-size:40px;
-
+    font-size: 38px;
 }
 
 
-.menu-info{
+/* ==========================================================
+   ITEM CONTENT
+========================================================== */
 
-    min-width:0;
+.menu-item-content {
 
-    display:flex;
+    min-width: 0;
 
-    flex-direction:column;
+    display: flex;
 
-    justify-content:center;
+    flex-direction: column;
 
+    justify-content: center;
 }
 
 
-.menu-category{
+.menu-item-content h4 {
 
-    color:#ed1747;
+    margin: 0;
 
-    font-size:10px;
+    color: #222222;
 
-    text-transform:uppercase;
+    font-size: 18px;
 
-    letter-spacing:.5px;
-
-    font-weight:800;
-
-    margin-bottom:5px;
-
+    font-weight: 700;
 }
 
 
-.menu-info h3{
-
-    margin:0;
-
-    color:#222;
-
-    font-size:18px;
-
-    font-weight:800;
-
-}
-
-
-.menu-info p{
+.menu-item-description {
 
     margin:
         6px 0 12px;
 
-    color:#777;
+    color: #777777;
 
-    font-size:12px;
+    font-size: 12px;
 
-    line-height:1.45;
+    line-height: 1.5;
 
+    display:
+        -webkit-box;
+
+    -webkit-line-clamp: 2;
+
+    -webkit-box-orient: vertical;
+
+    overflow: hidden;
 }
 
 
-.menu-bottom{
+/* ==========================================================
+   ITEM BOTTOM
+========================================================== */
 
-    display:flex;
+.menu-item-bottom {
 
-    align-items:center;
+    display: flex;
 
-    justify-content:space-between;
+    align-items: center;
 
-    gap:10px;
+    justify-content: space-between;
 
+    gap: 10px;
 }
 
 
-.menu-price{
+.menu-item-price {
 
-    color:#222;
+    color: #ed0038;
 
-    font-size:16px;
+    font-size: 17px;
 
-    font-weight:800;
+    font-weight: 800;
 
-    white-space:nowrap;
-
+    white-space: nowrap;
 }
 
 
-.add-cart-form{
+/* ==========================================================
+   QUANTITY
+========================================================== */
 
-    margin:0;
+.quantity-control {
 
+    display: inline-flex;
+
+    align-items: center;
+
+    border:
+        1px solid #eeeeee;
+
+    border-radius: 8px;
+
+    overflow: hidden;
+
+    background: #ffffff;
 }
 
 
-.add-cart-btn{
+.quantity-control button {
 
-    border:none;
+    width: 31px;
 
-    background:
-        linear-gradient(
-            90deg,
-            #ed0a3f,
-            #f64c7d
-        );
+    height: 31px;
 
-    color:#fff;
+    border: 0;
 
-    border-radius:9px;
+    background: #fff5f7;
 
-    padding:
-        9px 13px;
+    color: #ed0038;
 
-    display:inline-flex;
+    cursor: pointer;
 
-    align-items:center;
-
-    gap:6px;
-
-    font-size:11px;
-
-    font-weight:800;
-
-    cursor:pointer;
-
-    transition:.2s;
-
+    font-size: 12px;
 }
 
 
-.add-cart-btn:hover{
+.quantity-control button:hover {
+
+    background: #ed0038;
+
+    color: #ffffff;
+}
+
+
+.quantity-control input {
+
+    width: 35px;
+
+    height: 31px;
+
+    border: 0;
+
+    border-left:
+        1px solid #eeeeee;
+
+    border-right:
+        1px solid #eeeeee;
+
+    outline: none;
+
+    text-align: center;
+
+    font-size: 12px;
+
+    font-weight: 700;
+
+    color: #333333;
+}
+
+
+/* ==========================================================
+   ADD CART
+========================================================== */
+
+.add-cart-button {
+
+    margin-top: 10px;
+
+    width: 100%;
+
+    min-height: 38px;
+
+    border: 0;
+
+    border-radius: 8px;
+
+    background: #ed0038;
+
+    color: #ffffff;
+
+    cursor: pointer;
+
+    font-size: 12px;
+
+    font-weight: 800;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    gap: 7px;
+
+    transition: .2s ease;
+}
+
+
+.add-cart-button:hover {
+
+    background: #d90035;
 
     transform:
         translateY(-1px);
-
-    box-shadow:
-        0 5px 12px
-        rgba(237,10,63,.22);
-
 }
 
 
-/* =========================================================
-   ALERTS
-========================================================= */
-
-.page-message{
-
-    padding:
-        13px 16px;
-
-    border-radius:10px;
-
-    margin-bottom:18px;
-
-    font-size:13px;
-
-    font-weight:600;
-
-}
-
-
-.page-message.success{
-
-    background:#eafaf0;
-
-    color:#16743d;
-
-    border:
-        1px solid #c9efd8;
-
-}
-
-
-.page-message.error{
-
-    background:#fff0f2;
-
-    color:#b4233a;
-
-    border:
-        1px solid #ffd2da;
-
-}
-
-
-/* =========================================================
+/* ==========================================================
    EMPTY MENU
-========================================================= */
+========================================================== */
 
-.empty-menu{
+.empty-menu {
 
-    background:#fff;
-
-    border-radius:18px;
-
-    padding:60px 20px;
-
-    text-align:center;
+    background: #ffffff;
 
     border:
-        1px solid #eee;
+        1px solid #eeeeee;
 
-    box-shadow:
-        0 8px 25px rgba(0,0,0,.05);
-
-}
-
-
-.empty-menu i{
-
-    font-size:55px;
-
-    color:#ed1747;
-
-    margin-bottom:15px;
-
-}
-
-
-.empty-menu h3{
-
-    margin:0;
-
-    color:#222;
-
-    font-size:22px;
-
-}
-
-
-.empty-menu p{
-
-    color:#777;
-
-    font-size:14px;
-
-}
-
-
-/* =========================================================
-   RESTAURANT NOT FOUND
-========================================================= */
-
-.not-found{
-
-    background:#fff;
-
-    border-radius:20px;
-
-    padding:80px 20px;
-
-    text-align:center;
-
-    box-shadow:
-        0 10px 30px rgba(0,0,0,.06);
-
-}
-
-
-.not-found i{
-
-    font-size:65px;
-
-    color:#ed1747;
-
-    margin-bottom:18px;
-
-}
-
-
-.not-found h1{
-
-    margin:0;
-
-    font-size:30px;
-
-}
-
-
-.not-found p{
-
-    color:#777;
-
-    margin:10px 0 25px;
-
-}
-
-
-.back-btn{
-
-    display:inline-flex;
-
-    align-items:center;
-
-    gap:7px;
+    border-radius: 15px;
 
     padding:
-        11px 18px;
+        55px 20px;
 
-    border-radius:10px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #ed0a3f,
-            #ff6294
-        );
-
-    color:#fff;
-
-    font-size:13px;
-
-    font-weight:700;
-
+    text-align: center;
 }
 
 
-/* =========================================================
-   FOOTER
-========================================================= */
+.empty-menu i {
 
-.hf-footer{
+    color: #ed0038;
 
-    margin-top:20px;
+    font-size: 48px;
 
-    background:#222;
-
-    color:#fff;
-
+    margin-bottom: 15px;
 }
 
 
-.hf-footer-inner{
-
-    max-width:1250px;
-
-    margin:auto;
-
-    padding:
-        45px 20px;
-
-    display:grid;
-
-    grid-template-columns:
-        repeat(4,1fr);
-
-    gap:30px;
-
-}
-
-
-.hf-footer-column h3{
+.empty-menu h3 {
 
     margin:
-        0 0 15px;
+        0 0 7px;
 
-    font-size:17px;
+    color: #333333;
 
+    font-size: 21px;
 }
 
 
-.hf-footer-column ul{
+.empty-menu p {
 
-    list-style:none;
+    margin: 0;
 
-    padding:0;
+    color: #777777;
 
-    margin:0;
-
+    font-size: 13px;
 }
 
 
-.hf-footer-column li{
+/* ==========================================================
+   RESPONSIVE
+========================================================== */
 
-    margin-bottom:9px;
+@media (max-width: 1000px) {
 
-}
+    .menu-items-grid {
 
-
-.hf-footer-column a{
-
-    color:#bbb;
-
-    font-size:13px;
-
-}
-
-
-.hf-footer-column a:hover{
-
-    color:#ff6294;
-
-}
-
-
-.hf-social{
-
-    display:flex;
-
-    gap:9px;
-
-    margin-top:15px;
-
-}
-
-
-.hf-social a{
-
-    width:35px;
-
-    height:35px;
-
-    border-radius:50%;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    background:#333;
-
-    color:#fff;
-
-    transition:.2s;
-
-}
-
-
-.hf-social a:hover{
-
-    background:#ed1747;
-
-    color:#fff;
-
-}
-
-
-.hf-copyright{
-
-    border-top:
-        1px solid #444;
-
-    text-align:center;
-
-    padding:
-        18px 15px;
-
-    color:#aaa;
-
-    font-size:12px;
-
-}
-
-
-.hf-copyright p{
-
-    margin:0;
-
-}
-
-
-/* =========================================================
-   MOBILE
-========================================================= */
-
-@media(max-width:1000px){
-
-    .hf-search{
-
-        width:280px;
-
-    }
-
-
-    .restaurant-hero{
-
-        grid-template-columns:1fr;
-
-    }
-
-
-    .restaurant-hero-image{
-
-        min-height:280px;
-
-    }
-
-
-    .restaurant-hero-image img{
-
-        min-height:280px;
-
-    }
-
-
-    .restaurant-image-placeholder{
-
-        min-height:280px;
-
-    }
-
-
-    .menu-grid{
-
-        grid-template-columns:1fr;
-
+        grid-template-columns: 1fr;
     }
 
 }
 
 
-@media(max-width:760px){
+@media (max-width: 700px) {
 
-    .hf-top{
-
-        flex-wrap:wrap;
+    .restaurant-detail-page {
 
         padding:
-            12px 15px;
-
+            20px 15px
+            45px;
     }
 
 
-    .hf-search{
+    .restaurant-main-image {
 
-        order:3;
-
-        width:100%;
-
+        height: 260px;
     }
 
 
-    .hf-actions{
-
-        gap:10px;
-
-    }
-
-
-    .hf-nav-inner{
-
-        overflow-x:auto;
-
-        justify-content:flex-start;
-
-    }
-
-
-    .hf-nav ul{
-
-        gap:22px;
-
-        white-space:nowrap;
-
-    }
-
-
-    .restaurant-page{
-
-        margin-top:25px;
+    .restaurant-main-info {
 
         padding:
-            0 12px 45px;
-
+            25px 22px 28px;
     }
 
 
-    .restaurant-hero-info{
+    .restaurant-main-info h1 {
 
-        padding:
-            28px 22px;
-
+        font-size: 29px;
     }
 
 
-    .restaurant-hero-info h1{
+    .restaurant-menu-header {
 
-        font-size:30px;
-
+        display: block;
     }
 
 
-    .menu-heading{
+    .restaurant-menu-header h2 {
 
-        display:block;
-
-    }
-
-
-    .menu-heading h2{
-
-        font-size:24px;
-
-    }
-
-
-    .hf-footer-inner{
-
-        grid-template-columns:
-            repeat(2,1fr);
-
+        font-size: 24px;
     }
 
 }
 
 
-@media(max-width:520px){
+@media (max-width: 500px) {
 
-    .hf-logo{
+    .restaurant-main-image {
 
-        font-size:20px;
-
+        height: 220px;
     }
 
 
-    .hf-actions .user-name{
+    .restaurant-main-info h1 {
 
-        display:none;
-
+        font-size: 26px;
     }
 
 
-    .restaurant-hero-image{
+    .restaurant-stats {
 
-        min-height:220px;
-
-    }
-
-
-    .restaurant-hero-image img{
-
-        min-height:220px;
-
-    }
-
-
-    .restaurant-image-placeholder{
-
-        min-height:220px;
-
-    }
-
-
-    .restaurant-hero-info h1{
-
-        font-size:27px;
-
-    }
-
-
-    .restaurant-description{
-
-        font-size:13px;
-
-    }
-
-
-    .restaurant-stats{
-
-        display:grid;
+        display: grid;
 
         grid-template-columns:
             1fr 1fr;
-
     }
 
 
-    .menu-card{
+    .menu-item-card {
 
-        grid-template-columns:
-            95px 1fr;
-
-        gap:12px;
-
-        padding:11px;
-
+        grid-template-columns: 1fr;
     }
 
 
-    .menu-image{
+    .menu-item-image {
 
-        width:95px;
+        width: 100%;
 
-        height:105px;
-
+        height: 190px;
     }
 
 
-    .menu-info h3{
+    .menu-item-bottom {
 
-        font-size:15px;
-
-    }
-
-
-    .menu-info p{
-
-        font-size:11px;
-
-    }
-
-
-    .menu-bottom{
-
-        align-items:flex-end;
-
-    }
-
-
-    .menu-price{
-
-        font-size:14px;
-
-    }
-
-
-    .add-cart-btn{
-
-        padding:
-            8px 9px;
-
-        font-size:10px;
-
-    }
-
-
-    .hf-footer-inner{
-
-        grid-template-columns:1fr;
-
+        flex-wrap: wrap;
     }
 
 }
 
-</style>
+    </style>
 
 </head>
-
 
 <body>
 
 
-<!-- =========================================================
-     HEADER
-========================================================= -->
+<?php
 
-<header class="hf-header">
+/*
+|--------------------------------------------------------------------------
+| CUSTOMER HEADER
+|--------------------------------------------------------------------------
+*/
 
+require_once
+    __DIR__
+    . '/includes/customer-header.php';
 
-    <div class="hf-top">
+?>
 
 
-        <a
-            href="index.php"
-            class="hf-logo"
-        >
+<main class="restaurant-detail-page">
 
-            <i class="fas fa-utensils"></i>
 
-            Humsafar
+    <!-- ======================================================
+         BACK
+    ======================================================= -->
 
-        </a>
+    <a
+        href="restaurants.php"
+        class="restaurant-back"
+    >
 
+        <i class="fas fa-arrow-left"></i>
 
-        <div class="hf-search">
+        Back to Restaurants
 
-            <input
-                type="text"
-                placeholder="Search for restaurants or food..."
-                id="header-search"
-            >
+    </a>
 
-            <i class="fas fa-search"></i>
 
-        </div>
+    <!-- ======================================================
+         ALERT
+    ======================================================= -->
 
+    <?php if ($message !== '') { ?>
 
-        <div class="hf-actions">
+        <div class="restaurant-alert success">
 
-
-            <a
-                href="cart.php"
-                class="cart-link"
-            >
-
-                <i
-                    class="fas fa-shopping-cart"
-                ></i>
-
-                Cart
-
-                <?php if ($cartCount > 0) { ?>
-
-                    <span class="cart-count">
-
-                        <?php
-                            echo $cartCount;
-                        ?>
-
-                    </span>
-
-                <?php } ?>
-
-            </a>
-
-
-            <?php if ($userId > 0) { ?>
-
-                <div class="hf-user">
-
-                    <i class="fas fa-user"></i>
-
-                    <span class="user-name">
-
-                        <?php
-                            echo h(
-                                $userName !== ''
-                                    ? $userName
-                                    : 'My Account'
-                            );
-                        ?>
-
-                    </span>
-
-                </div>
-
-
-                <a
-                    href="logout.php"
-                    class="hf-logout"
-                >
-
-                    Logout
-
-                </a>
-
-
-            <?php } else { ?>
-
-                <a
-                    href="login.php"
-                >
-
-                    Sign In
-
-                </a>
-
-
-                <a
-                    href="register.php"
-                    class="hf-logout"
-                >
-
-                    Sign Up
-
-                </a>
-
-            <?php } ?>
-
-
-        </div>
-
-
-    </div>
-
-
-    <nav class="hf-nav">
-
-        <div class="hf-nav-inner">
-
-            <ul>
-
-                <li>
-                    <a href="index.php">
-                        Home
-                    </a>
-                </li>
-
-                <li>
-                    <a href="restaurants.php">
-                        Restaurants
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Deals
-                    </a>
-                </li>
-
-                <li>
-                    <a href="customer/dashboard.php">
-                        My Account
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Help
-                    </a>
-                </li>
-
-
-            </ul>
-
-        </div>
-
-    </nav>
-
-
-</header>
-
-
-<!-- =========================================================
-     MAIN
-========================================================= -->
-
-<main class="restaurant-page">
-
-
-<?php if (!$restaurant) { ?>
-
-
-    <!-- NOT FOUND -->
-
-    <div class="not-found">
-
-        <i
-            class="fas fa-store-slash"
-        ></i>
-
-        <h1>
-            Restaurant Not Found
-        </h1>
-
-        <p>
-            The restaurant you are looking for
-            is not available right now.
-        </p>
-
-        <a
-            href="restaurants.php"
-            class="back-btn"
-        >
-
-            <i
-                class="fas fa-arrow-left"
-            ></i>
-
-            Back to Restaurants
-
-        </a>
-
-    </div>
-
-
-<?php } else { ?>
-
-
-    <!-- =====================================================
-         BREADCRUMB
-    ====================================================== -->
-
-    <div class="breadcrumb">
-
-        <a href="index.php">
-            Home
-        </a>
-
-        <i class="fas fa-chevron-right"></i>
-
-        <a href="restaurants.php">
-            Restaurants
-        </a>
-
-        <i class="fas fa-chevron-right"></i>
-
-        <?php
-            echo h($restaurantName);
-        ?>
-
-    </div>
-
-
-    <!-- =====================================================
-         SUCCESS / ERROR
-    ====================================================== -->
-
-    <?php if ($cartMessage !== '') { ?>
-
-        <div class="page-message success">
-
-            <i
-                class="fas fa-check-circle"
-            ></i>
+            <i class="fas fa-circle-check"></i>
 
             <?php
-                echo h($cartMessage);
-            ?>
-
-            &nbsp;
-
-            <a
-                href="cart.php"
-                style="
-                    color:#16743d;
-                    text-decoration:underline;
-                "
-            >
-                View Cart
-            </a>
-
-        </div>
-
-    <?php } ?>
-
-
-    <?php if ($cartError !== '') { ?>
-
-        <div class="page-message error">
-
-            <i
-                class="fas fa-exclamation-circle"
-            ></i>
-
-            <?php
-                echo h($cartError);
+            echo restaurant_h($message);
             ?>
 
         </div>
@@ -2467,221 +1794,258 @@ a{
     <?php } ?>
 
 
-    <!-- =====================================================
+    <?php if ($error !== '') { ?>
+
+        <div class="restaurant-alert error">
+
+            <i class="fas fa-circle-exclamation"></i>
+
+            <?php
+            echo restaurant_h($error);
+            ?>
+
+        </div>
+
+    <?php } ?>
+
+
+    <!-- ======================================================
          RESTAURANT HERO
-    ====================================================== -->
+    ======================================================= -->
 
-    <section class="restaurant-hero">
-
-
-        <!-- IMAGE -->
-
-        <div class="restaurant-hero-image">
+    <section class="restaurant-detail-hero">
 
 
-            <?php if ($restaurantImage !== '') { ?>
+        <!-- ==================================================
+             TOP BACKGROUND IMAGE
+        =================================================== -->
+
+        <div class="restaurant-main-image">
+
+            <?php if ($restaurantImageUrl !== '') { ?>
 
                 <img
-                    src="assets/images/restaurants/<?php
-                        echo h($restaurantImage);
+                    src="<?php
+                    echo restaurant_h(
+                        $restaurantImageUrl
+                    );
                     ?>"
                     alt="<?php
-                        echo h($restaurantName);
+                    echo restaurant_h(
+                        $restaurantName
+                    );
                     ?>"
                 >
 
             <?php } else { ?>
 
-                <div
-                    class="restaurant-image-placeholder"
-                >
+                <div class="restaurant-image-empty">
 
-                    <i
-                        class="fas fa-store"
-                    ></i>
+                    <i class="fas fa-utensils"></i>
 
                 </div>
 
             <?php } ?>
 
-
         </div>
 
 
-        <!-- INFO -->
+        <!-- ==================================================
+             RESTAURANT INFORMATION
+        =================================================== -->
 
-        <div class="restaurant-hero-info">
+        <div class="restaurant-main-info">
 
 
-            <div class="restaurant-badge">
+            <span class="restaurant-label">
 
-                <i
-                    class="fas fa-utensils"
-                ></i>
+                <i class="fas fa-store"></i>
 
                 Restaurant
 
-            </div>
+            </span>
 
 
             <h1>
 
                 <?php
-                    echo h($restaurantName);
+                echo restaurant_h(
+                    $restaurantName
+                );
                 ?>
 
             </h1>
 
 
-            <p
-                class="restaurant-description"
-            >
+            <?php if (
+                $restaurantDescription !== ''
+            ) { ?>
 
-                <?php
-                    echo h(
+                <p class="restaurant-description">
+
+                    <?php
+                    echo restaurant_h(
                         $restaurantDescription
                     );
-                ?>
+                    ?>
 
-            </p>
+                </p>
 
+            <?php } ?>
+
+
+            <!-- ==================================================
+                 RESTAURANT STATS
+            =================================================== -->
 
             <div class="restaurant-stats">
 
 
-                <div
-                    class="restaurant-stat rating"
-                >
+                <div class="restaurant-stat rating">
 
-                    <i
-                        class="fas fa-star"
-                    ></i>
+                    <i class="fas fa-star"></i>
 
-                    <strong>
+                    <span>
 
                         <?php
-                            echo number_format(
-                                $restaurantRating,
-                                1
-                            );
+                        echo number_format(
+                            $restaurantRating,
+                            1
+                        );
                         ?>
 
-                    </strong>
-
-                    Rating
+                    </span>
 
                 </div>
 
 
-                <div
-                    class="restaurant-stat"
-                >
+                <div class="restaurant-stat">
 
-                    <i
-                        class="fas fa-clock"
-                    ></i>
+                    <i class="fas fa-clock"></i>
 
-                    <?php
-                        echo h(
-                            $deliveryTime
-                        );
-                    ?>
+                    <span>
+
+                        <?php
+                        echo $deliveryTime !== ''
+                            ? restaurant_h(
+                                $deliveryTime
+                            )
+                            : 'Delivery time not set';
+                        ?>
+
+                    </span>
+
+                </div>
+
+
+                <div class="restaurant-stat">
+
+                    <i class="fas fa-motorcycle"></i>
+
+                    <span>
+                        Delivery Available
+                    </span>
 
                 </div>
 
 
-                <div
-                    class="restaurant-stat"
-                >
+                <?php if (
+                    $restaurantPhone !== ''
+                ) { ?>
 
-                    <i
-                        class="fas fa-motorcycle"
-                    ></i>
+                    <div class="restaurant-stat">
 
-                    Rs.
-                    <?php
-                        echo number_format(
-                            $deliveryFee,
-                            0
-                        );
-                    ?>
+                        <i class="fas fa-phone"></i>
 
-                    Delivery
+                        <span>
 
-                </div>
+                            <?php
+                            echo restaurant_h(
+                                $restaurantPhone
+                            );
+                            ?>
+
+                        </span>
+
+                    </div>
+
+                <?php } ?>
 
 
             </div>
 
 
-            <div
-                class="restaurant-details-row"
-            >
+            <!-- ==================================================
+                 ADDRESS
+            =================================================== -->
 
+            <?php if (
+                $restaurantAddress !== ''
+            ) { ?>
 
-                <?php if ($restaurantAddress !== '') { ?>
+                <div class="restaurant-address">
 
-                    <div
-                        class="restaurant-detail"
-                    >
+                    <i class="fas fa-location-dot"></i>
 
-                        <i
-                            class="fas fa-location-dot"
-                        ></i>
-
-                        <?php
-                            echo h(
-                                $restaurantAddress
-                            );
-                        ?>
-
-                    </div>
-
-                <?php } ?>
-
-
-                <?php if ($restaurantPhone !== '') { ?>
-
-                    <div
-                        class="restaurant-detail"
-                    >
-
-                        <i
-                            class="fas fa-phone"
-                        ></i>
+                    <span>
 
                         <?php
-                            echo h(
-                                $restaurantPhone
-                            );
+                        echo restaurant_h(
+                            $restaurantAddress
+                        );
                         ?>
 
-                    </div>
+                    </span>
 
-                <?php } ?>
+                </div>
 
+            <?php } ?>
+
+
+            <!-- ==================================================
+                 DELIVERY FEE
+            =================================================== -->
+
+            <div class="delivery-fee-box">
+
+                <div class="delivery-fee-label">
+
+                    <i class="fas fa-truck"></i>
+
+                    Delivery Fee
+
+                </div>
+
+
+                <div class="delivery-fee-value">
+
+                    Rs.
+
+                    <?php
+                    echo number_format(
+                        $deliveryFee,
+                        2
+                    );
+                    ?>
+
+                </div>
 
             </div>
 
 
         </div>
 
-
     </section>
 
 
-    <!-- =====================================================
+    <!-- ======================================================
          MENU
-    ====================================================== -->
+    ======================================================= -->
 
-    <section
-        class="menu-section"
-        id="menu"
-    >
+    <section class="restaurant-menu-section">
 
 
-        <div class="menu-heading">
-
+        <div class="restaurant-menu-header">
 
             <div>
 
@@ -2690,307 +2054,358 @@ a{
                 </h2>
 
                 <p>
-                    Choose your favorite food
-                    and add it to your cart.
+
+                    Choose your favourite food from
+
+                    <?php
+                    echo restaurant_h(
+                        $restaurantName
+                    );
+                    ?>
+
                 </p>
 
             </div>
 
-
         </div>
 
 
-        <?php if (!empty($menuCategories)) { ?>
+        <?php if (
+            !empty($categories)
+        ) { ?>
 
 
-            <div class="menu-categories">
+            <?php foreach (
+                $categories as $categoryName => $items
+            ) { ?>
 
 
-                <button
-                    type="button"
-                    class="category-tab active"
-                    data-category="all"
-                >
-
-                    All
-
-                </button>
+                <div class="menu-category-section">
 
 
-                <?php foreach (
-                    $menuCategories
-                    as $category
-                ) { ?>
+                    <div class="menu-category-title">
 
-                    <button
-                        type="button"
-                        class="category-tab"
-                        data-category="<?php
-                            echo h(
-                                strtolower(
-                                    $category
-                                )
+                        <h3>
+
+                            <?php
+                            echo restaurant_h(
+                                $categoryName
                             );
-                        ?>"
-                    >
+                            ?>
 
-                        <?php
-                            echo h(
-                                $category
-                            );
-                        ?>
+                        </h3>
 
-                    </button>
+                        <div class="menu-category-line"></div>
 
-                <?php } ?>
+                    </div>
 
 
-            </div>
+                    <div class="menu-items-grid">
 
 
-        <?php } ?>
+                        <?php foreach (
+                            $items as $item
+                        ) { ?>
 
 
-        <?php if (!empty($menuItems)) { ?>
+                            <?php
 
+                            /*
+                            |--------------------------------------------------------------------------
+                            | ITEM IMAGE
+                            |--------------------------------------------------------------------------
+                            |
+                            | Restaurant owner uploads item images here:
+                            |
+                            | assets/images/restaurants/
+                            |
+                            */
 
-            <div class="menu-grid">
-
-
-                <?php foreach (
-                    $menuItems
-                    as $item
-                ) { ?>
-
-
-                    <?php
-
-                    $itemCategory =
-                        trim(
-                            $item['category']
-                            ?? ''
-                        );
-
-                    if (
-                        $itemCategory === ''
-                    ) {
-
-                        $itemCategory =
-                            'Menu';
-
-                    }
-
-
-                    $itemImage =
-                        $item['image']
-                        ?? '';
-
-
-                    $itemDescription =
-                        $item['description']
-                        ?? '';
-
-
-                    $itemPrice =
-                        (float)(
-                            $item['price']
-                            ?? 0
-                        );
-
-                    ?>
-
-
-                    <article
-                        class="menu-card"
-                        data-category="<?php
-                            echo h(
-                                strtolower(
-                                    $itemCategory
-                                )
-                            );
-                        ?>"
-                    >
-
-
-                        <!-- ITEM IMAGE -->
-
-                        <div
-                            class="menu-image"
-                        >
-
-
-                            <?php if (
-                                $itemImage !== ''
-                            ) { ?>
-
-                                <img
-                                    src="assets/images/menu/<?php
-                                        echo h(
-                                            $itemImage
-                                        );
-                                    ?>"
-                                    alt="<?php
-                                        echo h(
-                                            $item['name']
-                                        );
-                                    ?>"
-                                    onerror="
-                                        this.style.display='none';
-                                        this.nextElementSibling.style.display='flex';
-                                    "
-                                >
-
-
-                                <div
-                                    class="menu-placeholder"
-                                    style="display:none;"
-                                >
-
-                                    <i
-                                        class="fas fa-utensils"
-                                    ></i>
-
-                                </div>
-
-
-                            <?php } else { ?>
-
-
-                                <div
-                                    class="menu-placeholder"
-                                >
-
-                                    <i
-                                        class="fas fa-utensils"
-                                    ></i>
-
-                                </div>
-
-
-                            <?php } ?>
-
-
-                        </div>
-
-
-                        <!-- ITEM INFO -->
-
-                        <div
-                            class="menu-info"
-                        >
-
-
-                            <div
-                                class="menu-category"
-                            >
-
-                                <?php
-                                    echo h(
-                                        $itemCategory
-                                    );
-                                ?>
-
-                            </div>
-
-
-                            <h3>
-
-                                <?php
-                                    echo h(
-                                        $item['name']
-                                    );
-                                ?>
-
-                            </h3>
-
-
-                            <p>
-
-                                <?php
-
-                                echo h(
-                                    $itemDescription !== ''
-                                        ? $itemDescription
-                                        : 'Delicious food prepared fresh for you.'
+                            $itemImage =
+                                trim(
+                                    (string)
+                                    (
+                                        $item['image']
+                                        ?? ''
+                                    )
                                 );
 
-                                ?>
 
-                            </p>
-
-
-                            <div
-                                class="menu-bottom"
-                            >
+                            $itemImageUrl = '';
 
 
-                                <span
-                                    class="menu-price"
-                                >
+                            if (
+                                $itemImage !== ''
+                            ) {
 
-                                    Rs.
-                                    <?php
-                                        echo number_format(
-                                            $itemPrice,
-                                            0
+                                if (
+                                    preg_match(
+                                        '/^(https?:\/\/|\/|data:)/i',
+                                        $itemImage
+                                    )
+                                ) {
+
+                                    $itemImageUrl =
+                                        $itemImage;
+
+                                } elseif (
+                                    strpos(
+                                        $itemImage,
+                                        'assets/'
+                                    ) === 0
+                                ) {
+
+                                    $itemImageUrl =
+                                        $itemImage;
+
+                                } else {
+
+                                    $itemImageUrl =
+                                        'assets/images/restaurants/'
+                                        . basename(
+                                            $itemImage
                                         );
-                                    ?>
+                                }
+                            }
 
-                                </span>
+                            ?>
 
 
-                                <form
-                                    method="POST"
-                                    class="add-cart-form"
-                                >
+                            <article class="menu-item-card">
 
-                                    <input
-                                        type="hidden"
-                                        name="menu_item_id"
-                                        value="<?php
-                                            echo (int)
+
+                                <!-- ITEM IMAGE -->
+
+                                <div class="menu-item-image">
+
+                                    <?php if (
+                                        $itemImageUrl !== ''
+                                    ) { ?>
+
+                                        <img
+                                            src="<?php
+                                            echo restaurant_h(
+                                                $itemImageUrl
+                                            );
+                                            ?>"
+                                            alt="<?php
+                                            echo restaurant_h(
+                                                $item['name']
+                                            );
+                                            ?>"
+                                            loading="lazy"
+                                            onerror="
+                                                this.style.display='none';
+                                                this.nextElementSibling.style.display='flex';
+                                            "
+                                        >
+
+                                        <div
+                                            class="menu-item-placeholder"
+                                            style="
+                                                display:none;
+                                                width:100%;
+                                                height:100%;
+                                                align-items:center;
+                                                justify-content:center;
+                                            "
+                                        >
+
+                                            <i class="fas fa-utensils"></i>
+
+                                        </div>
+
+                                    <?php } else { ?>
+
+                                        <div class="menu-item-placeholder">
+
+                                            <i class="fas fa-utensils"></i>
+
+                                        </div>
+
+                                    <?php } ?>
+
+                                </div>
+
+
+                                <!-- ITEM CONTENT -->
+
+                                <div class="menu-item-content">
+
+
+                                    <h4>
+
+                                        <?php
+                                        echo restaurant_h(
+                                            $item['name']
+                                        );
+                                        ?>
+
+                                    </h4>
+
+
+                                    <?php if (
+                                        !empty(
+                                            $item['description']
+                                        )
+                                    ) { ?>
+
+                                        <p class="menu-item-description">
+
+                                            <?php
+                                            echo restaurant_h(
+                                                $item['description']
+                                            );
+                                            ?>
+
+                                        </p>
+
+                                    <?php } else { ?>
+
+                                        <p class="menu-item-description">
+
+                                            Delicious food prepared
+                                            fresh for you.
+
+                                        </p>
+
+                                    <?php } ?>
+
+
+                                    <div class="menu-item-bottom">
+
+
+                                        <span class="menu-item-price">
+
+                                            Rs.
+
+                                            <?php
+                                            echo number_format(
+                                                (float)
+                                                $item['price'],
+                                                2
+                                            );
+                                            ?>
+
+                                        </span>
+
+
+                                        <!-- QUANTITY -->
+
+                                        <div class="quantity-control">
+
+
+                                            <button
+                                                type="button"
+                                                onclick="
+                                                    changeQuantity(
+                                                        <?php
+                                                        echo (int)
+                                                        $item['id'];
+                                                        ?>,
+                                                        -1
+                                                    );
+                                                "
+                                            >
+
+                                                <i class="fas fa-minus"></i>
+
+                                            </button>
+
+
+                                            <input
+                                                type="number"
+                                                id="quantity-<?php
+                                                echo (int)
                                                 $item['id'];
-                                        ?>"
+                                                ?>"
+                                                value="1"
+                                                min="1"
+                                                max="99"
+                                                readonly
+                                            >
+
+
+                                            <button
+                                                type="button"
+                                                onclick="
+                                                    changeQuantity(
+                                                        <?php
+                                                        echo (int)
+                                                        $item['id'];
+                                                        ?>,
+                                                        1
+                                                    );
+                                                "
+                                            >
+
+                                                <i class="fas fa-plus"></i>
+
+                                            </button>
+
+
+                                        </div>
+
+                                    </div>
+
+
+                                    <!-- ADD TO CART -->
+
+                                    <form
+                                        method="POST"
+                                        class="add-cart-form"
                                     >
 
-
-                                    <input
-                                        type="hidden"
-                                        name="quantity"
-                                        value="1"
-                                    >
-
-
-                                    <button
-                                        type="submit"
-                                        name="add_to_cart"
-                                        class="add-cart-btn"
-                                    >
-
-                                        <i
-                                            class="fas fa-plus"
-                                        ></i>
-
-                                        Add to Cart
-
-                                    </button>
-
-                                </form>
+                                        <input
+                                            type="hidden"
+                                            name="menu_item_id"
+                                            value="<?php
+                                            echo (int)
+                                            $item['id'];
+                                            ?>"
+                                        >
 
 
-                            </div>
+                                        <input
+                                            type="hidden"
+                                            name="quantity"
+                                            id="hidden-quantity-<?php
+                                            echo (int)
+                                            $item['id'];
+                                            ?>"
+                                            value="1"
+                                        >
 
 
-                        </div>
+                                        <button
+                                            type="submit"
+                                            name="add_to_cart"
+                                            class="add-cart-button"
+                                        >
+
+                                            <i class="fas fa-cart-plus"></i>
+
+                                            Add to Cart
+
+                                        </button>
+
+                                    </form>
 
 
-                    </article>
+                                </div>
+
+                            </article>
 
 
-                <?php } ?>
+                        <?php } ?>
 
 
-            </div>
+                    </div>
+
+                </div>
+
+
+            <?php } ?>
 
 
         <?php } else { ?>
@@ -2998,17 +2413,15 @@ a{
 
             <div class="empty-menu">
 
-                <i
-                    class="fas fa-utensils"
-                ></i>
+                <i class="fas fa-utensils"></i>
 
                 <h3>
                     Menu Not Available
                 </h3>
 
                 <p>
-                    This restaurant currently
-                    has no menu items available.
+                    This restaurant has not added
+                    any menu items yet.
                 </p>
 
             </div>
@@ -3020,302 +2433,127 @@ a{
     </section>
 
 
-<?php } ?>
-
-
 </main>
 
 
-<!-- =========================================================
-     FOOTER
-========================================================= -->
-
-<footer class="hf-footer">
-
-
-    <div class="hf-footer-inner">
-
-
-        <div class="hf-footer-column">
-
-            <h3>
-                Humsafar
-            </h3>
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        About Us
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Careers
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Press
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Blog
-                    </a>
-                </li>
-
-            </ul>
-
-        </div>
-
-
-        <div class="hf-footer-column">
-
-            <h3>
-                For Foodies
-            </h3>
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        Code of Conduct
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Community
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Blogger Help
-                    </a>
-                </li>
-
-                <li>
-                    <a href="#">
-                        Mobile Apps
-                    </a>
-                </li>
-
-            </ul>
-
-        </div>
-
-
-
-
-        <div class="hf-footer-column">
-
-            <h3>
-                Contact Us
-            </h3>
-
-            <ul>
-
-                <li>
-                    <a href="#">
-                        Help & Support
-                    </a>
-                </li>
-
-                
-
-                
-
-            </ul>
-
-
-            <div class="hf-social">
-
-                <a href="#">
-                    <i
-                        class="fab fa-facebook"
-                    ></i>
-                </a>
-
-                <a href="#">
-                    <i
-                        class="fab fa-twitter"
-                    ></i>
-                </a>
-
-                <a href="#">
-                    <i
-                        class="fab fa-instagram"
-                    ></i>
-                </a>
-
-                <a href="#">
-                    <i
-                        class="fab fa-youtube"
-                    ></i>
-                </a>
-
-            </div>
-
-
-        </div>
-
-
-    </div>
-
-
-    <div class="hf-copyright">
-
-        <p>
-
-            &copy;
-            <?php
-                echo date('Y');
-            ?>
-
-            Humsafar Food Delivery.
-            All rights reserved.
-
-        </p>
-
-    </div>
-
-
-</footer>
-
-
-<!-- =========================================================
-     JAVASCRIPT
-========================================================= -->
-
 <script>
+
+/*
+|--------------------------------------------------------------------------
+| QUANTITY CONTROL
+|--------------------------------------------------------------------------
+*/
+
+function changeQuantity(
+    itemId,
+    change
+) {
+
+    const input =
+        document.getElementById(
+            'quantity-' + itemId
+        );
+
+
+    const hidden =
+        document.getElementById(
+            'hidden-quantity-' + itemId
+        );
+
+
+    if (!input || !hidden) {
+        return;
+    }
+
+
+    let value =
+        parseInt(
+            input.value,
+            10
+        ) || 1;
+
+
+    value += change;
+
+
+    if (value < 1) {
+        value = 1;
+    }
+
+
+    if (value > 99) {
+        value = 99;
+    }
+
+
+    input.value = value;
+
+    hidden.value = value;
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| FORM QUANTITY SYNC
+|--------------------------------------------------------------------------
+*/
 
 document.addEventListener(
     'DOMContentLoaded',
-    function(){
+    function () {
 
-        /* =========================================
-           CATEGORY FILTER
-        ========================================= */
-
-        const tabs =
+        const forms =
             document.querySelectorAll(
-                '.category-tab'
+                '.add-cart-form'
             );
 
 
-        const cards =
-            document.querySelectorAll(
-                '.menu-card'
-            );
+        forms.forEach(
+            function (form) {
 
+                form.addEventListener(
+                    'submit',
+                    function () {
 
-        tabs.forEach(function(tab){
-
-            tab.addEventListener(
-                'click',
-                function(){
-
-                    tabs.forEach(
-                        function(item){
-                            item.classList.remove(
-                                'active'
+                        const itemInput =
+                            form.querySelector(
+                                '[name="menu_item_id"]'
                             );
+
+
+                        const hidden =
+                            form.querySelector(
+                                '[name="quantity"]'
+                            );
+
+
+                        if (
+                            !itemInput ||
+                            !hidden
+                        ) {
+                            return;
                         }
-                    );
 
 
-                    this.classList.add(
-                        'active'
-                    );
-
-
-                    const selected =
-                        this.getAttribute(
-                            'data-category'
-                        );
-
-
-                    cards.forEach(
-                        function(card){
-
-                            const cardCategory =
-                                card.getAttribute(
-                                    'data-category'
-                                );
-
-
-                            if (
-                                selected === 'all'
-                                ||
-                                cardCategory === selected
-                            ){
-
-                                card.style.display =
-                                    'grid';
-
-                            }else{
-
-                                card.style.display =
-                                    'none';
-
-                            }
-
-                        }
-                    );
-
-                }
-            );
-
-        });
-
-
-        /* =========================================
-           HEADER SEARCH
-        ========================================= */
-
-        const searchInput =
-            document.getElementById(
-                'header-search'
-            );
-
-
-        if(searchInput){
-
-            searchInput.addEventListener(
-                'keydown',
-                function(event){
-
-                    if(
-                        event.key === 'Enter'
-                    ){
-
-                        const value =
-                            this.value.trim();
-
-
-                        if(value !== ''){
-
-                            window.location.href =
-                                'restaurants.php?search='
+                        const quantityInput =
+                            document.getElementById(
+                                'quantity-'
                                 +
-                                encodeURIComponent(
-                                    value
-                                );
+                                itemInput.value
+                            );
 
+
+                        if (quantityInput) {
+
+                            hidden.value =
+                                quantityInput.value;
                         }
 
                     }
+                );
 
-                }
-            );
-
-        }
-
+            }
+        );
 
     }
 );

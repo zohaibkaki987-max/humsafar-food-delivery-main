@@ -4,22 +4,6 @@
 | HUMSAFAR FOOD DELIVERY
 | CUSTOMER CART PAGE
 |--------------------------------------------------------------------------
-| File:
-| /cart.php
-|
-| Uses:
-| - includes/config.php
-| - includes/session.php
-| - includes/customer-header.php
-|
-| Cart:
-| - cart
-| - menu_items
-| - restaurants
-|
-| Addresses:
-| - customer_addresses
-|--------------------------------------------------------------------------
 */
 
 require_once __DIR__ . '/includes/config.php';
@@ -29,7 +13,6 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-
 /*
 |--------------------------------------------------------------------------
 | LOGIN CHECK
@@ -38,14 +21,13 @@ if (session_status() === PHP_SESSION_NONE) {
 
 if (
     !isset($_SESSION['user_id']) ||
-    (int) $_SESSION['user_id'] <= 0
+    (int)$_SESSION['user_id'] <= 0
 ) {
     header('Location: login.php');
     exit;
 }
 
-$userId = (int) $_SESSION['user_id'];
-
+$userId = (int)$_SESSION['user_id'];
 
 /*
 |--------------------------------------------------------------------------
@@ -56,45 +38,11 @@ $userId = (int) $_SESSION['user_id'];
 function cart_h($value)
 {
     return htmlspecialchars(
-        (string) $value,
+        (string)$value,
         ENT_QUOTES,
         'UTF-8'
     );
 }
-
-
-/*
-|--------------------------------------------------------------------------
-| PROJECT ROOT
-|--------------------------------------------------------------------------
-|
-| This creates the correct path even when the project
-| is installed inside:
-|
-| /humsafar-food-delivery-main/
-|
-*/
-
-$projectRoot = rtrim(
-    dirname($_SERVER['SCRIPT_NAME']),
-    '/'
-);
-
-if ($projectRoot === '\\' || $projectRoot === '.') {
-    $projectRoot = '';
-}
-
-
-/*
-|--------------------------------------------------------------------------
-| MANAGE ADDRESS URL
-|--------------------------------------------------------------------------
-*/
-
-$manageAddressUrl =
-    $projectRoot .
-    '/customer/manage-addresses.php';
-
 
 /*
 |--------------------------------------------------------------------------
@@ -102,30 +50,21 @@ $manageAddressUrl =
 |--------------------------------------------------------------------------
 |
 | IMPORTANT:
-|
-| Restaurant:
-| assets/images/restaurants/
-|
-| Menu item:
+| Menu images are stored in:
 | assets/images/menu/
 |
-| These paths match the existing restaurant.php
-| implementation in the repository.
+| Restaurant images are stored in:
+| assets/images/restaurants/
 |--------------------------------------------------------------------------
 */
 
 function cartRestaurantImage($image)
 {
-    $image = trim((string) $image);
+    $image = trim((string)$image);
 
     if ($image === '') {
         return '';
     }
-
-
-    /*
-    | Full URL / absolute path
-    */
 
     if (
         preg_match(
@@ -136,21 +75,11 @@ function cartRestaurantImage($image)
         return $image;
     }
 
-
-    /*
-    | Already contains assets path
-    */
-
     if (
         strpos($image, 'assets/') === 0
     ) {
         return $image;
     }
-
-
-    /*
-    | Correct repository path
-    */
 
     return
         'assets/images/restaurants/' .
@@ -160,17 +89,15 @@ function cartRestaurantImage($image)
 
 function cartMenuImage($image)
 {
-    $image = trim((string) $image);
+    $image = trim((string)$image);
 
     if ($image === '') {
         return '';
     }
 
-
     /*
-    | Full URL / absolute path
-    */
-
+     * Full URL / absolute path / data URI
+     */
     if (
         preg_match(
             '/^(https?:\/\/|data:|\/)/i',
@@ -180,30 +107,76 @@ function cartMenuImage($image)
         return $image;
     }
 
-
     /*
-    | Already contains assets path
-    */
-
+     * If database already contains
+     * the complete assets path.
+     */
     if (
         strpos($image, 'assets/') === 0
     ) {
         return $image;
     }
 
-
     /*
-    | IMPORTANT:
-    | The repository's restaurant.php uses:
-    |
-    | assets/images/menu/
-    |
-    | NOT menu-items.
-    */
-
+     * IMPORTANT:
+     * Restaurant owner saves both
+     * restaurant images and menu item images
+     * inside:
+     *
+     * assets/images/restaurants/
+     */
     return
-        'assets/images/menu/' .
+        'assets/images/restaurants/' .
         basename($image);
+}
+
+/*
+|--------------------------------------------------------------------------
+| UPDATE QUANTITY
+|--------------------------------------------------------------------------
+*/
+
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['cart_id']) &&
+    isset($_POST['quantity'])
+) {
+
+    $cartId = (int)$_POST['cart_id'];
+    $quantity = (int)$_POST['quantity'];
+
+    if ($cartId > 0) {
+
+        if ($quantity < 1) {
+            $quantity = 1;
+        }
+
+        $updateSql = "
+            UPDATE cart
+            SET quantity = ?
+            WHERE id = ?
+              AND user_id = ?
+        ";
+
+        $updateStmt =
+            $conn->prepare($updateSql);
+
+        if ($updateStmt) {
+
+            $updateStmt->bind_param(
+                "iii",
+                $quantity,
+                $cartId,
+                $userId
+            );
+
+            $updateStmt->execute();
+            $updateStmt->close();
+        }
+    }
+
+    header('Location: cart.php');
+    exit;
 }
 
 
@@ -214,7 +187,6 @@ function cartMenuImage($image)
 */
 
 $cartItems = [];
-
 
 $cartSql = "
     SELECT
@@ -249,31 +221,25 @@ $cartSql = "
     ORDER BY c.id ASC
 ";
 
-
 $cartStmt =
     $conn->prepare($cartSql);
 
-
 if (!$cartStmt) {
-
     die(
         'Unable to load cart: ' .
         $conn->error
     );
 }
 
-
 $cartStmt->bind_param(
-    'i',
+    "i",
     $userId
 );
 
 $cartStmt->execute();
 
-
 $cartResult =
     $cartStmt->get_result();
-
 
 while (
     $row =
@@ -281,36 +247,33 @@ while (
 ) {
 
     $row['cart_id'] =
-        (int) $row['cart_id'];
+        (int)$row['cart_id'];
 
     $row['menu_item_id'] =
-        (int) $row['menu_item_id'];
+        (int)$row['menu_item_id'];
 
     $row['quantity'] =
         max(
             1,
-            (int) $row['quantity']
+            (int)$row['quantity']
         );
 
     $row['item_price'] =
-        (float) $row['item_price'];
+        (float)$row['item_price'];
 
     $row['item_subtotal'] =
         $row['item_price'] *
         $row['quantity'];
 
-
-    $cartItems[] =
-        $row;
+    $cartItems[] = $row;
 }
-
 
 $cartStmt->close();
 
 
 /*
 |--------------------------------------------------------------------------
-| BASIC VALUES
+| CART TOTALS
 |--------------------------------------------------------------------------
 */
 
@@ -318,41 +281,35 @@ $isCartEmpty =
     empty($cartItems);
 
 $totalItems = 0;
-
 $subtotal = 0;
 
-
 foreach (
-    $cartItems
-    as $item
+    $cartItems as $item
 ) {
 
     $totalItems +=
-        (int) $item['quantity'];
+        (int)$item['quantity'];
 
     $subtotal +=
-        (float) $item['item_subtotal'];
+        (float)$item['item_subtotal'];
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| RESTAURANTS IN CART
+| RESTAURANTS
 |--------------------------------------------------------------------------
 */
 
 $restaurantIds = [];
 
-
 foreach (
-    $cartItems
-    as $item
+    $cartItems as $item
 ) {
 
     $restaurantIds[] =
-        (int) $item['restaurant_id'];
+        (int)$item['restaurant_id'];
 }
-
 
 $restaurantIds =
     array_values(
@@ -360,7 +317,6 @@ $restaurantIds =
             $restaurantIds
         )
     );
-
 
 $multipleRestaurants =
     count($restaurantIds) > 1;
@@ -373,67 +329,62 @@ $multipleRestaurants =
 */
 
 $restaurantId = 0;
-
 $restaurantName = '';
-
 $restaurantImage = '';
-
 $restaurantAddress = '';
-
 $deliveryTime = '';
-
 $deliveryFee = 0;
-
 
 if (!$isCartEmpty) {
 
-    $restaurantId =
-        (int)
-        $cartItems[0]['restaurant_id'];
+    $firstItem =
+        $cartItems[0];
 
+    $restaurantId =
+        (int)$firstItem[
+            'restaurant_id'
+        ];
 
     $restaurantName =
-        $cartItems[0]['restaurant_name']
-        ?? 'Restaurant';
-
+        $firstItem[
+            'restaurant_name'
+        ] ?? '';
 
     $restaurantImage =
-        $cartItems[0]['restaurant_image']
-        ?? '';
-
+        $firstItem[
+            'restaurant_image'
+        ] ?? '';
 
     $restaurantAddress =
-        $cartItems[0]['restaurant_address']
-        ?? '';
-
+        $firstItem[
+            'restaurant_address'
+        ] ?? '';
 
     $deliveryTime =
         trim(
-            (string)
-            (
-                $cartItems[0]['delivery_time']
-                ?? ''
+            (string)(
+                $firstItem[
+                    'delivery_time'
+                ] ?? ''
             )
         );
 
-
     $deliveryFee =
-        (float)
-        (
-            $cartItems[0]['delivery_fee']
-            ?? 0
+        (float)(
+            $firstItem[
+                'delivery_fee'
+            ] ?? 0
         );
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| MULTIPLE RESTAURANT DELIVERY FEE
+| MULTIPLE RESTAURANT DELIVERY
 |--------------------------------------------------------------------------
 */
 
 if ($multipleRestaurants) {
-
     $deliveryFee = 0;
 }
 
@@ -449,7 +400,7 @@ $discount = 0;
 
 /*
 |--------------------------------------------------------------------------
-| TOTAL
+| GRAND TOTAL
 |--------------------------------------------------------------------------
 */
 
@@ -463,15 +414,9 @@ $grandTotal =
 |--------------------------------------------------------------------------
 | CUSTOMER ADDRESSES
 |--------------------------------------------------------------------------
-|
-| IMPORTANT:
-|
-| Same table used by manage-addresses.php
-|--------------------------------------------------------------------------
 */
 
 $addresses = [];
-
 
 $addressSql = "
     SELECT
@@ -495,26 +440,22 @@ $addressSql = "
         id DESC
 ";
 
-
 $addressStmt =
     $conn->prepare(
         $addressSql
     );
 
-
 if ($addressStmt) {
 
     $addressStmt->bind_param(
-        'i',
+        "i",
         $userId
     );
 
     $addressStmt->execute();
 
-
     $addressResult =
         $addressStmt->get_result();
-
 
     while (
         $addressRow =
@@ -525,34 +466,31 @@ if ($addressStmt) {
             $addressRow;
     }
 
-
     $addressStmt->close();
 }
 
 
 /*
 |--------------------------------------------------------------------------
-| SELECT ADDRESS
+| SELECT DEFAULT ADDRESS
 |--------------------------------------------------------------------------
 */
 
 $selectedAddressId = 0;
-
 $selectedAddress = null;
 
-
 foreach (
-    $addresses
-    as $address
+    $addresses as $address
 ) {
 
     if (
-        (int)
-        $address['is_default'] === 1
+        (int)$address[
+            'is_default'
+        ] === 1
     ) {
 
         $selectedAddressId =
-            (int) $address['id'];
+            (int)$address['id'];
 
         $selectedAddress =
             $address;
@@ -562,14 +500,19 @@ foreach (
 }
 
 
+/*
+|--------------------------------------------------------------------------
+| NO DEFAULT → LATEST ADDRESS
+|--------------------------------------------------------------------------
+*/
+
 if (
     $selectedAddressId <= 0 &&
     !empty($addresses)
 ) {
 
     $selectedAddressId =
-        (int)
-        $addresses[0]['id'];
+        (int)$addresses[0]['id'];
 
     $selectedAddress =
         $addresses[0];
@@ -578,33 +521,27 @@ if (
 
 /*
 |--------------------------------------------------------------------------
-| ADDRESS TEXT
+| SELECTED ADDRESS TEXT
 |--------------------------------------------------------------------------
 */
 
-$selectedAddressLabel =
-    'No Address';
-
-$selectedAddressText =
-    'Please add a delivery address.';
-
-$selectedAddressPhone =
-    '';
-
+$selectedAddressText = '';
+$selectedAddressLabel = '';
 
 if ($selectedAddress) {
 
     $selectedAddressLabel =
-        $selectedAddress['address_title']
-        ?: 'Address';
-
+        $selectedAddress[
+            'address_title'
+        ] ?? 'Address';
 
     $parts = [];
 
-
     if (
         !empty(
-            $selectedAddress['address_line']
+            $selectedAddress[
+                'address_line'
+            ]
         )
     ) {
 
@@ -613,7 +550,6 @@ if ($selectedAddress) {
                 'address_line'
             ];
     }
-
 
     if (
         !empty(
@@ -627,7 +563,6 @@ if ($selectedAddress) {
             ];
     }
 
-
     if (
         !empty(
             $selectedAddress['city']
@@ -640,17 +575,11 @@ if ($selectedAddress) {
             ];
     }
 
-
     $selectedAddressText =
         implode(
             ', ',
             $parts
         );
-
-
-    $selectedAddressPhone =
-        $selectedAddress['phone']
-        ?? '';
 }
 
 
@@ -660,2497 +589,1949 @@ if ($selectedAddress) {
 |--------------------------------------------------------------------------
 */
 
-require_once
-    __DIR__ .
+require_once __DIR__ .
     '/includes/customer-header.php';
 
 ?>
 
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="Humsafar Food Delivery Cart"
+    >
+
+    <title>
+        Your Cart - Humsafar
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    >
+
+    <style>
 
-<style>
+        * {
+            box-sizing: border-box;
+        }
 
-/* =========================================================
-   CART PAGE
-========================================================= */
+        html {
+            scroll-behavior: smooth;
+        }
 
-.cart-page {
+        body {
+            margin: 0;
+            background: #f8f8f9;
+            color: #222;
+            font-family:
+                "Segoe UI",
+                Arial,
+                Helvetica,
+                sans-serif;
+        }
 
-    min-height:
-        calc(100vh - 100px);
+        button,
+        input {
+            font-family: inherit;
+        }
 
-    padding:
-        35px 4% 70px;
+        a {
+            text-decoration: none;
+        }
 
-    background:
-        linear-gradient(
-            180deg,
-            #fff7fa 0,
-            #ffffff 350px
-        );
-}
 
+        /*
+        =========================================================
+        PAGE
+        =========================================================
+        */
 
-.cart-wrapper {
+        .humsafar-cart-page {
+            min-height: calc(100vh - 100px);
 
-    width: 100%;
+            padding:
+                35px 4%
+                70px;
 
-    max-width: 1450px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #fff7fa 0,
+                    #ffffff 330px
+                );
+        }
 
-    margin: 0 auto;
-}
+        .cart-wrapper {
+            width: 100%;
+            max-width: 1450px;
+            margin: 0 auto;
+        }
 
 
-/* =========================================================
-   PAGE HEADING
-========================================================= */
+        /*
+        =========================================================
+        HEADING
+        =========================================================
+        */
 
-.cart-heading {
+        .cart-heading {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
 
-    display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
 
-    align-items: flex-end;
+        .cart-heading h1 {
+            margin: 0;
 
-    justify-content: space-between;
+            color: #ed0038;
 
-    gap: 20px;
+            font-size: 32px;
+            font-weight: 800;
 
-    margin-bottom: 25px;
-}
+            letter-spacing: -.4px;
+        }
 
+        .cart-heading p {
+            margin:
+                7px 0 0;
 
-.cart-heading h1 {
+            color: #777;
 
-    margin: 0;
+            font-size: 13px;
+            font-weight: 400;
+        }
 
-    color: #ed0038;
+        .continue-shopping {
+            display: inline-flex;
+            align-items: center;
 
-    font-size: 32px;
+            gap: 8px;
 
-    font-weight: 700;
+            color: #ed0038;
 
-    letter-spacing: -.4px;
-}
+            font-size: 13px;
+            font-weight: 600;
+        }
 
 
-.cart-heading p {
+        /*
+        =========================================================
+        MAIN GRID
+        =========================================================
+        */
 
-    margin:
-        7px 0 0;
+        .cart-layout {
+            display: grid;
 
-    color: #777;
+            grid-template-columns:
+                minmax(0, 1fr)
+                390px;
 
-    font-size: 15px;
+            gap: 25px;
 
-    font-weight: 400;
-}
+            align-items: start;
+        }
 
 
-.continue-shopping {
+        /*
+        =========================================================
+        CARDS
+        =========================================================
+        */
 
-    display: inline-flex;
+        .cart-card {
+            background: #fff;
 
-    align-items: center;
+            border:
+                1px solid #eeeeee;
 
-    gap: 8px;
+            border-radius: 18px;
 
-    color: #ed0038;
+            box-shadow:
+                0 8px 30px
+                rgba(40, 15, 25, .06);
 
-    font-size: 14px;
+            overflow: hidden;
+        }
 
-    font-weight: 500;
 
-    transition: .2s ease;
-}
+        /*
+        =========================================================
+        RESTAURANT
+        =========================================================
+        */
 
+        .restaurant-header {
+            padding: 20px 22px;
 
-.continue-shopping:hover {
+            display: flex;
+            align-items: center;
 
-    color: #c90030;
-}
+            gap: 14px;
 
+            border-bottom:
+                1px solid #eeeeee;
 
-/* =========================================================
-   MAIN GRID
-========================================================= */
+            background:
+                linear-gradient(
+                    90deg,
+                    #fff5f8,
+                    #ffffff
+                );
+        }
 
-.cart-layout {
+        .restaurant-image {
+            width: 60px;
+            height: 60px;
 
-    display: grid;
+            flex-shrink: 0;
 
-    grid-template-columns:
-        minmax(0, 1fr)
-        390px;
+            border-radius: 13px;
 
-    gap: 25px;
+            overflow: hidden;
 
-    align-items: start;
-}
+            background: #fff0f4;
 
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-/* =========================================================
-   CARD
-========================================================= */
+            color: #ed0038;
 
-.cart-card {
+            font-size: 22px;
+        }
 
-    background: #ffffff;
+        .restaurant-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
-    border:
-        1px solid #eeeeee;
+        .restaurant-info {
+            min-width: 0;
+        }
 
-    border-radius: 18px;
+        .restaurant-info h2 {
+            margin: 0;
 
-    box-shadow:
-        0 8px 30px
-        rgba(40,15,25,.06);
+            color: #222;
 
-    overflow: hidden;
-}
+            font-size: 18px;
+            font-weight: 700;
+        }
 
+        .restaurant-address {
+            margin-top: 5px;
 
-/* =========================================================
-   RESTAURANT HEADER
-========================================================= */
+            color: #888;
 
-.restaurant-header {
+            font-size: 11px;
 
-    padding:
-        20px 22px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
 
-    display: flex;
+        .restaurant-meta {
+            display: flex;
+            flex-wrap: wrap;
 
-    align-items: center;
+            gap: 12px;
 
-    gap: 15px;
+            margin-top: 7px;
 
-    border-bottom:
-        1px solid #eeeeee;
+            color: #777;
 
-    background:
-        linear-gradient(
-            90deg,
-            #fff5f8,
-            #ffffff
-        );
-}
+            font-size: 11px;
+        }
 
+        .restaurant-meta span {
+            display: inline-flex;
+            align-items: center;
 
-.restaurant-image {
+            gap: 5px;
+        }
 
-    width: 62px;
+        .restaurant-meta i {
+            color: #ed0038;
+        }
 
-    height: 62px;
 
-    flex-shrink: 0;
+        /*
+        =========================================================
+        WARNING
+        =========================================================
+        */
 
-    border-radius: 13px;
+        .restaurant-warning {
+            margin: 18px 20px;
 
-    overflow: hidden;
+            padding: 14px;
 
-    background: #fff0f4;
+            display: flex;
 
-    display: flex;
+            gap: 10px;
 
-    align-items: center;
+            background: #fff7e8;
 
-    justify-content: center;
+            border:
+                1px solid #f0d29d;
 
-    color: #ed0038;
+            border-radius: 11px;
 
-    font-size: 23px;
-}
+            color: #765000;
 
+            font-size: 12px;
 
-.restaurant-image img {
+            line-height: 1.55;
+        }
 
-    width: 100%;
+        .restaurant-warning i {
+            color: #df9700;
+        }
 
-    height: 100%;
 
-    display: block;
+        /*
+        =========================================================
+        ITEMS HEADING
+        =========================================================
+        */
 
-    object-fit: cover;
-}
+        .items-heading {
+            padding:
+                18px 22px
+                12px;
 
+            color: #333;
 
-.restaurant-info {
+            font-size: 14px;
+            font-weight: 700;
+        }
 
-    min-width: 0;
-}
 
+        /*
+        =========================================================
+        CART ITEM
+        =========================================================
+        */
 
-.restaurant-info h2 {
+        .cart-item {
+            margin:
+                0 18px
+                12px;
 
-    margin: 0;
+            padding: 15px;
 
-    color: #222;
+            display: grid;
 
-    font-size: 19px;
+            grid-template-columns:
+                88px
+                minmax(0, 1fr)
+                115px
+                95px
+                35px;
 
-    font-weight: 600;
-}
+            align-items: center;
 
+            gap: 14px;
 
-.restaurant-address {
+            border:
+                1px solid #eeeeee;
 
-    margin-top: 5px;
+            border-radius: 14px;
 
-    color: #777;
+            background: #fff;
+        }
 
-    font-size: 13px;
 
-    white-space: nowrap;
+        /*
+        =========================================================
+        ITEM IMAGE
+        =========================================================
+        */
 
-    overflow: hidden;
+        .item-image {
+            width: 88px;
+            height: 78px;
 
-    text-overflow: ellipsis;
-}
+            border-radius: 11px;
 
+            overflow: hidden;
 
-.restaurant-meta {
+            background:
+                linear-gradient(
+                    135deg,
+                    #fff0f4,
+                    #ffffff
+                );
 
-    display: flex;
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-    flex-wrap: wrap;
+            color: #ed0038;
 
-    gap: 14px;
+            font-size: 22px;
+        }
 
-    margin-top: 7px;
+        .item-image img {
+            width: 100%;
+            height: 100%;
 
-    color: #777;
+            object-fit: cover;
+        }
 
-    font-size: 13px;
 
-    font-weight: 400;
-}
+        /*
+        =========================================================
+        ITEM DETAILS
+        =========================================================
+        */
 
+        .item-details {
+            min-width: 0;
+        }
 
-.restaurant-meta span {
+        .item-details h3 {
+            margin:
+                0 0 5px;
 
-    display: inline-flex;
+            color: #222;
 
-    align-items: center;
+            font-size: 15px;
+            font-weight: 700;
+        }
 
-    gap: 5px;
-}
+        .item-description {
+            margin: 0;
 
+            color: #888;
 
-.restaurant-meta i {
+            font-size: 11px;
 
-    color: #ed0038;
-}
+            line-height: 1.45;
 
+            display: -webkit-box;
 
-/* =========================================================
-   WARNING
-========================================================= */
+            -webkit-line-clamp: 2;
 
-.restaurant-warning {
+            -webkit-box-orient: vertical;
 
-    margin:
-        18px 20px;
+            overflow: hidden;
+        }
 
-    padding: 14px;
+        .item-price {
+            margin-top: 7px;
 
-    display: flex;
+            color: #ed0038;
 
-    gap: 10px;
+            font-size: 12px;
+        }
 
-    background: #fff7e8;
 
-    border:
-        1px solid #f0d29d;
+        /*
+        =========================================================
+        QUANTITY
+        =========================================================
+        */
 
-    border-radius: 11px;
+        .quantity-area {
+            text-align: center;
+        }
 
-    color: #765000;
+        .quantity-label {
+            margin-bottom: 6px;
 
-    font-size: 13px;
+            color: #999;
 
-    line-height: 1.55;
-}
+            font-size: 10px;
+        }
 
+        .quantity-form {
+            margin: 0;
+        }
 
-.restaurant-warning i {
+        .quantity-box {
+            display: inline-flex;
 
-    color: #df9700;
+            align-items: center;
 
-    margin-top: 2px;
-}
+            border:
+                1px solid #e3e3e3;
 
+            border-radius: 8px;
 
-.restaurant-warning strong {
+            overflow: hidden;
 
-    display: block;
+            background: #fff;
+        }
 
-    margin-bottom: 3px;
+        .quantity-btn {
+            width: 30px;
+            height: 31px;
 
-    font-weight: 600;
-}
+            border: 0;
 
+            background: #fff;
 
-/* =========================================================
-   ITEMS HEADING
-========================================================= */
+            color: #ed0038;
 
-.items-heading {
+            cursor: pointer;
 
-    padding:
-        19px 22px 12px;
+            font-size: 14px;
+        }
 
-    color: #333;
+        .quantity-btn:hover {
+            background: #fff1f5;
+        }
 
-    font-size: 16px;
+        .quantity-btn:disabled {
+            color: #ccc;
+            cursor: not-allowed;
+        }
 
-    font-weight: 500;
-}
+        .quantity-number {
+            min-width: 30px;
 
+            text-align: center;
 
-/* =========================================================
-   CART ITEM
-========================================================= */
+            color: #333;
 
-.cart-item {
+            font-size: 12px;
+        }
 
-    margin:
-        0 18px 12px;
 
-    padding: 15px;
+        /*
+        =========================================================
+        TOTAL
+        =========================================================
+        */
 
-    display: grid;
+        .item-total {
+            text-align: right;
+        }
 
-    grid-template-columns:
-        92px
-        minmax(0,1fr)
-        120px
-        105px
-        36px;
+        .item-total-label {
+            margin-bottom: 4px;
 
-    align-items: center;
+            color: #999;
 
-    gap: 15px;
+            font-size: 10px;
+        }
 
-    border:
-        1px solid #eeeeee;
+        .item-total-value {
+            color: #222;
 
-    border-radius: 14px;
+            font-size: 14px;
+            font-weight: 700;
+        }
 
-    background: #ffffff;
 
-    transition: .2s ease;
-}
+        /*
+        =========================================================
+        REMOVE
+        =========================================================
+        */
 
+        .remove-item {
+            width: 34px;
+            height: 34px;
 
-.cart-item:hover {
+            border: 0;
 
-    border-color: #f0b6c6;
+            border-radius: 8px;
 
-    box-shadow:
-        0 5px 18px
-        rgba(237,0,56,.06);
-}
+            background: #fff1f4;
 
+            color: #d52949;
 
-/* =========================================================
-   ITEM IMAGE
-========================================================= */
+            display: flex;
+            align-items: center;
+            justify-content: center;
 
-.item-image {
+            transition: .2s;
+        }
 
-    width: 92px;
+        .remove-item:hover {
+            background: #ed0038;
+            color: #fff;
+        }
 
-    height: 82px;
 
-    border-radius: 11px;
+        /*
+        =========================================================
+        SUMMARY
+        =========================================================
+        */
 
-    overflow: hidden;
+        .summary-card {
+            position: sticky;
+            top: 95px;
 
-    background:
-        linear-gradient(
-            135deg,
-            #fff0f4,
-            #ffffff
-        );
+            padding: 22px;
+        }
 
-    display: flex;
+        .summary-title {
+            margin:
+                0 0 20px;
 
-    align-items: center;
+            color: #222;
 
-    justify-content: center;
+            font-size: 19px;
+            font-weight: 700;
+        }
 
-    color: #ed0038;
+        .summary-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-    font-size: 23px;
-}
+            gap: 15px;
 
+            margin-bottom: 13px;
 
-.item-image img {
+            color: #666;
 
-    width: 100%;
+            font-size: 12px;
+        }
 
-    height: 100%;
+        .summary-row strong {
+            color: #222;
+            font-weight: 600;
+        }
 
-    display: block;
+        .summary-divider {
+            height: 1px;
 
-    object-fit: cover;
-}
+            margin:
+                17px 0;
 
+            background: #eeeeee;
+        }
 
-/* =========================================================
-   ITEM DETAILS
-========================================================= */
+        .summary-total {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-.item-details {
+            color: #222;
 
-    min-width: 0;
-}
+            font-size: 17px;
+        }
 
+        .summary-total strong {
+            color: #ed0038;
 
-.item-details h3 {
+            font-size: 20px;
+        }
 
-    margin:
-        0 0 6px;
 
-    color: #222;
+        /*
+        =========================================================
+        DELIVERY TIME
+        =========================================================
+        */
 
-    font-size: 17px;
+        .delivery-time-box {
+            margin-top: 18px;
 
-    font-weight: 500;
+            padding: 13px;
 
-    line-height: 1.3;
-}
+            display: flex;
+            align-items: center;
 
+            gap: 10px;
 
-.item-description {
+            background: #fff7fa;
 
-    margin: 0;
+            border:
+                1px solid #f2c4d0;
 
-    color: #777;
+            border-radius: 11px;
+        }
 
-    font-size: 13px;
+        .delivery-time-icon {
+            width: 35px;
+            height: 35px;
 
-    font-weight: 400;
+            flex-shrink: 0;
 
-    line-height: 1.5;
+            border-radius: 9px;
 
-    display: -webkit-box;
+            background: #ed0038;
 
-    -webkit-line-clamp: 2;
+            color: #fff;
 
-    -webkit-box-orient: vertical;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    overflow: hidden;
-}
+        .delivery-time-text span {
+            display: block;
 
+            color: #888;
 
-.item-price {
+            font-size: 10px;
+        }
 
-    margin-top: 7px;
+        .delivery-time-text strong {
+            display: block;
 
-    color: #ed0038;
+            margin-top: 3px;
 
-    font-size: 14px;
+            color: #222;
 
-    font-weight: 500;
-}
+            font-size: 12px;
+        }
 
 
-/* =========================================================
-   QUANTITY
-========================================================= */
+        /*
+        =========================================================
+        ADDRESS
+        =========================================================
+        */
 
-.quantity-area {
+        .summary-section {
+            margin-top: 22px;
+        }
 
-    text-align: center;
-}
+        .section-title {
+            display: flex;
+            align-items: center;
 
+            gap: 8px;
 
-.quantity-label {
+            margin-bottom: 10px;
 
-    margin-bottom: 6px;
+            color: #333;
 
-    color: #888;
+            font-size: 13px;
+            font-weight: 600;
+        }
 
-    font-size: 12px;
+        .section-title i {
+            color: #ed0038;
+        }
 
-    font-weight: 400;
-}
+        .address-box {
+            padding: 13px;
 
+            background: #fff8fa;
 
-.quantity-form {
+            border:
+                1px solid #f1c5d1;
 
-    margin: 0;
-}
+            border-radius: 11px;
+        }
 
+        .address-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
-.quantity-box {
+            gap: 10px;
 
-    display: inline-flex;
+            margin-bottom: 7px;
+        }
 
-    align-items: center;
+        .address-label {
+            color: #ed0038;
 
-    border:
-        1px solid #e3e3e3;
+            font-size: 11px;
+            font-weight: 600;
 
-    border-radius: 8px;
+            text-transform: capitalize;
+        }
 
-    overflow: hidden;
+        .address-default {
+            padding:
+                3px 7px;
 
-    background: #fff;
-}
+            border-radius: 20px;
 
+            background: #ed0038;
 
-.quantity-btn {
+            color: #fff;
 
-    width: 33px;
+            font-size: 9px;
+        }
 
-    height: 34px;
+        .address-text {
+            margin: 0;
 
-    border: 0;
+            color: #666;
 
-    background: #fff;
+            font-size: 11px;
 
-    color: #ed0038;
+            line-height: 1.55;
+        }
 
-    cursor: pointer;
+        .address-phone {
+            margin-top: 6px;
 
-    font-size: 16px;
+            color: #777;
 
-    font-weight: 500;
-}
+            font-size: 11px;
+        }
 
+        .change-address {
+            margin-top: 10px;
 
-.quantity-btn:hover {
+            padding: 0;
 
-    background: #fff1f5;
-}
+            border: 0;
 
+            background: transparent;
 
-.quantity-number {
+            color: #ed0038;
 
-    min-width: 34px;
+            cursor: pointer;
 
-    text-align: center;
+            font-size: 11px;
+            font-weight: 600;
+        }
 
-    color: #333;
+        .no-address {
+            padding: 13px;
 
-    font-size: 13px;
+            border:
+                1px solid #f0d4dc;
 
-    font-weight: 400;
-}
+            border-radius: 10px;
 
+            background: #fff8fa;
 
-/* =========================================================
-   ITEM TOTAL
-========================================================= */
+            color: #777;
 
-.item-total {
+            font-size: 11px;
 
-    text-align: right;
-}
+            line-height: 1.5;
+        }
 
+        .add-address-link {
+            display: inline-flex;
 
-.item-total-label {
+            margin-top: 8px;
 
-    margin-bottom: 4px;
+            color: #ed0038;
 
-    color: #888;
+            font-size: 12px;
+        }
 
-    font-size: 12px;
 
-    font-weight: 400;
-}
+        /*
+        =========================================================
+        PROMO
+        =========================================================
+        */
 
+        .promo-box {
+            margin-top: 20px;
+        }
 
-.item-total-value {
+        .promo-form {
+            display: flex;
 
-    color: #222;
+            gap: 7px;
+        }
 
-    font-size: 16px;
+        .promo-input {
+            width: 100%;
 
-    font-weight: 500;
-}
+            min-height: 40px;
 
+            padding:
+                0 11px;
 
-/* =========================================================
-   REMOVE
-========================================================= */
+            border:
+                1px solid #ddd;
 
-.remove-item {
+            border-radius: 8px;
 
-    width: 36px;
+            outline: none;
 
-    height: 36px;
+            color: #333;
 
-    border: 0;
+            font-size: 12px;
+        }
 
-    border-radius: 8px;
+        .promo-input:focus {
+            border-color: #ed0038;
+        }
 
-    background: #fff1f4;
+        .promo-button {
+            min-width: 65px;
 
-    color: #d52949;
+            border: 0;
 
-    cursor: pointer;
+            border-radius: 8px;
 
-    display: flex;
+            background: #ed0038;
 
-    align-items: center;
+            color: #fff;
 
-    justify-content: center;
+            cursor: pointer;
 
-    transition: .2s ease;
-}
+            font-size: 11px;
+        }
 
 
-.remove-item:hover {
+        /*
+        =========================================================
+        CHECKOUT
+        =========================================================
+        */
 
-    background: #ed0038;
+        .checkout-btn {
+            width: 100%;
 
-    color: #ffffff;
-}
+            margin-top: 22px;
 
+            min-height: 46px;
 
-/* =========================================================
-   ADD MORE
-========================================================= */
+            border: 0;
 
-.cart-footer {
+            border-radius: 10px;
 
-    padding:
-        8px 22px 22px;
-}
+            background:
+                linear-gradient(
+                    90deg,
+                    #ed0038,
+                    #ff6294
+                );
 
+            color: #fff;
 
-.add-more {
+            cursor: pointer;
 
-    display: inline-flex;
+            font-size: 13px;
+            font-weight: 600;
+        }
 
-    align-items: center;
+        .checkout-btn.disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
 
-    gap: 8px;
+        .security-note {
+            margin-top: 12px;
 
-    padding:
-        10px 15px;
+            text-align: center;
 
-    border:
-        1px solid #ed0038;
+            color: #999;
 
-    border-radius: 9px;
+            font-size: 10px;
+        }
 
-    color: #ed0038;
 
-    background: #fff;
+        /*
+        =========================================================
+        EMPTY CART
+        =========================================================
+        */
 
-    font-size: 13px;
+        .empty-cart {
+            background: #fff;
 
-    font-weight: 500;
+            border:
+                1px solid #eeeeee;
 
-    text-decoration: none;
-}
+            border-radius: 18px;
 
+            padding:
+                70px 25px;
 
-.add-more:hover {
+            text-align: center;
 
-    background: #ed0038;
+            box-shadow:
+                0 8px 30px
+                rgba(40,15,25,.05);
+        }
 
-    color: #fff;
-}
+        .empty-cart i {
+            color: #ed0038;
 
+            font-size: 55px;
 
-/* =========================================================
-   SUMMARY
-========================================================= */
+            margin-bottom: 15px;
+        }
 
-.summary-card {
+        .empty-cart h2 {
+            margin: 0 0 8px;
 
-    position: sticky;
+            color: #222;
 
-    top: 18px;
+            font-size: 24px;
+        }
 
-    padding: 22px;
+        .empty-cart p {
+            color: #777;
 
-    background: #fff;
+            font-size: 13px;
+        }
 
-    border:
-        1px solid #eeeeee;
+        .browse-btn {
+            display: inline-flex;
 
-    border-radius: 18px;
+            align-items: center;
 
-    box-shadow:
-        0 8px 30px
-        rgba(40,15,25,.07);
-}
+            gap: 7px;
 
+            margin-top: 15px;
 
-.summary-title {
+            padding:
+                11px 18px;
 
-    margin:
-        0 0 20px;
+            border-radius: 10px;
 
-    color: #222;
+            background:
+                linear-gradient(
+                    90deg,
+                    #ed0038,
+                    #ff6294
+                );
 
-    font-size: 20px;
+            color: #fff;
 
-    font-weight: 600;
-}
+            font-size: 13px;
+        }
 
 
-.summary-row {
+        /*
+        =========================================================
+        ADDRESS MODAL
+        =========================================================
+        */
 
-    display: flex;
+        .address-modal {
+            position: fixed;
 
-    align-items: center;
+            inset: 0;
 
-    justify-content: space-between;
+            z-index: 9999;
 
-    gap: 15px;
+            background:
+                rgba(0,0,0,.45);
 
-    margin-bottom: 13px;
+            display: none;
 
-    color: #666;
+            align-items: center;
+            justify-content: center;
 
-    font-size: 14px;
+            padding: 20px;
+        }
 
-    font-weight: 400;
-}
+        .address-modal.open {
+            display: flex;
+        }
 
+        .address-modal-box {
+            width: 100%;
 
-.summary-row strong {
+            max-width: 520px;
 
-    color: #222;
+            max-height: 90vh;
 
-    font-weight: 500;
-}
+            overflow: hidden;
 
+            background: #fff;
 
-.summary-divider {
+            border-radius: 18px;
 
-    height: 1px;
+            box-shadow:
+                0 20px 60px
+                rgba(0,0,0,.20);
+        }
 
-    margin:
-        17px 0;
+        .modal-header {
+            padding:
+                18px 20px;
 
-    background: #eeeeee;
-}
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
 
+            border-bottom:
+                1px solid #eee;
+        }
 
-.summary-total {
+        .modal-header h2 {
+            margin: 0;
 
-    display: flex;
+            color: #222;
 
-    align-items: center;
+            font-size: 18px;
+        }
 
-    justify-content: space-between;
+        .modal-close {
+            width: 34px;
+            height: 34px;
 
-    color: #222;
+            border: 0;
 
-    font-size: 17px;
+            border-radius: 8px;
 
-    font-weight: 600;
-}
+            background: #fff1f4;
 
+            color: #ed0038;
 
-.summary-total span:last-child {
+            cursor: pointer;
+        }
 
-    color: #ed0038;
+        .modal-body {
+            max-height: 55vh;
 
-    font-size: 20px;
+            overflow-y: auto;
 
-    font-weight: 600;
-}
+            padding: 18px;
+        }
 
+        .address-option {
+            position: relative;
 
-/* =========================================================
-   SECTION TITLE
-========================================================= */
+            padding: 14px;
 
-.section-title {
+            margin-bottom: 10px;
 
-    display: flex;
+            border:
+                1px solid #eee;
 
-    align-items: center;
+            border-radius: 12px;
 
-    gap: 8px;
+            cursor: pointer;
+        }
 
-    margin:
-        22px 0 10px;
+        .address-option:hover,
+        .address-option.selected {
+            border-color: #ed0038;
 
-    color: #333;
+            background: #fff8fa;
+        }
 
-    font-size: 14px;
+        .address-option input {
+            position: absolute;
 
-    font-weight: 500;
-}
+            opacity: 0;
+        }
 
+        .address-option-title {
+            color: #ed0038;
 
-.section-title i {
+            font-size: 13px;
+            font-weight: 600;
+        }
 
-    color: #ed0038;
-}
+        .address-option-default {
+            margin-left: 6px;
 
+            padding:
+                3px 7px;
 
-/* =========================================================
-   ADDRESS
-========================================================= */
+            border-radius: 20px;
 
-.address-box {
+            background: #ed0038;
 
-    padding: 14px;
+            color: #fff;
 
-    background: #fff8fa;
+            font-size: 9px;
+        }
 
-    border:
-        1px solid #f1c5d1;
+        .address-option-text {
+            margin-top: 7px;
 
-    border-radius: 10px;
-}
+            color: #666;
 
+            font-size: 11px;
 
-.address-top {
+            line-height: 1.5;
+        }
 
-    display: flex;
+        .address-option-phone {
+            margin-top: 6px;
 
-    align-items: center;
+            color: #777;
 
-    justify-content: space-between;
+            font-size: 10px;
+        }
 
-    gap: 10px;
+        .modal-footer {
+            padding:
+                15px 18px;
 
-    margin-bottom: 7px;
-}
+            display: flex;
 
+            gap: 10px;
 
-.address-label {
+            border-top:
+                1px solid #eee;
+        }
 
-    color: #ed0038;
+        .manage-address-btn,
+        .use-address-btn {
+            flex: 1;
 
-    font-size: 13px;
+            min-height: 42px;
 
-    font-weight: 500;
-}
+            border-radius: 9px;
 
+            display: flex;
 
-.address-selected {
+            align-items: center;
+            justify-content: center;
 
-    padding:
-        4px 8px;
+            cursor: pointer;
 
-    border-radius: 20px;
+            font-size: 12px;
+        }
 
-    background: #ed0038;
+        .manage-address-btn {
+            border:
+                1px solid #ed0038;
 
-    color: #fff;
+            color: #ed0038;
 
-    font-size: 9px;
+            background: #fff;
+        }
 
-    font-weight: 500;
+        .use-address-btn {
+            border: 0;
 
-    text-transform: uppercase;
-}
+            background:
+                linear-gradient(
+                    90deg,
+                    #ed0038,
+                    #ff6294
+                );
 
+            color: #fff;
+        }
 
-.address-text {
 
-    margin: 0;
+        /*
+        =========================================================
+        RESPONSIVE
+        =========================================================
+        */
 
-    color: #666;
+        @media (max-width: 1050px) {
 
-    font-size: 13px;
+            .cart-layout {
+                grid-template-columns: 1fr;
+            }
 
-    line-height: 1.55;
+            .summary-card {
+                position: static;
+            }
+        }
 
-    font-weight: 400;
-}
 
+        @media (max-width: 760px) {
 
-.address-phone {
+            .humsafar-cart-page {
+                padding:
+                    25px 14px
+                    50px;
+            }
 
-    margin-top: 7px;
+            .cart-heading {
+                display: block;
+            }
 
-    color: #777;
+            .continue-shopping {
+                margin-top: 12px;
+            }
 
-    font-size: 12px;
-}
+            .cart-item {
+                grid-template-columns:
+                    75px
+                    minmax(0,1fr);
 
+                gap: 12px;
+            }
 
-.address-phone i {
+            .item-image {
+                width: 75px;
+                height: 70px;
+            }
 
-    color: #ed0038;
-}
+            .quantity-area {
+                grid-column: 2;
+                text-align: left;
+            }
 
+            .item-total {
+                grid-column: 2;
+                text-align: left;
+            }
 
-.change-address {
+            .remove-item {
+                grid-column: 2;
+                justify-self: start;
+            }
+        }
 
-    margin-top: 11px;
 
-    padding: 0;
+        @media (max-width: 520px) {
 
-    border: 0;
+            .cart-heading h1 {
+                font-size: 28px;
+            }
 
-    background: transparent;
+            .restaurant-header {
+                padding: 16px;
+            }
 
-    color: #ed0038;
+            .restaurant-image {
+                width: 52px;
+                height: 52px;
+            }
 
-    cursor: pointer;
+            .cart-item {
+                margin:
+                    0 10px
+                    10px;
 
-    font-size: 13px;
+                padding: 12px;
+            }
 
-    font-weight: 500;
-}
+            .summary-card {
+                padding: 18px;
+            }
 
+            .modal-footer {
+                flex-direction: column;
+            }
+        }
 
-.change-address:hover {
+    </style>
 
-    color: #c90030;
+</head>
 
-    text-decoration: underline;
-}
+<body>
 
+<main class="humsafar-cart-page">
 
-.add-address-link {
+<div class="cart-wrapper">
 
-    display: inline-block;
 
-    margin-top: 8px;
+    <!-- =====================================================
+         HEADING
+    ====================================================== -->
 
-    color: #ed0038;
+    <div class="cart-heading">
 
-    font-size: 13px;
+        <div>
 
-    font-weight: 500;
-}
+            <h1>
+                Your Cart
+            </h1>
 
+            <p>
+                Review your items and delivery details before checkout.
+            </p>
 
-/* =========================================================
-   PROMO
-========================================================= */
+        </div>
 
-.promo-form {
+        <a
+            href="restaurants.php"
+            class="continue-shopping"
+        >
 
-    display: flex;
+            <i class="fas fa-arrow-left"></i>
 
-    gap: 8px;
-}
+            Continue Shopping
 
+        </a>
 
-.promo-input {
+    </div>
 
-    width: 100%;
 
-    height: 42px;
+    <?php if ($isCartEmpty): ?>
 
-    padding:
-        0 12px;
+        <!-- =================================================
+             EMPTY CART
+        ================================================== -->
 
-    border:
-        1px solid #dddddd;
+        <div class="empty-cart">
 
-    border-radius: 8px;
+            <i class="fas fa-cart-shopping"></i>
 
-    outline: none;
+            <h2>
+                Your cart is empty
+            </h2>
 
-    color: #444;
-
-    font-size: 13px;
-}
-
-
-.promo-input:focus {
-
-    border-color: #ed0038;
-}
-
-
-.promo-button {
-
-    height: 42px;
-
-    padding:
-        0 15px;
-
-    border: 0;
-
-    border-radius: 8px;
-
-    background: #ed0038;
-
-    color: #fff;
-
-    cursor: pointer;
-
-    font-size: 13px;
-
-    font-weight: 500;
-}
-
-
-.promo-button:hover {
-
-    background: #d90035;
-}
-
-
-/* =========================================================
-   CHECKOUT
-========================================================= */
-
-.checkout-btn {
-
-    width: 100%;
-
-    min-height: 48px;
-
-    margin-top: 22px;
-
-    border: 0;
-
-    border-radius: 10px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #ed0038,
-            #f52c67
-        );
-
-    color: #fff;
-
-    cursor: pointer;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    gap: 8px;
-
-    font-size: 14px;
-
-    font-weight: 500;
-}
-
-
-.checkout-btn:hover {
-
-    background:
-        linear-gradient(
-            90deg,
-            #d90035,
-            #e7255e
-        );
-}
-
-
-.checkout-btn.disabled,
-.checkout-btn:disabled {
-
-    opacity: .55;
-
-    cursor: not-allowed;
-}
-
-
-.security-note {
-
-    margin-top: 11px;
-
-    text-align: center;
-
-    color: #999;
-
-    font-size: 11px;
-
-    font-weight: 400;
-}
-
-
-.security-note i {
-
-    color: #3a985d;
-
-    margin-right: 4px;
-}
-
-
-/* =========================================================
-   EMPTY CART
-========================================================= */
-
-.empty-cart {
-
-    padding:
-        75px 25px;
-
-    text-align: center;
-}
-
-
-.empty-cart-icon {
-
-    width: 85px;
-
-    height: 85px;
-
-    margin:
-        0 auto 18px;
-
-    border-radius: 50%;
-
-    background: #fff0f4;
-
-    color: #ed0038;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    font-size: 34px;
-}
-
-
-.empty-cart h2 {
-
-    margin:
-        0 0 9px;
-
-    color: #222;
-
-    font-size: 25px;
-
-    font-weight: 500;
-}
-
-
-.empty-cart p {
-
-    max-width: 430px;
-
-    margin:
-        0 auto 23px;
-
-    color: #777;
-
-    font-size: 14px;
-
-    line-height: 1.6;
-}
-
-
-.browse-btn {
-
-    display: inline-flex;
-
-    align-items: center;
-
-    gap: 8px;
-
-    padding:
-        11px 18px;
-
-    border-radius: 9px;
-
-    background: #ed0038;
-
-    color: #fff;
-
-    font-size: 13px;
-
-    font-weight: 500;
-}
-
-
-/* =========================================================
-   ADDRESS MODAL
-========================================================= */
-
-.address-modal {
-
-    position: fixed;
-
-    inset: 0;
-
-    z-index: 9999;
-
-    display: none;
-
-    align-items: center;
-
-    justify-content: center;
-
-    padding: 20px;
-
-    background:
-        rgba(20,10,15,.55);
-}
-
-
-.address-modal.open {
-
-    display: flex;
-}
-
-
-.address-modal-box {
-
-    width: 100%;
-
-    max-width: 560px;
-
-    max-height: 88vh;
-
-    overflow: hidden;
-
-    display: flex;
-
-    flex-direction: column;
-
-    background: #fff;
-
-    border-radius: 17px;
-
-    box-shadow:
-        0 20px 60px
-        rgba(0,0,0,.22);
-}
-
-
-.modal-header {
-
-    padding:
-        18px 20px;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: space-between;
-
-    gap: 15px;
-
-    border-bottom:
-        1px solid #eeeeee;
-}
-
-
-.modal-header h2 {
-
-    margin: 0;
-
-    color: #222;
-
-    font-size: 19px;
-
-    font-weight: 600;
-}
-
-
-.modal-close {
-
-    width: 35px;
-
-    height: 35px;
-
-    border: 0;
-
-    border-radius: 8px;
-
-    background: #fff1f4;
-
-    color: #ed0038;
-
-    cursor: pointer;
-}
-
-
-.modal-body {
-
-    padding: 17px;
-
-    overflow-y: auto;
-}
-
-
-.address-option {
-
-    margin-bottom: 10px;
-
-    padding: 14px;
-
-    display: flex;
-
-    align-items: flex-start;
-
-    gap: 11px;
-
-    border:
-        1px solid #e5e5e5;
-
-    border-radius: 11px;
-
-    cursor: pointer;
-
-    transition: .2s ease;
-}
-
-
-.address-option:hover {
-
-    border-color: #ef9fb3;
-
-    background: #fff9fb;
-}
-
-
-.address-option.selected {
-
-    border-color: #ed0038;
-
-    background: #fff5f8;
-}
-
-
-.address-option input {
-
-    margin-top: 4px;
-
-    accent-color: #ed0038;
-}
-
-
-.address-option-content {
-
-    flex: 1;
-
-    min-width: 0;
-}
-
-
-.address-option-title {
-
-    color: #333;
-
-    font-size: 14px;
-
-    font-weight: 500;
-}
-
-
-.address-option-text {
-
-    margin-top: 5px;
-
-    color: #777;
-
-    font-size: 13px;
-
-    line-height: 1.5;
-}
-
-
-.address-option-phone {
-
-    margin-top: 6px;
-
-    color: #777;
-
-    font-size: 12px;
-}
-
-
-.address-option-phone i {
-
-    color: #ed0038;
-}
-
-
-.no-address {
-
-    padding:
-        25px 15px;
-
-    text-align: center;
-
-    color: #777;
-
-    font-size: 13px;
-
-    line-height: 1.6;
-}
-
-
-.modal-footer {
-
-    padding:
-        14px 17px;
-
-    display: flex;
-
-    justify-content: flex-end;
-
-    gap: 9px;
-
-    border-top:
-        1px solid #eeeeee;
-}
-
-
-.manage-address-btn {
-
-    display: inline-flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    gap: 6px;
-
-    min-height: 40px;
-
-    padding:
-        0 14px;
-
-    border:
-        1px solid #ed0038;
-
-    border-radius: 8px;
-
-    background: #fff;
-
-    color: #ed0038;
-
-    font-size: 12px;
-
-    font-weight: 500;
-
-    text-decoration: none;
-}
-
-
-.manage-address-btn:hover {
-
-    background: #fff1f5;
-}
-
-
-.use-address-btn {
-
-    min-height: 40px;
-
-    padding:
-        0 15px;
-
-    border: 0;
-
-    border-radius: 8px;
-
-    background: #ed0038;
-
-    color: #fff;
-
-    cursor: pointer;
-
-    font-size: 12px;
-
-    font-weight: 500;
-}
-
-
-.use-address-btn:hover {
-
-    background: #d90035;
-}
-
-
-/* =========================================================
-   RESPONSIVE
-========================================================= */
-
-@media (max-width: 1100px) {
-
-    .cart-layout {
-
-        grid-template-columns:
-            minmax(0,1fr)
-            340px;
-    }
-
-
-    .cart-item {
-
-        grid-template-columns:
-            82px
-            minmax(0,1fr)
-            105px
-            90px
-            35px;
-    }
-
-
-    .item-image {
-
-        width: 82px;
-
-        height: 75px;
-    }
-}
-
-
-@media (max-width: 850px) {
-
-    .cart-layout {
-
-        grid-template-columns: 1fr;
-    }
-
-
-    .summary-card {
-
-        position: static;
-    }
-
-
-    .cart-heading {
-
-        align-items: flex-start;
-
-        flex-direction: column;
-    }
-}
-
-
-@media (max-width: 650px) {
-
-    .cart-page {
-
-        padding:
-            25px 3% 50px;
-    }
-
-
-    .cart-heading h1 {
-
-        font-size: 28px;
-    }
-
-
-    .cart-heading p {
-
-        font-size: 14px;
-    }
-
-
-    .cart-item {
-
-        grid-template-columns:
-            78px
-            minmax(0,1fr)
-            35px;
-
-        gap: 11px;
-
-        padding: 12px;
-    }
-
-
-    .item-image {
-
-        width: 78px;
-
-        height: 72px;
-    }
-
-
-    .quantity-area {
-
-        grid-column: 2;
-
-        text-align: left;
-    }
-
-
-    .item-total {
-
-        grid-column: 2;
-
-        text-align: left;
-    }
-
-
-    .remove-item {
-
-        grid-column: 3;
-
-        grid-row: 1;
-
-        align-self: start;
-    }
-
-
-    .item-details h3 {
-
-        font-size: 16px;
-    }
-
-
-    .item-description {
-
-        font-size: 12px;
-    }
-
-
-    .item-price {
-
-        font-size: 13px;
-    }
-}
-
-
-@media (max-width: 480px) {
-
-    .restaurant-header {
-
-        padding: 16px;
-    }
-
-
-    .restaurant-image {
-
-        width: 55px;
-
-        height: 55px;
-    }
-
-
-    .restaurant-info h2 {
-
-        font-size: 17px;
-    }
-
-
-    .restaurant-address {
-
-        font-size: 12px;
-    }
-
-
-    .restaurant-meta {
-
-        font-size: 12px;
-
-        gap: 9px;
-    }
-
-
-    .summary-card {
-
-        padding: 18px;
-    }
-
-
-    .modal-footer {
-
-        flex-direction: column;
-    }
-
-
-    .manage-address-btn,
-    .use-address-btn {
-
-        width: 100%;
-    }
-}
-
-</style>
-
-
-<main class="cart-page">
-
-    <div class="cart-wrapper">
-
-
-        <!-- =====================================================
-             PAGE HEADING
-        ====================================================== -->
-
-        <div class="cart-heading">
-
-            <div>
-
-                <h1>
-                    Your Cart
-                </h1>
-
-                <p>
-
-                    <?php if (!$isCartEmpty): ?>
-
-                        <?php
-                        echo (int)
-                            $totalItems;
-                        ?>
-
-                        <?php
-                        echo
-                            $totalItems === 1
-                                ? ' item'
-                                : ' items';
-                        ?>
-
-                        in your cart
-
-                    <?php else: ?>
-
-                        Your cart is currently empty.
-
-                    <?php endif; ?>
-
-                </p>
-
-            </div>
-
+            <p>
+                Add some delicious food to your cart and come back here.
+            </p>
 
             <a
                 href="restaurants.php"
-                class="continue-shopping"
+                class="browse-btn"
             >
 
-                <i class="fas fa-arrow-left"></i>
+                <i class="fas fa-utensils"></i>
 
-                Continue Shopping
+                Browse Restaurants
 
             </a>
 
         </div>
 
+    <?php else: ?>
 
-        <?php if ($isCartEmpty): ?>
+
+        <!-- =================================================
+             CART LAYOUT
+        ================================================== -->
+
+        <div class="cart-layout">
 
 
-            <!-- =================================================
-                 EMPTY CART
-            ================================================== -->
+            <!-- =============================================
+                 LEFT
+            ============================================== -->
 
-            <div class="cart-card">
+            <section class="cart-card">
 
-                <div class="empty-cart">
 
-                    <div
-                        class="empty-cart-icon"
-                    >
+                <!-- RESTAURANT -->
 
-                        <i
-                            class="
-                            fas
-                            fa-basket-shopping
-                            "
-                        ></i>
+                <div class="restaurant-header">
+
+                    <div class="restaurant-image">
+
+                        <?php
+
+                        $restaurantImg =
+                            cartRestaurantImage(
+                                $restaurantImage
+                            );
+
+                        ?>
+
+                        <?php if ($restaurantImg !== ''): ?>
+
+                            <img
+                                src="<?php
+                                    echo cart_h(
+                                        $restaurantImg
+                                    );
+                                ?>"
+                                alt="<?php
+                                    echo cart_h(
+                                        $restaurantName
+                                    );
+                                ?>"
+                                onerror="
+                                    this.style.display='none';
+                                    this.nextElementSibling.style.display='flex';
+                                "
+                            >
+
+                            <i
+                                class="fas fa-store"
+                                style="display:none;"
+                            ></i>
+
+                        <?php else: ?>
+
+                            <i class="fas fa-store"></i>
+
+                        <?php endif; ?>
 
                     </div>
 
 
-                    <h2>
-                        Your Cart is Empty
-                    </h2>
+                    <div class="restaurant-info">
 
-
-                    <p>
-
-                        You haven't added any
-                        food items yet.
-                        Explore restaurants and
-                        order your favourite food.
-
-                    </p>
-
-
-                    <a
-                        href="restaurants.php"
-                        class="browse-btn"
-                    >
-
-                        <i
-                            class="fas fa-store"
-                        ></i>
-
-                        Browse Restaurants
-
-                    </a>
-
-                </div>
-
-            </div>
-
-
-        <?php else: ?>
-
-
-            <!-- =================================================
-                 CART LAYOUT
-            ================================================== -->
-
-            <div class="cart-layout">
-
-
-                <!-- =================================================
-                     LEFT CART
-                ================================================== -->
-
-                <section
-                    class="cart-card"
-                >
-
-
-                    <!-- RESTAURANT -->
-
-                    <div
-                        class="restaurant-header"
-                    >
-
-                        <div
-                            class="restaurant-image"
-                        >
-
+                        <h2>
                             <?php
-
-                            $restaurantImg =
-                                cartRestaurantImage(
-                                    $restaurantImage
-                                );
-
+                            echo cart_h(
+                                $restaurantName
+                            );
                             ?>
+                        </h2>
 
 
-                            <?php if (
-                                $restaurantImg !== ''
-                            ): ?>
+                        <?php if (
+                            $restaurantAddress !== ''
+                        ): ?>
 
-                                <img
-                                    src="<?php
-                                    echo cart_h(
-                                        $restaurantImg
-                                    );
-                                    ?>"
-                                    alt="<?php
-                                    echo cart_h(
-                                        $restaurantName
-                                    );
-                                    ?>"
-                                    loading="lazy"
-                                    onerror="
-                                        this.style.display='none';
-                                        this.parentElement
-                                        .querySelector(
-                                            '.restaurant-fallback'
-                                        )
-                                        .style.display='block';
-                                    "
-                                >
-
+                            <div
+                                class="restaurant-address"
+                            >
 
                                 <i
-                                    class="
-                                    fas
-                                    fa-store
-                                    restaurant-fallback
-                                    "
-                                    style="
-                                        display:none;
-                                    "
+                                    class="fas fa-location-dot"
                                 ></i>
-
-
-                            <?php else: ?>
-
-                                <i
-                                    class="
-                                    fas
-                                    fa-store
-                                    "
-                                ></i>
-
-                            <?php endif; ?>
-
-                        </div>
-
-
-                        <div
-                            class="restaurant-info"
-                        >
-
-                            <h2>
 
                                 <?php
                                 echo cart_h(
-                                    $restaurantName
+                                    $restaurantAddress
                                 );
                                 ?>
 
-                            </h2>
+                            </div>
 
+                        <?php endif; ?>
+
+
+                        <div class="restaurant-meta">
 
                             <?php if (
-                                $restaurantAddress !== ''
+                                $deliveryTime !== ''
                             ): ?>
-
-                                <div
-                                    class="
-                                    restaurant-address
-                                    "
-                                >
-
-                                    <i
-                                        class="
-                                        fas
-                                        fa-location-dot
-                                        "
-                                    ></i>
-
-                                    <?php
-                                    echo cart_h(
-                                        $restaurantAddress
-                                    );
-                                    ?>
-
-                                </div>
-
-                            <?php endif; ?>
-
-
-                            <div
-                                class="
-                                restaurant-meta
-                                "
-                            >
-
-                                <?php if (
-                                    $deliveryTime !== ''
-                                ): ?>
-
-                                    <span>
-
-                                        <i
-                                            class="
-                                            fas
-                                            fa-clock
-                                            "
-                                        ></i>
-
-                                        <?php
-                                        echo cart_h(
-                                            $deliveryTime
-                                        );
-                                        ?>
-
-                                    </span>
-
-                                <?php endif; ?>
-
 
                                 <span>
 
                                     <i
-                                        class="
-                                        fas
-                                        fa-motorcycle
-                                        "
+                                        class="fas fa-clock"
                                     ></i>
 
-                                    Delivery:
-                                    Rs.
                                     <?php
-                                    echo number_format(
-                                        $deliveryFee,
-                                        0
+                                    echo cart_h(
+                                        $deliveryTime
                                     );
                                     ?>
 
                                 </span>
 
-                            </div>
+                            <?php endif; ?>
+
+
+                            <span>
+
+                                <i
+                                    class="fas fa-truck"
+                                ></i>
+
+                                Delivery
+
+                            </span>
 
                         </div>
 
                     </div>
 
-
-                    <?php if (
-                        $multipleRestaurants
-                    ): ?>
-
-                        <div
-                            class="
-                            restaurant-warning
-                            "
-                        >
-
-                            <i
-                                class="
-                                fas
-                                fa-triangle-exclamation
-                                "
-                            ></i>
+                </div>
 
 
-                            <div>
-
-                                <strong>
-                                    Multiple restaurants
-                                </strong>
-
-                                Your cart contains
-                                items from more than
-                                one restaurant.
-                                Please keep items
-                                from one restaurant
-                                before checkout.
-
-                            </div>
-
-                        </div>
-
-                    <?php endif; ?>
-
-
-                    <!-- ITEMS -->
+                <?php if (
+                    $multipleRestaurants
+                ): ?>
 
                     <div
-                        class="items-heading"
+                        class="restaurant-warning"
                     >
-                        Cart Items
+
+                        <i
+                            class="fas fa-triangle-exclamation"
+                        ></i>
+
+                        <div>
+
+                            <strong>
+                                Multiple restaurants
+                            </strong>
+
+                            Your cart contains items
+                            from more than one restaurant.
+                            Please keep one restaurant's
+                            items in the cart before checkout.
+
+                        </div>
+
                     </div>
 
-
-                    <?php foreach (
-                        $cartItems
-                        as $item
-                    ): ?>
+                <?php endif; ?>
 
 
-                        <?php
+                <!-- ITEMS HEADING -->
 
-                        /*
-                        | IMPORTANT:
-                        | This now uses:
-                        |
-                        | assets/images/menu/
-                        |
-                        | exactly like restaurant.php.
-                        */
+                <div class="items-heading">
 
-                        $itemImg =
-                            cartMenuImage(
-                                $item['item_image']
-                            );
+                    Cart Items
 
-                        ?>
+                </div>
 
 
-                        <article
-                            class="cart-item"
-                        >
+                <!-- ITEMS -->
+
+                <?php foreach (
+                    $cartItems as $item
+                ): ?>
+
+                    <article
+                        class="cart-item"
+                    >
 
 
-                            <!-- ITEM IMAGE -->
+                        <!-- ITEM IMAGE -->
 
-                            <div
-                                class="item-image"
-                            >
+                        <div class="item-image">
 
-                                <?php if (
-                                    $itemImg !== ''
-                                ): ?>
+                            <?php
 
-                                    <img
-                                        src="<?php
+                            /*
+                             * FIXED IMAGE PATH
+                             *
+                             * Database:
+                             * m.image
+                             *
+                             * Actual folder:
+                             * assets/images/menu/
+                             */
+
+                            $itemImg =
+                                cartMenuImage(
+                                    $item[
+                                        'item_image'
+                                    ]
+                                );
+
+                            ?>
+
+                            <?php if (
+                                $itemImg !== ''
+                            ): ?>
+
+                                <img
+                                    src="<?php
                                         echo cart_h(
                                             $itemImg
                                         );
-                                        ?>"
-                                        alt="<?php
+                                    ?>"
+                                    alt="<?php
                                         echo cart_h(
-                                            $item['item_name']
+                                            $item[
+                                                'item_name'
+                                            ]
                                         );
-                                        ?>"
-                                        loading="lazy"
-                                        onerror="
-                                            this.style.display='none';
-                                            this.parentElement
-                                            .querySelector(
-                                                '.item-fallback'
-                                            )
-                                            .style.display='block';
-                                        "
-                                    >
+                                    ?>"
+                                    loading="lazy"
+                                    onerror="
+                                        this.style.display='none';
+                                        this.nextElementSibling.style.display='flex';
+                                    "
+                                >
+
+                                <i
+                                    class="fas fa-utensils"
+                                    style="display:none;"
+                                ></i>
+
+                            <?php else: ?>
+
+                                <i
+                                    class="fas fa-utensils"
+                                ></i>
+
+                            <?php endif; ?>
+
+                        </div>
 
 
-                                    <i
-                                        class="
-                                        fas
-                                        fa-utensils
-                                        item-fallback
-                                        "
-                                        style="
-                                            display:none;
-                                        "
-                                    ></i>
+                        <!-- DETAILS -->
+
+                        <div class="item-details">
+
+                            <h3>
+
+                                <?php
+                                echo cart_h(
+                                    $item[
+                                        'item_name'
+                                    ]
+                                );
+                                ?>
+
+                            </h3>
 
 
-                                <?php else: ?>
+                            <?php if (
+                                !empty(
+                                    $item[
+                                        'item_description'
+                                    ]
+                                )
+                            ): ?>
 
-                                    <i
-                                        class="
-                                        fas
-                                        fa-utensils
-                                        "
-                                    ></i>
-
-                                <?php endif; ?>
-
-                            </div>
-
-
-                            <!-- DETAILS -->
-
-                            <div
-                                class="item-details"
-                            >
-
-                                <h3>
+                                <p
+                                    class="item-description"
+                                >
 
                                     <?php
                                     echo cart_h(
                                         $item[
-                                            'item_name'
-                                        ]
-                                    );
-                                    ?>
-
-                                </h3>
-
-
-                                <?php if (
-                                    !empty(
-                                        $item[
                                             'item_description'
                                         ]
-                                    )
-                                ): ?>
-
-                                    <p
-                                        class="
-                                        item-description
-                                        "
-                                    >
-
-                                        <?php
-                                        echo cart_h(
-                                            $item[
-                                                'item_description'
-                                            ]
-                                        );
-                                        ?>
-
-                                    </p>
-
-                                <?php endif; ?>
-
-
-                                <div
-                                    class="item-price"
-                                >
-
-                                    Rs.
-                                    <?php
-                                    echo number_format(
-                                        $item[
-                                            'item_price'
-                                        ],
-                                        2
                                     );
                                     ?>
 
-                                    each
+                                </p>
 
-                                </div>
+                            <?php endif; ?>
 
-                            </div>
-
-
-                            <!-- QUANTITY -->
 
                             <div
-                                class="quantity-area"
+                                class="item-price"
                             >
 
-                                <div
-                                    class="
-                                    quantity-label
-                                    "
-                                >
-                                    Quantity
-                                </div>
-
-
-                                <form
-                                    method="POST"
-                                    action="update_cart.php"
-                                    class="
-                                    quantity-form
-                                    "
-                                >
-
-                                    <input
-                                        type="hidden"
-                                        name="cart_id"
-                                        value="<?php
-                                        echo (int)
-                                            $item[
-                                                'cart_id'
-                                            ];
-                                        ?>"
-                                    >
-
-
-                                    <div
-                                        class="
-                                        quantity-box
-                                        "
-                                    >
-
-                                        <button
-                                            type="submit"
-                                            name="quantity"
-                                            value="<?php
-                                            echo max(
-                                                1,
-                                                (
-                                                    (int)
-                                                    $item[
-                                                        'quantity'
-                                                    ]
-                                                    - 1
-                                                )
-                                            );
-                                            ?>"
-                                            class="
-                                            quantity-btn
-                                            "
-                                            aria-label="
-                                            Decrease quantity
-                                            "
-                                        >
-                                            −
-                                        </button>
-
-
-                                        <span
-                                            class="
-                                            quantity-number
-                                            "
-                                        >
-
-                                            <?php
-                                            echo (int)
-                                                $item[
-                                                    'quantity'
-                                                ];
-                                            ?>
-
-                                        </span>
-
-
-                                        <button
-                                            type="submit"
-                                            name="quantity"
-                                            value="<?php
-                                            echo
-                                                (
-                                                    (int)
-                                                    $item[
-                                                        'quantity'
-                                                    ]
-                                                    + 1
-                                                );
-                                            ?>"
-                                            class="
-                                            quantity-btn
-                                            "
-                                            aria-label="
-                                            Increase quantity
-                                            "
-                                        >
-                                            +
-                                        </button>
-
-                                    </div>
-
-                                </form>
+                                Rs.
+                                <?php
+                                echo number_format(
+                                    $item[
+                                        'item_price'
+                                    ],
+                                    2
+                                );
+                                ?>
 
                             </div>
 
+                        </div>
 
-                            <!-- TOTAL -->
+
+                        <!-- QUANTITY -->
+
+                        <div class="quantity-area">
 
                             <div
-                                class="item-total"
+                                class="quantity-label"
                             >
-
-                                <div
-                                    class="
-                                    item-total-label
-                                    "
-                                >
-                                    Total
-                                </div>
-
-
-                                <div
-                                    class="
-                                    item-total-value
-                                    "
-                                >
-
-                                    Rs.
-                                    <?php
-                                    echo number_format(
-                                        $item[
-                                            'item_subtotal'
-                                        ],
-                                        2
-                                    );
-                                    ?>
-
-                                </div>
-
+                                Quantity
                             </div>
-
-
-                            <!-- REMOVE -->
 
                             <form
                                 method="POST"
-                                action="remove_from_cart.php"
+                                action="cart.php"
+                                class="quantity-form"
                             >
 
                                 <input
                                     type="hidden"
                                     name="cart_id"
                                     value="<?php
-                                    echo (int)
-                                        $item[
-                                            'cart_id'
-                                        ];
+                                        echo (int)
+                                            $item[
+                                                'cart_id'
+                                            ];
                                     ?>"
                                 >
 
+                                <div class="quantity-box">
 
-                                <button
-                                    type="submit"
-                                    class="
-                                    remove-item
-                                    "
-                                    title="Remove item"
-                                    onclick="
-                                        return confirm(
-                                            'Remove this item from your cart?'
-                                        );
-                                    "
-                                >
 
-                                    <i
-                                        class="
-                                        fas
-                                        fa-trash
-                                        "
-                                    ></i>
+                                    <button
+                                        type="submit"
+                                        name="quantity"
+                                        value="<?php
+                                            echo max(
+                                                1,
+                                                $item[
+                                                    'quantity'
+                                                ] - 1
+                                            );
+                                        ?>"
+                                        class="quantity-btn"
+                                        <?php
+                                        echo
+                                            $item[
+                                                'quantity'
+                                            ] <= 1
+                                            ? 'disabled'
+                                            : '';
+                                        ?>
+                                    >
+                                        −
+                                    </button>
 
-                                </button>
+
+                                    <span
+                                        class="quantity-number"
+                                    >
+                                        <?php
+                                        echo (int)
+                                            $item[
+                                                'quantity'
+                                            ];
+                                        ?>
+                                    </span>
+
+
+                                    <button
+                                        type="submit"
+                                        name="quantity"
+                                        value="<?php
+                                            echo
+                                                (int)
+                                                $item[
+                                                    'quantity'
+                                                ] + 1;
+                                        ?>"
+                                        class="quantity-btn"
+                                    >
+                                        +
+                                    </button>
+
+                                </div>
 
                             </form>
 
-
-                        </article>
-
-
-                    <?php endforeach; ?>
+                        </div>
 
 
-                    <!-- ADD MORE -->
+                        <!-- TOTAL -->
 
-                    <div
-                        class="cart-footer"
-                    >
+                        <div class="item-total">
+
+                            <div
+                                class="item-total-label"
+                            >
+                                Total
+                            </div>
+
+                            <div
+                                class="item-total-value"
+                            >
+
+                                Rs.
+                                <?php
+                                echo number_format(
+                                    $item[
+                                        'item_subtotal'
+                                    ],
+                                    2
+                                );
+                                ?>
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- REMOVE -->
 
                         <a
-                            href="restaurants.php"
-                            class="add-more"
+                            href="remove_from_cart.php?id=<?php
+                                echo (int)
+                                    $item[
+                                        'cart_id'
+                                    ];
+                            ?>"
+                            class="remove-item"
+                            title="Remove item"
+                            onclick="
+                                return confirm(
+                                    'Remove this item from cart?'
+                                );
+                            "
                         >
 
                             <i
-                                class="fas fa-plus"
+                                class="fas fa-trash"
                             ></i>
-
-                            Add More Items
 
                         </a>
 
-                    </div>
+                    </article>
+
+                <?php endforeach; ?>
 
 
-                </section>
+            </section>
 
 
-                <!-- =================================================
-                     RIGHT SUMMARY
-                ================================================== -->
+            <!-- =============================================
+                 RIGHT SUMMARY
+            ============================================== -->
 
-                <aside
-                    class="summary-card"
+            <aside
+                class="
+                    cart-card
+                    summary-card
+                "
+            >
+
+                <h2
+                    class="summary-title"
                 >
+                    Order Summary
+                </h2>
 
 
-                    <h2
-                        class="summary-title"
-                    >
-                        Order Summary
-                    </h2>
+                <!-- ITEMS -->
+
+                <div class="summary-row">
+
+                    <span>
+                        Items
+                    </span>
+
+                    <strong>
+                        <?php
+                        echo $totalItems;
+                        ?>
+                    </strong>
+
+                </div>
 
 
-                    <div
-                        class="summary-row"
-                    >
+                <!-- SUBTOTAL -->
 
-                        <span>
-                            Items
-                        </span>
+                <div class="summary-row">
 
-                        <strong>
+                    <span>
+                        Subtotal
+                    </span>
 
-                            Rs.
-                            <?php
-                            echo number_format(
-                                $subtotal,
-                                2
-                            );
-                            ?>
+                    <strong>
 
-                        </strong>
+                        Rs.
+                        <?php
+                        echo number_format(
+                            $subtotal,
+                            2
+                        );
+                        ?>
 
-                    </div>
+                    </strong>
+
+                </div>
 
 
-                    <div
-                        class="summary-row"
-                    >
+                <!-- DELIVERY -->
 
-                        <span>
-                            Delivery Fee
-                        </span>
+                <div class="summary-row">
 
-                        <strong>
+                    <span>
+                        Delivery Fee
+                    </span>
+
+                    <strong>
+
+                        <?php if (
+                            $multipleRestaurants
+                        ): ?>
+
+                            —
+
+                        <?php else: ?>
 
                             Rs.
                             <?php
@@ -3160,75 +2541,123 @@ require_once
                             );
                             ?>
 
-                        </strong>
+                        <?php endif; ?>
 
-                    </div>
+                    </strong>
 
-
-                    <?php if (
-                        $discount > 0
-                    ): ?>
-
-                        <div
-                            class="summary-row"
-                        >
-
-                            <span>
-                                Discount
-                            </span>
-
-                            <strong
-                                style="
-                                color:#218c4b;
-                                "
-                            >
-
-                                - Rs.
-                                <?php
-                                echo number_format(
-                                    $discount,
-                                    2
-                                );
-                                ?>
-
-                            </strong>
-
-                        </div>
-
-                    <?php endif; ?>
+                </div>
 
 
-                    <div
-                        class="summary-divider"
-                    ></div>
+                <?php if (
+                    $discount > 0
+                ): ?>
 
-
-                    <div
-                        class="summary-total"
-                    >
+                    <div class="summary-row">
 
                         <span>
-                            Total
+                            Discount
                         </span>
 
-                        <span>
+                        <strong
+                            style="
+                                color:#218c4b;
+                            "
+                        >
 
-                            Rs.
+                            − Rs.
                             <?php
                             echo number_format(
-                                $grandTotal,
+                                $discount,
                                 2
                             );
                             ?>
 
-                        </span>
+                        </strong>
 
                     </div>
 
+                <?php endif; ?>
 
-                    <!-- =================================================
-                         ADDRESS
-                    ================================================== -->
+
+                <div
+                    class="summary-divider"
+                ></div>
+
+
+                <!-- GRAND TOTAL -->
+
+                <div
+                    class="summary-total"
+                >
+
+                    <span>
+                        Total
+                    </span>
+
+                    <strong>
+
+                        Rs.
+                        <?php
+                        echo number_format(
+                            $grandTotal,
+                            2
+                        );
+                        ?>
+
+                    </strong>
+
+                </div>
+
+
+                <!-- DELIVERY TIME -->
+
+                <?php if (
+                    $deliveryTime !== ''
+                ): ?>
+
+                    <div
+                        class="delivery-time-box"
+                    >
+
+                        <div
+                            class="delivery-time-icon"
+                        >
+
+                            <i
+                                class="fas fa-clock"
+                            ></i>
+
+                        </div>
+
+
+                        <div
+                            class="delivery-time-text"
+                        >
+
+                            <span>
+                                Estimated Delivery Time
+                            </span>
+
+                            <strong>
+                                <?php
+                                echo cart_h(
+                                    $deliveryTime
+                                );
+                                ?>
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                <?php endif; ?>
+
+
+                <!-- ADDRESS -->
+
+                <div
+                    class="summary-section"
+                >
 
                     <div
                         class="section-title"
@@ -3236,8 +2665,8 @@ require_once
 
                         <i
                             class="
-                            fas
-                            fa-location-dot
+                                fas
+                                fa-location-dot
                             "
                         ></i>
 
@@ -3246,155 +2675,150 @@ require_once
                     </div>
 
 
-                    <div
-                        class="address-box"
-                    >
+                    <?php if (
+                        $selectedAddress
+                    ): ?>
 
                         <div
-                            class="address-top"
+                            class="address-box"
+                            id="selectedAddressBox"
                         >
-
-                            <span
-                                class="address-label"
-                                id="
-                                selectedAddressLabel
-                                "
-                            >
-
-                                <?php
-                                echo cart_h(
-                                    $selectedAddressLabel
-                                );
-                                ?>
-
-                            </span>
-
-
-                            <?php if (
-                                $selectedAddress
-                            ): ?>
-
-                                <span
-                                    class="
-                                    address-selected
-                                    "
-                                >
-                                    Selected
-                                </span>
-
-                            <?php endif; ?>
-
-                        </div>
-
-
-                        <p
-                            class="address-text"
-                            id="
-                            selectedAddressText
-                            "
-                        >
-
-                            <?php
-                            echo cart_h(
-                                $selectedAddressText
-                            );
-                            ?>
-
-                        </p>
-
-
-                        <?php if (
-                            $selectedAddressPhone !== ''
-                        ): ?>
 
                             <div
-                                class="
-                                address-phone
-                                "
-                                id="
-                                selectedAddressPhone
-                                "
+                                class="address-top"
                             >
 
-                                <i
-                                    class="
-                                    fas
-                                    fa-phone
-                                    "
-                                ></i>
+                                <span
+                                    class="address-label"
+                                    id="selectedAddressLabel"
+                                >
 
-                                <?php
-                                echo cart_h(
-                                    $selectedAddressPhone
-                                );
-                                ?>
+                                    <?php
+                                    echo cart_h(
+                                        $selectedAddressLabel
+                                    );
+                                    ?>
+
+                                </span>
+
+
+                                <?php if (
+                                    (int)
+                                    $selectedAddress[
+                                        'is_default'
+                                    ] === 1
+                                ): ?>
+
+                                    <span
+                                        class="address-default"
+                                    >
+                                        Default
+                                    </span>
+
+                                <?php endif; ?>
 
                             </div>
 
-                        <?php else: ?>
 
-                            <div
-                                class="
-                                address-phone
-                                "
-                                id="
-                                selectedAddressPhone
-                                "
-                            ></div>
+                            <p
+                                class="address-text"
+                                id="selectedAddressText"
+                            >
 
-                        <?php endif; ?>
+                                <?php
+                                echo cart_h(
+                                    $selectedAddressText
+                                );
+                                ?>
+
+                            </p>
 
 
-                        <?php if (
-                            $selectedAddress
-                        ): ?>
+                            <?php if (
+                                !empty(
+                                    $selectedAddress[
+                                        'phone'
+                                    ]
+                                )
+                            ): ?>
+
+                                <div
+                                    class="address-phone"
+                                    id="selectedAddressPhone"
+                                >
+
+                                    <i
+                                        class="fas fa-phone"
+                                    ></i>
+
+                                    <?php
+                                    echo cart_h(
+                                        $selectedAddress[
+                                            'phone'
+                                        ]
+                                    );
+                                    ?>
+
+                                </div>
+
+                            <?php endif; ?>
+
 
                             <button
                                 type="button"
-                                class="
-                                change-address
-                                "
+                                class="change-address"
                                 onclick="
                                     openAddressModal();
                                 "
                             >
 
                                 <i
-                                    class="
-                                    fas
-                                    fa-pen
-                                    "
+                                    class="fas fa-pen"
                                 ></i>
 
                                 Change Address
 
                             </button>
 
-                        <?php else: ?>
+                        </div>
+
+                    <?php else: ?>
+
+                        <div
+                            class="no-address"
+                        >
+
+                            <i
+                                class="
+                                    fas
+                                    fa-location-dot
+                                "
+                            ></i>
+
+                            No delivery address
+                            has been saved yet.
+
+                            <br>
 
                             <a
-                                href="<?php
-                                echo cart_h(
-                                    $manageAddressUrl
-                                );
-                                ?>"
-                                class="
-                                add-address-link
-                                "
+                                href="customer/manage-addresses.php"
+                                class="add-address-link"
                             >
 
                                 Add Delivery Address
 
                             </a>
 
-                        <?php endif; ?>
+                        </div>
 
-                    </div>
+                    <?php endif; ?>
+
+                </div>
 
 
-                    <!-- =================================================
-                         PROMO
-                    ================================================== -->
+                <!-- PROMO -->
+
+                <div class="promo-box">
 
                     <div
                         class="section-title"
@@ -3402,8 +2826,8 @@ require_once
 
                         <i
                             class="
-                            fas
-                            fa-ticket
+                                fas
+                                fa-ticket
                             "
                         ></i>
 
@@ -3412,55 +2836,43 @@ require_once
                     </div>
 
 
-                    <div
-                        class="promo-form"
-                    >
+                    <div class="promo-form">
 
                         <input
                             type="text"
                             id="promoCode"
                             class="promo-input"
-                            placeholder="
-                            Enter promo code
-                            "
+                            placeholder="Enter promo code"
                             autocomplete="off"
                         >
 
-
                         <button
                             type="button"
-                            class="
-                            promo-button
-                            "
-                            onclick="
-                                applyPromo();
-                            "
+                            class="promo-button"
+                            onclick="applyPromo();"
                         >
-
                             Apply
-
                         </button>
 
                     </div>
 
-
-                    <!-- =================================================
-                         CHECKOUT
-                    ================================================== -->
-
-                    <?php
-
-                    $checkoutDisabled =
-                        $multipleRestaurants ||
-                        empty($addresses);
-
-                    ?>
+                </div>
 
 
-                    <button
-                        type="button"
-                        id="checkoutButton"
-                        class="
+                <!-- CHECKOUT -->
+
+                <?php
+
+                $checkoutDisabled =
+                    $multipleRestaurants ||
+                    empty($addresses);
+
+                ?>
+
+                <button
+                    type="button"
+                    id="checkoutButton"
+                    class="
                         checkout-btn
                         <?php
                         echo
@@ -3468,63 +2880,57 @@ require_once
                             ? 'disabled'
                             : '';
                         ?>
-                        "
-                        <?php
-                        echo
-                            $checkoutDisabled
-                            ? 'disabled'
-                            : '';
-                        ?>
-                        onclick="
-                            proceedToCheckout();
-                        "
-                    >
+                    "
+                    <?php
+                    echo
+                        $checkoutDisabled
+                        ? 'disabled'
+                        : '';
+                    ?>
+                    onclick="
+                        proceedToCheckout();
+                    "
+                >
 
-                        <i
-                            class="
-                            fas
-                            fa-lock
-                            "
-                        ></i>
+                    <i
+                        class="fas fa-lock"
+                    ></i>
 
-                        Proceed to Checkout
+                    Proceed to Checkout
 
-                    </button>
+                </button>
 
 
-                    <div
-                        class="security-note"
-                    >
+                <div
+                    class="security-note"
+                >
 
-                        <i
-                            class="
+                    <i
+                        class="
                             fas
                             fa-shield-halved
-                            "
-                        ></i>
+                        "
+                    ></i>
 
-                        Your order information is
-                        securely handled.
+                    Your order information is
+                    securely handled.
 
-                    </div>
+                </div>
 
+            </aside>
 
-                </aside>
+        </div>
 
+    <?php endif; ?>
 
-            </div>
-
-        <?php endif; ?>
-
-
-    </div>
+</div>
 
 </main>
 
 
 <!-- =========================================================
      ADDRESS MODAL
-========================================================== -->
+========================================================= -->
 
 <div
     class="address-modal"
@@ -3532,20 +2938,15 @@ require_once
     aria-hidden="true"
 >
 
-
     <div
         class="address-modal-box"
     >
 
-
-        <div
-            class="modal-header"
-        >
+        <div class="modal-header">
 
             <h2>
                 Select Delivery Address
             </h2>
-
 
             <button
                 type="button"
@@ -3553,14 +2954,10 @@ require_once
                 onclick="
                     closeAddressModal();
                 "
-                aria-label="Close"
             >
 
                 <i
-                    class="
-                    fas
-                    fa-xmark
-                    "
+                    class="fas fa-xmark"
                 ></i>
 
             </button>
@@ -3568,35 +2965,22 @@ require_once
         </div>
 
 
-        <div
-            class="modal-body"
-        >
-
+        <div class="modal-body">
 
             <?php if (
                 empty($addresses)
             ): ?>
 
-
-                <div
-                    class="no-address"
-                >
+                <div class="no-address">
 
                     You don't have any saved
                     delivery addresses.
 
                     <br>
 
-
                     <a
-                        href="<?php
-                        echo cart_h(
-                            $manageAddressUrl
-                        );
-                        ?>"
-                        class="
-                        add-address-link
-                        "
+                        href="customer/manage-addresses.php"
+                        class="add-address-link"
                     >
 
                         Add New Address
@@ -3605,20 +2989,16 @@ require_once
 
                 </div>
 
-
             <?php else: ?>
 
 
                 <?php foreach (
-                    $addresses
-                    as $address
+                    $addresses as $address
                 ): ?>
-
 
                     <?php
 
                     $optionParts = [];
-
 
                     if (
                         !empty(
@@ -3634,7 +3014,6 @@ require_once
                             ];
                     }
 
-
                     if (
                         !empty(
                             $address['area']
@@ -3644,7 +3023,6 @@ require_once
                         $optionParts[] =
                             $address['area'];
                     }
-
 
                     if (
                         !empty(
@@ -3656,13 +3034,11 @@ require_once
                             $address['city'];
                     }
 
-
                     $optionText =
                         implode(
                             ', ',
                             $optionParts
                         );
-
 
                     $isSelected =
                         (
@@ -3672,50 +3048,45 @@ require_once
                             $selectedAddressId
                         );
 
-
                     ?>
-
 
                     <div
                         class="
-                        address-option
-                        <?php
-                        echo
-                            $isSelected
-                            ? 'selected'
-                            : '';
-                        ?>
+                            address-option
+                            <?php
+                            echo
+                                $isSelected
+                                ? 'selected'
+                                : '';
+                            ?>
                         "
                         data-address-id="<?php
-                        echo (int)
-                            $address['id'];
+                            echo (int)
+                                $address['id'];
                         ?>"
                         data-address-label="<?php
-                        echo cart_h(
-                            $address[
-                                'address_title'
-                            ]
-                            ?: 'Address'
-                        );
+                            echo cart_h(
+                                $address[
+                                    'address_title'
+                                ]
+                            );
                         ?>"
                         data-address-text="<?php
-                        echo cart_h(
-                            $optionText
-                        );
+                            echo cart_h(
+                                $optionText
+                            );
                         ?>"
                         data-address-phone="<?php
-                        echo cart_h(
-                            $address[
-                                'phone'
-                            ]
-                            ?? ''
-                        );
+                            echo cart_h(
+                                $address[
+                                    'phone'
+                                ] ?? ''
+                            );
                         ?>"
                         onclick="
                             selectAddress(this);
                         "
                     >
-
 
                         <input
                             type="radio"
@@ -3730,120 +3101,111 @@ require_once
 
 
                         <div
-                            class="
-                            address-option-content
-                            "
+                            class="address-option-title"
                         >
 
-                            <div
-                                class="
-                                address-option-title
-                                "
-                            >
-
-                                <?php
-                                echo cart_h(
-                                    $address[
-                                        'address_title'
-                                    ]
-                                    ?: 'Address'
-                                );
-                                ?>
-
-                            </div>
-
-
-                            <div
-                                class="
-                                address-option-text
-                                "
-                            >
-
-                                <?php
-                                echo cart_h(
-                                    $optionText
-                                );
-                                ?>
-
-                            </div>
+                            <?php
+                            echo cart_h(
+                                $address[
+                                    'address_title'
+                                ]
+                            );
+                            ?>
 
 
                             <?php if (
-                                !empty(
-                                    $address[
-                                        'phone'
-                                    ]
-                                )
+                                (int)
+                                $address[
+                                    'is_default'
+                                ] === 1
                             ): ?>
 
-                                <div
+                                <span
                                     class="
-                                    address-option-phone
+                                        address-option-default
                                     "
                                 >
-
-                                    <i
-                                        class="
-                                        fas
-                                        fa-phone
-                                        "
-                                    ></i>
-
-                                    <?php
-                                    echo cart_h(
-                                        $address[
-                                            'phone'
-                                        ]
-                                    );
-                                    ?>
-
-                                </div>
+                                    Default
+                                </span>
 
                             <?php endif; ?>
-
 
                         </div>
 
 
-                    </div>
+                        <div
+                            class="address-option-text"
+                        >
 
+                            <?php
+                            echo cart_h(
+                                $optionText
+                            );
+                            ?>
+
+                        </div>
+
+
+                        <?php if (
+                            !empty(
+                                $address['phone']
+                            )
+                        ): ?>
+
+                            <div
+                                class="
+                                    address-option-phone
+                                "
+                            >
+
+                                <i
+                                    class="
+                                        fas
+                                        fa-phone
+                                    "
+                                ></i>
+
+                                <?php
+                                echo cart_h(
+                                    $address[
+                                        'phone'
+                                    ]
+                                );
+                                ?>
+
+                            </div>
+
+                        <?php endif; ?>
+
+                    </div>
 
                 <?php endforeach; ?>
 
-
             <?php endif; ?>
-
 
         </div>
 
 
-        <div
-            class="modal-footer"
-        >
+        <div class="modal-footer">
 
 
             <!-- IMPORTANT:
-                 This is now generated from
-                 the actual project root.
+                 This is the correct page.
             -->
 
             <a
-                href="<?php
-                echo cart_h(
-                    $manageAddressUrl
-                );
-                ?>"
-                class="
-                manage-address-btn
-                "
+                href="customer/manage-addresses.php"
+                class="manage-address-btn"
             >
 
                 <i
                     class="
-                    fas
-                    fa-location-dot
+                        fas
+                        fa-location-dot
                     "
                 ></i>
+
+                &nbsp;
 
                 Manage Addresses
 
@@ -3852,9 +3214,7 @@ require_once
 
             <button
                 type="button"
-                class="
-                use-address-btn
-                "
+                class="use-address-btn"
                 onclick="
                     useSelectedAddress();
                 "
@@ -3864,9 +3224,7 @@ require_once
 
             </button>
 
-
         </div>
-
 
     </div>
 
@@ -3875,9 +3233,11 @@ require_once
 
 <script>
 
-/* =========================================================
-   SELECTED ADDRESS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| SELECTED ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 var selectedAddressId =
     <?php
@@ -3886,83 +3246,72 @@ var selectedAddressId =
     ?>;
 
 
-/* =========================================================
-   OPEN MODAL
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| OPEN MODAL
+|--------------------------------------------------------------------------
+*/
 
 function openAddressModal()
 {
-
     var modal =
         document.getElementById(
             'addressModal'
         );
 
-
     if (!modal) {
         return;
     }
-
 
     modal.classList.add(
         'open'
     );
 
-
     modal.setAttribute(
         'aria-hidden',
         'false'
     );
-
-
-    document.body.style.overflow =
-        'hidden';
 }
 
 
-/* =========================================================
-   CLOSE MODAL
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| CLOSE MODAL
+|--------------------------------------------------------------------------
+*/
 
 function closeAddressModal()
 {
-
     var modal =
         document.getElementById(
             'addressModal'
         );
 
-
     if (!modal) {
         return;
     }
-
 
     modal.classList.remove(
         'open'
     );
 
-
     modal.setAttribute(
         'aria-hidden',
         'true'
     );
-
-
-    document.body.style.overflow =
-        '';
 }
 
 
-/* =========================================================
-   CLOSE WHEN CLICK OUTSIDE
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| CLICK OUTSIDE
+|--------------------------------------------------------------------------
+*/
 
 var addressModal =
     document.getElementById(
         'addressModal'
     );
-
 
 if (addressModal) {
 
@@ -3981,17 +3330,17 @@ if (addressModal) {
 
         }
     );
-
 }
 
 
-/* =========================================================
-   SELECT ADDRESS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| SELECT ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 function selectAddress(element)
 {
-
     document
         .querySelectorAll(
             '.address-option'
@@ -4003,18 +3352,13 @@ function selectAddress(element)
                     'selected'
                 );
 
-
                 var radio =
                     option.querySelector(
                         'input[type="radio"]'
                     );
 
-
                 if (radio) {
-
-                    radio.checked =
-                        false;
-
+                    radio.checked = false;
                 }
 
             }
@@ -4031,12 +3375,8 @@ function selectAddress(element)
             'input[type="radio"]'
         );
 
-
     if (radio) {
-
-        radio.checked =
-            true;
-
+        radio.checked = true;
     }
 
 
@@ -4044,24 +3384,23 @@ function selectAddress(element)
         parseInt(
             element.getAttribute(
                 'data-address-id'
-            ),
-            10
+            )
         );
 }
 
 
-/* =========================================================
-   USE SELECTED ADDRESS
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| USE ADDRESS
+|--------------------------------------------------------------------------
+*/
 
 function useSelectedAddress()
 {
-
     var selected =
         document.querySelector(
             '.address-option.selected'
         );
-
 
     if (!selected) {
 
@@ -4077,8 +3416,7 @@ function useSelectedAddress()
         parseInt(
             selected.getAttribute(
                 'data-address-id'
-            ),
-            10
+            )
         );
 
 
@@ -4123,31 +3461,25 @@ function useSelectedAddress()
         labelElement.textContent =
             label ||
             'Address';
+
     }
 
 
     if (textElement) {
 
         textElement.textContent =
-            text ||
-            '';
+            text || '';
+
     }
 
 
     if (phoneElement) {
 
-        if (phone) {
-
-            phoneElement.innerHTML =
-                '<i class="fas fa-phone"></i> ' +
-                escapeHtml(phone);
-
-        } else {
-
-            phoneElement.innerHTML =
-                '';
-
-        }
+        phoneElement.innerHTML =
+            '<i class="fas fa-phone"></i> ' +
+            escapeHtml(
+                phone || ''
+            );
 
     }
 
@@ -4156,39 +3488,38 @@ function useSelectedAddress()
 }
 
 
-/* =========================================================
-   ESCAPE HTML
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| ESCAPE HTML
+|--------------------------------------------------------------------------
+*/
 
 function escapeHtml(value)
 {
-
     var div =
         document.createElement(
             'div'
         );
 
-
     div.textContent =
         value;
-
 
     return div.innerHTML;
 }
 
 
-/* =========================================================
-   PROMO
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| PROMO
+|--------------------------------------------------------------------------
+*/
 
 function applyPromo()
 {
-
     var input =
         document.getElementById(
             'promoCode'
         );
-
 
     if (!input) {
         return;
@@ -4216,7 +3547,7 @@ function applyPromo()
     ) {
 
         alert(
-            'Promo code accepted.'
+            'Promo code accepted. Real discount calculation will be connected later.'
         );
 
     } else {
@@ -4229,9 +3560,11 @@ function applyPromo()
 }
 
 
-/* =========================================================
-   CHECKOUT
-========================================================= */
+/*
+|--------------------------------------------------------------------------
+| CHECKOUT
+|--------------------------------------------------------------------------
+*/
 
 function proceedToCheckout()
 {
@@ -4257,14 +3590,8 @@ function proceedToCheckout()
             'Please add a delivery address first.'
         );
 
-
         window.location.href =
-            <?php
-            echo json_encode(
-                $manageAddressUrl
-            );
-            ?>;
-
+            'customer/manage-addresses.php';
 
         return;
 
@@ -4280,9 +3607,7 @@ function proceedToCheckout()
             'Please select a valid delivery address.'
         );
 
-
         openAddressModal();
-
 
         return;
     }
@@ -4293,36 +3618,31 @@ function proceedToCheckout()
         encodeURIComponent(
             selectedAddressId
         );
-
 }
 
-</script>
-
-
-<?php
 
 /*
 |--------------------------------------------------------------------------
-| FOOTER
-|--------------------------------------------------------------------------
-|
-| The existing customer header/footer structure
-| is preserved. If your customer-header.php already
-| includes the footer, don't add another footer here.
+| ESC KEY
 |--------------------------------------------------------------------------
 */
 
-if (
-    file_exists(
-        __DIR__ .
-        '/includes/footer.php'
-    )
-) {
+document.addEventListener(
+    'keydown',
+    function(event) {
 
-    require_once
-        __DIR__ .
-        '/includes/footer.php';
+        if (
+            event.key === 'Escape'
+        ) {
 
-}
+            closeAddressModal();
 
-?>
+        }
+
+    }
+);
+
+</script>
+
+</body>
+</html>
