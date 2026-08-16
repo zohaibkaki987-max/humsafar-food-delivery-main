@@ -1,0 +1,20 @@
+<?php
+require_once __DIR__ . '/../includes/config.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (empty($_SESSION['rider_id'])) { header('Location: rider-login.php'); exit; }
+$riderId=(int)$_SESSION['rider_id'];
+function rsh($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
+$msg='';$err='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+ $subject=trim($_POST['subject']??'');$message=trim($_POST['message']??'');
+ if($subject===''||$message==='') $err='Please enter a subject and message.';
+ elseif(mb_strlen($message)<10) $err='Please provide a little more detail.';
+ else {
+  $ok=false;
+  $st=$conn->prepare('INSERT INTO rider_support_tickets (rider_id,subject,message,status,created_at) VALUES (?,?,?,"open",NOW())');
+  if($st){$st->bind_param('iss',$riderId,$subject,$message);$ok=$st->execute();$st->close();}
+  if($ok)$msg='Support request submitted. Our team will review it.'; else $err='Support system is not configured yet. Please contact admin.';
+ }
+}
+?>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Support | Humsafar Rider</title><style>body{margin:0;background:#f7f7f8;font-family:Segoe UI,Arial;color:#222}.page{margin-left:223px;padding:36px;min-height:100vh}.wrap{max-width:900px}.title{font-size:30px;font-weight:850;margin:0 0 6px}.sub{color:#777;margin:0 0 24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{background:#fff;border-radius:17px;padding:25px;box-shadow:0 8px 25px #0000000b}.field{margin-bottom:16px}.field label{display:block;font-size:13px;font-weight:800;margin-bottom:7px}.input,.area{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;box-sizing:border-box;font:inherit}.area{min-height:150px;resize:vertical}.btn{background:#ed0038;color:#fff;border:0;border-radius:10px;padding:13px 22px;font-weight:800;cursor:pointer}.msg{padding:12px;border-radius:9px;margin-bottom:18px}.ok{background:#eaf8ef;color:#176c36}.bad{background:#fff0f3;color:#b00032}.help{display:flex;gap:12px;padding:15px 0;border-bottom:1px solid #eee}.help:last-child{border:0}.icon{width:38px;height:38px;border-radius:10px;background:#ffe5ec;color:#ed0038;display:flex;align-items:center;justify-content:center;font-weight:900}.help strong{display:block}.help span{display:block;color:#777;font-size:13px;margin-top:3px}@media(max-width:800px){.page{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}</style></head><body><?php include __DIR__.'/rider-sidebar.php'; ?><main class="page"><div class="wrap"><h1 class="title">Rider Support</h1><p class="sub">Need help with an order, payment, account or delivery? Send us a support request.</p><?php if($msg):?><div class="msg ok"><?=rsh($msg)?></div><?php endif;?><?php if($err):?><div class="msg bad"><?=rsh($err)?></div><?php endif;?><div class="grid"><div class="card"><h2>Contact Support</h2><form method="post"><div class="field"><label>Subject</label><input class="input" name="subject" placeholder="e.g. Problem with delivery"></div><div class="field"><label>Message</label><textarea class="area" name="message" placeholder="Explain your issue..."></textarea></div><button class="btn">Submit Request</button></form></div><div class="card"><h2>Common Help</h2><div class="help"><div class="icon">?</div><div><strong>Order issue</strong><span>Report a problem with an assigned delivery.</span></div></div><div class="help"><div class="icon">₨</div><div><strong>Earnings</strong><span>Ask about missing or incorrect delivery earnings.</span></div></div><div class="help"><div class="icon">↻</div><div><strong>Account</strong><span>Get help with your profile or approval status.</span></div></div><div class="help"><div class="icon">📍</div><div><strong>Location</strong><span>Report GPS or delivery location problems.</span></div></div></div></div></div></main></body></html>
