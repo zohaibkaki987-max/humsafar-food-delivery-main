@@ -11,7 +11,6 @@ if (PHP_SAPI === 'cli' || defined('HUMSAFAR_CUSTOMER_FEATURES_DISABLED')) {
 if (!function_exists('humsafar_customer_feature_output')) {
     function humsafar_customer_feature_output($html)
     {
-        // Never modify JSON, redirects, AJAX fragments or other non-HTML responses.
         if (strpos((string)$html, '</html>') === false) {
             return $html;
         }
@@ -73,7 +72,6 @@ if (!function_exists('humsafar_customer_feature_output')) {
         $headerLinks = "<a href=\"favorites.php\" class=\"hcf-header-link\" title=\"Favourite Restaurants\" aria-label=\"Favourite Restaurants\"><i class=\"fas fa-heart\"></i><span>Favourites</span></a>"
             . "<a href=\"notifications.php\" class=\"hcf-header-link hcf-notification-link\" title=\"Notifications\" aria-label=\"Notifications\"><i class=\"fas fa-bell\"></i><span>Notifications</span>{$badge}</a>";
 
-        // Existing customer header: add Favorites + Notifications inside the action area.
         $html = preg_replace(
             '/(<div\s+class="customer-header-actions"\s*>)/i',
             '$1' . $headerLinks,
@@ -81,7 +79,6 @@ if (!function_exists('humsafar_customer_feature_output')) {
             1
         );
 
-        // Existing profile dropdown: add Favorites + Notifications shortcuts.
         $profileLinks = "<a href=\"favorites.php\" class=\"customer-menu-link\"><i class=\"fas fa-heart\"></i> Favourite Restaurants</a>"
             . "<a href=\"notifications.php\" class=\"customer-menu-link\"><i class=\"fas fa-bell\"></i> Notifications {$badge}</a>";
         $html = preg_replace(
@@ -91,7 +88,6 @@ if (!function_exists('humsafar_customer_feature_output')) {
             1
         );
 
-        // Shared customer feature strip below the existing header.
         $featureStrip = "<div class=\"hcf-strip\"><div class=\"hcf-strip-inner\">"
             . "<a href=\"favorites.php\"><i class=\"fas fa-heart\"></i> Favourites</a>"
             . "<a href=\"notifications.php\"><i class=\"fas fa-bell\"></i> Notifications {$badge}</a>"
@@ -99,7 +95,6 @@ if (!function_exists('humsafar_customer_feature_output')) {
             . "</div></div>";
         $html = preg_replace('/(<\/header>)/i', '$1' . $featureStrip, $html, 1);
 
-        // Restaurant page: actual add/remove favorite toggle.
         if ($path === 'restaurant.php') {
             $restaurantId = (int)($_GET['id'] ?? 0);
             if ($restaurantId > 0) {
@@ -111,18 +106,16 @@ if (!function_exists('humsafar_customer_feature_output')) {
             }
         }
 
-        // My Orders: attach Reorder to previous non-cancelled orders and Review to delivered orders.
         if ($path === 'my_orders.php') {
+            // The existing order card already contains its order-details link. Insert the
+            // feature buttons immediately before that link, so each button keeps the right ID.
             $html = preg_replace_callback(
-                '/(<div\s+class="order-card"[^>]*>.*?<div\s+class="order-bottom"[^>]*>)/is',
+                '/(<div\s+class="order-card"[^>]*>.*?)(<a\s+href="\s*order-details\.php\?id=(\d+)[^>]*class="view-order-btn"[^>]*>)/is',
                 function ($m) {
-                    $segment = $m[1];
-                    if (!preg_match('/order-details\.php\?id=(\d+)/i', $segment, $idMatch)) {
-                        return $m[0];
-                    }
-                    $orderId = (int)$idMatch[1];
-                    $cancelled = (bool)preg_match('/Order Cancelled|status-cancelled/i', $segment);
-                    $delivered = (bool)preg_match('/>\s*Delivered\s*</i', $segment);
+                    $beforeLink = $m[1];
+                    $orderId = (int)$m[3];
+                    $cancelled = (bool)preg_match('/Order Cancelled|status-cancelled/i', $beforeLink);
+                    $delivered = (bool)preg_match('/>\s*Delivered\s*</i', $beforeLink);
                     $buttons = '<div class="hcf-order-actions">';
                     if (!$cancelled) {
                         $buttons .= '<a href="reorder.php?order_id=' . $orderId . '" class="hcf-order-btn reorder"><i class="fas fa-rotate-right"></i> Reorder</a>';
@@ -131,7 +124,7 @@ if (!function_exists('humsafar_customer_feature_output')) {
                         $buttons .= '<a href="review.php?order_id=' . $orderId . '" class="hcf-order-btn review"><i class="fas fa-star"></i> Review</a>';
                     }
                     $buttons .= '</div>';
-                    return str_replace($segment, $buttons . $segment, $m[0]);
+                    return $beforeLink . $buttons . $m[2];
                 },
                 $html
             );
