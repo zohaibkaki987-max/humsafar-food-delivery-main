@@ -15,8 +15,8 @@ $s->bind_param('ii',$orderId,$userId);$s->execute();$order=$s->get_result()->fet
 if(!$order){http_response_code(404);echo json_encode(['ok'=>false,'error'=>'Order not found']);exit;}
 $status=strtolower((string)$order['order_status']);
 if(in_array($status,['delivered','cancelled','completed'],true)){echo json_encode(['ok'=>false,'error'=>'Tracking is no longer active']);exit;}
-$check=$conn->query("SHOW TABLES LIKE 'order_delivery_locations'");
-if(!$check||$check->num_rows===0){http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Tracking database table is not installed']);exit;}
+$create="CREATE TABLE IF NOT EXISTS order_delivery_locations (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,order_id INT NOT NULL UNIQUE,user_id INT NOT NULL,latitude DECIMAL(10,7) NOT NULL,longitude DECIMAL(10,7) NOT NULL,accuracy DECIMAL(10,2) NULL,updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,INDEX idx_odl_user(user_id),INDEX idx_odl_order(order_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+if(!$conn->query($create)){http_response_code(500);echo json_encode(['ok'=>false,'error'=>'Unable to initialize tracking database']);exit;}
 $s=$conn->prepare("INSERT INTO order_delivery_locations(order_id,user_id,latitude,longitude,accuracy) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),latitude=VALUES(latitude),longitude=VALUES(longitude),accuracy=VALUES(accuracy),updated_at=CURRENT_TIMESTAMP");
 $s->bind_param('iiddd',$orderId,$userId,$lat,$lng,$accuracy);$ok=$s->execute();$s->close();
 echo json_encode(['ok'=>$ok]);
