@@ -3,3 +3,9 @@ RewriteEngine On
 # Public root URL always opens the Humsafar landing page.
 # index.php remains the actual customer homepage after login.
 RewriteRule ^$ join-humsafar.php [L]
+
+# Complete customer checkout transaction through the dedicated PHP processor.
+# GET /checkout.php keeps the existing checkout page/UI.
+# POST /checkout.php is internally handled by place_order.php.
+RewriteCond %{REQUEST_METHOD} POST
+RewriteRule ^checkout\.php$ place_order.php [L]
