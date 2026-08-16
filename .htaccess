@@ -9,3 +9,7 @@ RewriteRule ^$ join-humsafar.php [L]
 # POST /checkout.php is internally handled by place_order.php.
 RewriteCond %{REQUEST_METHOD} POST
 RewriteRule ^checkout\.php$ place_order.php [L]
+
+# Use the immutable order-address snapshot on the success page.
+RewriteCond %{REQUEST_METHOD} GET
+RewriteRule ^order_success\.php$ order_success_snapshot.php [L]
