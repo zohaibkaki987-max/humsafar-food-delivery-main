@@ -7,7 +7,13 @@ $user_id = (int)$_SESSION['user_id'];
 $order_id = (int)($_GET['order_id'] ?? 0);
 if ($order_id <= 0) { header('Location: my_orders.php'); exit; }
 
-/* Customer can cancel only while payment is not completed AND order is still pending. */
+/*
+ * Customer can cancel ONLY when:
+ * - order is still pending (restaurant has not accepted it), and
+ * - payment is not completed.
+ * The final UPDATE repeats both conditions atomically so a race with payment
+ * or restaurant acceptance cannot bypass the rule.
+ */
 $stmt = $conn->prepare(
     "SELECT o.id, o.order_status, COALESCE(p.status, 'pending') AS payment_status
      FROM orders o
@@ -24,25 +30,22 @@ if (!$order) { header('Location: my_orders.php'); exit; }
 
 $status = strtolower(trim((string)$order['order_status']));
 $payment_status = strtolower(trim((string)$order['payment_status']));
+$paymentCompleted = in_array($payment_status, ['paid','completed','success','succeeded','verified'], true);
 
-$paymentCompletedStatuses = ['paid','completed','success','succeeded','verified'];
-$paymentCompleted = in_array($payment_status, $paymentCompletedStatuses, true);
-
-/* Restaurant acceptance starts at confirmed/accepted; all later statuses are locked. */
-$restaurantAcceptedStatuses = [
-    'confirmed','accepted','preparing','ready','ready_for_pickup','rider_assigned',
-    'picked_up','out_for_delivery','on_the_way','delivered','completed'
-];
-$restaurantAccepted = in_array($status, $restaurantAcceptedStatuses, true);
-
-if ($status !== 'pending' || $restaurantAccepted || $paymentCompleted) {
+if ($status !== 'pending' || $paymentCompleted) {
     header('Location: order_success.php?order_id=' . $order_id . '&cancel=not_allowed');
     exit;
 }
 
+/* Atomic final guard: payment must still be incomplete and order still pending. */
 $update = $conn->prepare(
-    "UPDATE orders SET order_status = 'cancelled'
-     WHERE id = ? AND user_id = ? AND order_status = 'pending'"
+    "UPDATE orders o
+     LEFT JOIN payments p ON p.order_id = o.id
+     SET o.order_status = 'cancelled'
+     WHERE o.id = ?
+       AND o.user_id = ?
+       AND o.order_status = 'pending'
+       AND COALESCE(p.status, 'pending') NOT IN ('paid','completed','success','succeeded','verified')"
 );
 if (!$update) die('Database error: ' . $conn->error);
 $update->bind_param('ii', $order_id, $user_id);
