@@ -11,6 +11,11 @@ if (PHP_SAPI === 'cli' || defined('HUMSAFAR_CUSTOMER_FEATURES_DISABLED')) {
 if (!function_exists('humsafar_customer_feature_output')) {
     function humsafar_customer_feature_output($html)
     {
+        // Never modify JSON, redirects, AJAX fragments or other non-HTML responses.
+        if (strpos((string)$html, '</html>') === false) {
+            return $html;
+        }
+
         $path = basename((string)($_SERVER['PHP_SELF'] ?? ''));
         $requestPath = str_replace('\\', '/', (string)($_SERVER['REQUEST_URI'] ?? ''));
 
