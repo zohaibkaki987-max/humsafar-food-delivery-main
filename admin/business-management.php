@@ -4,6 +4,28 @@ if(session_status()===PHP_SESSION_NONE)session_start();
 if(empty($_SESSION['admin_id']) && empty($_SESSION['admin_logged_in'])){header('Location: admin-login.php');exit;}
 function bh($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 $msg='';$err='';
+
+// Self-heal the business settings storage so Admin does not need to manually import SQL.
+$businessTableSql="CREATE TABLE IF NOT EXISTS business_settings (
+ id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ setting_key VARCHAR(100) NOT NULL UNIQUE,
+ setting_value TEXT NULL,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+if(!$conn->query($businessTableSql)){
+    $err='Unable to initialize business settings: '.($conn->error ?: 'database error');
+}else{
+    $defaults=[
+        'customer_markup_percent'=>'0',
+        'restaurant_commission_percent'=>'15',
+        'rider_base_payout'=>'80',
+        'delivery_fee_per_km'=>'50',
+        'currency'=>'PKR'
+    ];
+    $seed=$conn->prepare('INSERT IGNORE INTO business_settings(setting_key,setting_value) VALUES(?,?)');
+    if($seed){foreach($defaults as $k=>$v){$seed->bind_param('ss',$k,$v);$seed->execute();}$seed->close();}
+}
+
 if($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='setting'){
  $key=trim($_POST['key']??'');$value=trim($_POST['value']??'');
  $allowed=['customer_markup_percent','restaurant_commission_percent','rider_base_payout','delivery_fee_per_km','currency'];
@@ -11,7 +33,11 @@ if($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='setting'){
  elseif($value==='')$err='Setting value is required.';
  elseif(in_array($key,['customer_markup_percent','restaurant_commission_percent'],true)&&((float)$value<0||(float)$value>100))$err='Percentage must be between 0 and 100.';
  elseif(in_array($key,['rider_base_payout','delivery_fee_per_km'],true)&&(float)$value<0)$err='Amount cannot be negative.';
- else{$s=$conn->prepare('INSERT INTO business_settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');if($s){$s->bind_param('ss',$key,$value);if($s->execute())$msg='Business setting saved successfully.';else$err='Unable to save setting.';$s->close();}else$err='The business_settings table is missing. Import the business settings migration first.';}
+ else{
+   $s=$conn->prepare('INSERT INTO business_settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');
+   if($s){$s->bind_param('ss',$key,$value);if($s->execute())$msg='Business setting saved successfully.';else$err='Unable to save setting: '.($s->error?:'database error');$s->close();}
+   else $err='Unable to prepare business setting update: '.($conn->error?:'database error');
+ }
 }
 $settings=[];$q=$conn->query('SELECT setting_key,setting_value FROM business_settings ORDER BY setting_key');if($q)while($r=$q->fetch_assoc())$settings[$r['setting_key']]=$r['setting_value'];
 $markup=(float)($settings['customer_markup_percent']??0);$commission=(float)($settings['restaurant_commission_percent']??15);$rate=(float)($settings['delivery_fee_per_km']??50);$riderPay=(float)($settings['rider_base_payout']??80);
