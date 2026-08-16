@@ -13,9 +13,9 @@ if ($conn->connect_error) {
 
 $conn->set_charset("utf8mb4");
 
-// Safe additive integration for Customer Favorites, Reviews, Reorder and Notifications.
-// The injector is read-only until a customer action is clicked and is disabled automatically
-// on admin, restaurant-owner, rider and delivery routes.
+// Safe additive customer features integration.
 require_once __DIR__ . '/customer-feature-injector.php';
+// Customer cancellation UI guard. Server-side enforcement is in cancel_order.php.
+require_once __DIR__ . '/customer-cancellation-injector.php';
 
 ?>
