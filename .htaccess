@@ -1,0 +1,5 @@
+RewriteEngine On
+
+# Public root URL always opens the Humsafar landing page.
+# index.php remains the actual customer homepage after login.
+RewriteRule ^$ join-humsafar.php [L]
