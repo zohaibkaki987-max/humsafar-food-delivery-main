@@ -1,6 +1,6 @@
 -- Humsafar Customer Features
 -- Ratings & Reviews + Favourite Restaurants + Customer Notifications
--- Reorder uses the existing orders/order_items/cart tables and needs no new table.
+-- Reorder uses existing orders/order_items/cart tables.
 -- Safe migration: creates only missing feature tables.
 
 CREATE TABLE IF NOT EXISTS restaurant_favorites (
@@ -46,10 +46,8 @@ CREATE TABLE IF NOT EXISTS customer_notifications (
     KEY idx_notifications_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Automatically create a customer notification whenever the existing
--- order status history records a status change.
+-- Create a customer notification whenever order status history receives a row.
 DROP TRIGGER IF EXISTS trg_customer_order_notification;
-
 DELIMITER $$
 CREATE TRIGGER trg_customer_order_notification
 AFTER INSERT ON order_status_history
@@ -59,10 +57,7 @@ BEGIN
     DECLARE v_title VARCHAR(150);
     DECLARE v_message VARCHAR(500);
 
-    SELECT user_id INTO v_user_id
-    FROM orders
-    WHERE id = NEW.order_id
-    LIMIT 1;
+    SELECT user_id INTO v_user_id FROM orders WHERE id=NEW.order_id LIMIT 1;
 
     SET v_title = CASE NEW.status
         WHEN 'pending' THEN 'Order received'
@@ -76,8 +71,7 @@ BEGIN
         WHEN 'delivered' THEN 'Order delivered'
         WHEN 'cancelled' THEN 'Order cancelled'
         WHEN 'rejected' THEN 'Order rejected'
-        ELSE 'Order status updated'
-    END;
+        ELSE 'Order status updated' END;
 
     SET v_message = CASE NEW.status
         WHEN 'pending' THEN 'We received your order and sent it to the restaurant.'
@@ -91,17 +85,32 @@ BEGIN
         WHEN 'delivered' THEN 'Your order has been delivered. Enjoy your meal!'
         WHEN 'cancelled' THEN 'Your order has been cancelled.'
         WHEN 'rejected' THEN 'The restaurant could not accept your order.'
-        ELSE COALESCE(NULLIF(NEW.note, ''), 'Your order status has been updated.')
-    END;
+        ELSE COALESCE(NULLIF(NEW.note,''),'Your order status has been updated.') END;
 
     IF v_user_id > 0 THEN
-        INSERT INTO customer_notifications
-            (user_id, order_id, type, title, message)
-        VALUES
-            (v_user_id, NEW.order_id, 'order_status', v_title, v_message);
+        INSERT INTO customer_notifications(user_id,order_id,type,title,message)
+        VALUES(v_user_id,NEW.order_id,'order_status',v_title,v_message);
     END IF;
 END$$
 DELIMITER ;
 
--- Optional one-time backfill is intentionally not automatic.
--- Run it manually if you want old order history converted into notifications.
+-- Keep restaurants.rating synchronized with submitted customer reviews.
+DROP TRIGGER IF EXISTS trg_restaurant_review_rating_insert;
+DROP TRIGGER IF EXISTS trg_restaurant_review_rating_update;
+DELIMITER $$
+CREATE TRIGGER trg_restaurant_review_rating_insert
+AFTER INSERT ON restaurant_reviews
+FOR EACH ROW
+BEGIN
+    UPDATE restaurants r SET r.rating=(SELECT COALESCE(ROUND(AVG(rr.rating),1),0) FROM restaurant_reviews rr WHERE rr.restaurant_id=NEW.restaurant_id) WHERE r.id=NEW.restaurant_id;
+END$$
+CREATE TRIGGER trg_restaurant_review_rating_update
+AFTER UPDATE ON restaurant_reviews
+FOR EACH ROW
+BEGIN
+    UPDATE restaurants r SET r.rating=(SELECT COALESCE(ROUND(AVG(rr.rating),1),0) FROM restaurant_reviews rr WHERE rr.restaurant_id=NEW.restaurant_id) WHERE r.id=NEW.restaurant_id;
+    IF OLD.restaurant_id<>NEW.restaurant_id THEN
+        UPDATE restaurants r SET r.rating=(SELECT COALESCE(ROUND(AVG(rr.rating),1),0) FROM restaurant_reviews rr WHERE rr.restaurant_id=OLD.restaurant_id) WHERE r.id=OLD.restaurant_id;
+    END IF;
+END$$
+DELIMITER ;
