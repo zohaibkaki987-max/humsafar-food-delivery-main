@@ -2,80 +2,38 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/session.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
-}
-
+if (!isset($_SESSION['user_id'])) { header('Location: login.php'); exit; }
 $user_id = (int)$_SESSION['user_id'];
 $order_id = (int)($_GET['order_id'] ?? 0);
+if ($order_id <= 0) { header('Location: my_orders.php'); exit; }
 
-if ($order_id <= 0) {
-    header('Location: my_orders.php');
-    exit;
-}
-
-/*
- * Customer cancellation rule:
- * 1) Payment must NOT be completed.
- * 2) Restaurant must NOT have accepted the order.
- *
- * This is enforced server-side. Hiding the button in the UI is not enough.
- */
+/* Customer can cancel only while payment is not completed AND order is still pending. */
 $stmt = $conn->prepare(
-    "SELECT
-        o.id,
-        o.order_status,
-        COALESCE(p.status, 'pending') AS payment_status
+    "SELECT o.id, o.order_status, COALESCE(p.status, 'pending') AS payment_status
      FROM orders o
      LEFT JOIN payments p ON p.order_id = o.id
      WHERE o.id = ? AND o.user_id = ?
-     ORDER BY p.id DESC
-     LIMIT 1"
+     ORDER BY p.id DESC LIMIT 1"
 );
-
-if (!$stmt) {
-    die('Database error: ' . $conn->error);
-}
-
+if (!$stmt) die('Database error: ' . $conn->error);
 $stmt->bind_param('ii', $order_id, $user_id);
 $stmt->execute();
 $order = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-
-if (!$order) {
-    header('Location: my_orders.php');
-    exit;
-}
+if (!$order) { header('Location: my_orders.php'); exit; }
 
 $status = strtolower(trim((string)$order['order_status']));
-payment_status = strtolower(trim((string)$order['payment_status']));
+$payment_status = strtolower(trim((string)$order['payment_status']));
 
-/* Restaurant acceptance begins at confirmed/accepted and every later state. */
-$restaurantAcceptedStatuses = [
-    'confirmed',
-    'accepted',
-    'preparing',
-    'ready',
-    'ready_for_pickup',
-    'rider_assigned',
-    'picked_up',
-    'out_for_delivery',
-    'on_the_way',
-    'delivered',
-    'completed'
-];
-
-$paymentCompletedStatuses = [
-    'paid',
-    'completed',
-    'success',
-    'succeeded',
-    'verified'
-];
-
-$restaurantAccepted = in_array($status, $restaurantAcceptedStatuses, true);
+$paymentCompletedStatuses = ['paid','completed','success','succeeded','verified'];
 $paymentCompleted = in_array($payment_status, $paymentCompletedStatuses, true);
+
+/* Restaurant acceptance starts at confirmed/accepted; all later statuses are locked. */
+$restaurantAcceptedStatuses = [
+    'confirmed','accepted','preparing','ready','ready_for_pickup','rider_assigned',
+    'picked_up','out_for_delivery','on_the_way','delivered','completed'
+];
+$restaurantAccepted = in_array($status, $restaurantAcceptedStatuses, true);
 
 if ($status !== 'pending' || $restaurantAccepted || $paymentCompleted) {
     header('Location: order_success.php?order_id=' . $order_id . '&cancel=not_allowed');
@@ -83,17 +41,10 @@ if ($status !== 'pending' || $restaurantAccepted || $paymentCompleted) {
 }
 
 $update = $conn->prepare(
-    "UPDATE orders
-     SET order_status = 'cancelled'
-     WHERE id = ?
-       AND user_id = ?
-       AND order_status = 'pending'"
+    "UPDATE orders SET order_status = 'cancelled'
+     WHERE id = ? AND user_id = ? AND order_status = 'pending'"
 );
-
-if (!$update) {
-    die('Database error: ' . $conn->error);
-}
-
+if (!$update) die('Database error: ' . $conn->error);
 $update->bind_param('ii', $order_id, $user_id);
 $update->execute();
 $changed = $update->affected_rows;
@@ -104,7 +55,6 @@ if ($changed !== 1) {
     exit;
 }
 
-/* Keep the status history and customer notification in sync when those tables exist. */
 $history = $conn->prepare(
     "INSERT INTO order_status_history
      (order_id, status, changed_by, changed_by_role, note)
