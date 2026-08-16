@@ -1,0 +1,18 @@
+<?php
+require_once __DIR__ . '/../includes/config.php';
+if (session_status() === PHP_SESSION_NONE) session_start();
+if (empty($_SESSION['rider_id'])) { header('Location: rider-login.php'); exit; }
+$riderId=(int)$_SESSION['rider_id'];
+function rvh($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
+$msg='';$err='';
+if($_SERVER['REQUEST_METHOD']==='POST'){
+ $vehicle=trim($_POST['vehicle_type']??'');$bike=trim($_POST['bike_number']??'');$license=trim($_POST['license_number']??'');
+ if($vehicle===''||$bike===''||$license==='') $err='Please fill all vehicle details.';
+ else { $st=$conn->prepare('UPDATE riders SET vehicle_type=?, bike_number=?, license_number=? WHERE id=?'); if($st){$st->bind_param('sssi',$vehicle,$bike,$license,$riderId); if($st->execute()) $msg='Vehicle information updated successfully.'; else $err='Unable to update vehicle information.'; $st->close();} else $err='Vehicle fields are not available in the database yet.'; }
+}
+$vehicle=$bike=$license='';
+$st=$conn->prepare('SELECT full_name,vehicle_type,bike_number,license_number,status FROM riders WHERE id=? LIMIT 1');
+if($st){$st->bind_param('i',$riderId);$st->execute();$r=$st->get_result()->fetch_assoc();$st->close();} else $r=null;
+if($r){$vehicle=$r['vehicle_type']??'';$bike=$r['bike_number']??'';$license=$r['license_number']??'';}
+?>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vehicle Information | Humsafar</title><style>body{margin:0;background:#f7f7f8;font-family:Segoe UI,Arial;color:#222}.page{margin-left:223px;padding:36px;min-height:100vh}.card{max-width:760px;background:#fff;border-radius:18px;padding:28px;box-shadow:0 8px 25px #0000000b}.title{font-size:30px;font-weight:850;margin:0 0 6px}.sub{color:#777;margin:0 0 24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.field{margin-bottom:16px}.field label{display:block;font-size:13px;font-weight:800;margin-bottom:7px}.field input,.field select{width:100%;padding:13px;border:1px solid #ddd;border-radius:10px;font-size:14px;box-sizing:border-box}.full{grid-column:1/-1}.btn{background:#ed0038;color:#fff;border:0;border-radius:10px;padding:13px 22px;font-weight:800;cursor:pointer}.msg{padding:12px;border-radius:9px;margin-bottom:18px}.ok{background:#eaf8ef;color:#176c36}.bad{background:#fff0f3;color:#b00032}@media(max-width:800px){.page{margin-left:0;padding:20px}.grid{grid-template-columns:1fr}}</style></head><body><?php include __DIR__.'/rider-sidebar.php'; ?><main class="page"><div class="card"><h1 class="title">Vehicle Information</h1><p class="sub">Keep your motorcycle and license details up to date for deliveries.</p><?php if($msg):?><div class="msg ok"><?=rvh($msg)?></div><?php endif;?><?php if($err):?><div class="msg bad"><?=rvh($err)?></div><?php endif;?><form method="post"><div class="grid"><div class="field"><label>Vehicle Type</label><select name="vehicle_type"><option value="Motorcycle" <?=$vehicle==='Motorcycle'?'selected':''?>>Motorcycle</option><option value="Bike" <?=$vehicle==='Bike'?'selected':''?>>Bike</option><option value="Scooter" <?=$vehicle==='Scooter'?'selected':''?>>Scooter</option></select></div><div class="field"><label>Bike / Vehicle Number</label><input name="bike_number" value="<?=rvh($bike)?>" placeholder="e.g. ABC-123"></div><div class="field full"><label>Driving License Number</label><input name="license_number" value="<?=rvh($license)?>" placeholder="Enter license number"></div></div><button class="btn">Save Vehicle Information</button></form></div></main></body></html>
