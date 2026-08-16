@@ -8,6 +8,7 @@
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/customer-pricing.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -259,7 +260,10 @@ while (
         );
 
     $row['item_price'] =
-        (float)$row['item_price'];
+        humsafar_customer_price_from_db(
+            $conn,
+            (float)$row['item_price']
+        );
 
     $row['item_subtotal'] =
         $row['item_price'] *

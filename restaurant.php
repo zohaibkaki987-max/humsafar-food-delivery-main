@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/customer-pricing.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -602,6 +603,7 @@ if ($menuStmt) {
 
     while ($row = $menuResult->fetch_assoc()) {
 
+        $row['price'] = humsafar_customer_price_from_db($conn, $row['price']);
         $menuItems[] = $row;
     }
 
