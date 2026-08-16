@@ -51,11 +51,16 @@ jobs:
               if needle in s: s=s.replace(needle,repl,1)
               p.write_text(s)
 
-          # Home page: remove the legacy app_settings/platform_markup_percent
-          # calculation and use the live business_settings commission helper.
+          # Home page: remove legacy markup and repair any previous escaped PHP variables.
           p=Path('index.php')
           if p.exists():
               s=add_helper(p)
+
+              # Previous bad patch accidentally wrote PHP variables as \$var.
+              # Normalize those back to valid PHP variables before further processing.
+              s=s.replace('\\$originalPrice','$originalPrice')
+              s=s.replace('\\$customerPrice','$customerPrice')
+              s=s.replace('\\$conn','$conn')
 
               legacy = re.compile(
                   r'/\* =========================================================\s+ADMIN MARKUP\s+========================================================= \*/\s+.*?(?=/\* =========================================================\s+CATEGORIES)',
@@ -73,8 +78,14 @@ jobs:
                   r'\$originalPrice\s*=\s*\(float\)\$item\[\'price\'\];\s*\$customerPrice\s*=\s*customerFinalPrice\(\s*\$originalPrice,\s*\$markupPercent\s*\);',
                   re.S
               )
-              new_calc = "\\$originalPrice = (float)\\$item['price'];\n\n                                \\$customerPrice = humsafar_customer_price_from_db(\\$conn, \\$originalPrice);"
+              new_calc = "$originalPrice = (float)$item['price'];\n\n                                $customerPrice = humsafar_customer_price_from_db($conn, $originalPrice);"
               s=old_calc.sub(new_calc,s,count=1)
+
+              # If the old calculation is already gone, ensure the customer price assignment exists.
+              if 'humsafar_customer_price_from_db($conn, $originalPrice)' not in s:
+                  marker="$originalPrice = (float)$item['price'];"
+                  if marker in s:
+                      s=s.replace(marker, marker+"\n\n                                $customerPrice = humsafar_customer_price_from_db($conn, $originalPrice);",1)
 
               old_cond = "<?php if (\n                                                    $markupPercent > 0\n                                                ): ?>"
               if old_cond in s:
@@ -82,6 +93,14 @@ jobs:
 
               p.write_text(s)
           PY
+      - name: Validate PHP files
+        shell: bash
+        run: |
+          php -l index.php
+          php -l restaurant.php
+          php -l cart.php
+          php -l checkout.php
+          php -l includes/customer-pricing.php
       - name: Commit pricing integration
         shell: bash
         run: |
@@ -89,5 +108,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.php restaurant.php cart.php checkout.php includes/customer-pricing.php .github/workflows/apply-customer-pricing.yml
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Apply live admin commission to homepage pricing"
+          git commit -m "Fix homepage PHP syntax and live commission pricing"
           git push
