@@ -1,0 +1,58 @@
+name: Normalize Admin Sidebars
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Replace admin sidebars with shared sidebar
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          admin = Path('admin')
+          shared = "<?php include __DIR__ . '/admin-sidebar.php'; ?>"
+          skip = {'admin-login.php', 'admin-logout.php', 'admin-sidebar.php'}
+
+          for path in admin.glob('*.php'):
+              if path.name in skip:
+                  continue
+              text = path.read_text(encoding='utf-8')
+              if "include __DIR__ . '/admin-sidebar.php'" in text:
+                  continue
+
+              new = re.sub(r'\s*<aside\s+class=["\']sidebar["\'][\s\S]*?</aside>\s*', '\n', text, count=1, flags=re.I)
+              if new == text:
+                  new = re.sub(r'\s*<aside\s+[^>]*class=["\'][^"\']*\bsidebar\b[^"\']*["\'][^>]*>[\s\S]*?</aside>\s*', '\n', text, count=1, flags=re.I)
+
+              if new == text:
+                  print(f'No legacy sidebar found in {path}')
+                  continue
+
+              new = re.sub(r'(<body\b[^>]*>)', r'\1\n' + shared + '\n', new, count=1, flags=re.I)
+              path.write_text(new, encoding='utf-8')
+              print(f'Normalized {path}')
+
+      - name: Commit normalized admin pages
+        run: |
+          git config user.name "Humsafar Admin Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add admin/*.php
+          if git diff --cached --quiet; then
+            echo "No sidebar changes needed."
+          else
+            git commit -m "Unify admin sidebar across all admin pages [skip ci]"
+            git push
+          fi
