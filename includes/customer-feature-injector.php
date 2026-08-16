@@ -1,6 +1,7 @@
 <?php
 /**
- * Safe additive integration for customer Favorites, Reviews, Reorder and Notifications.
+ * Safe additive integration for customer Favorites, Reviews, Reorder,
+ * Notifications and Live Tracking.
  * Loaded from config.php so existing large customer pages remain untouched.
  */
 
@@ -107,8 +108,6 @@ if (!function_exists('humsafar_customer_feature_output')) {
         }
 
         if ($path === 'my_orders.php') {
-            // The existing order card already contains its order-details link. Insert the
-            // feature buttons immediately before that link, so each button keeps the right ID.
             $html = preg_replace_callback(
                 '/(<div\s+class="order-card"[^>]*>.*?)(<a\s+href="\s*order-details\.php\?id=(\d+)[^>]*class="view-order-btn"[^>]*>)/is',
                 function ($m) {
@@ -130,8 +129,70 @@ if (!function_exists('humsafar_customer_feature_output')) {
             );
         }
 
+        /* Customer Live Tracking: destination capture + route + ETA. */
+        if ($path === 'track-order.php') {
+            $trackingUi = '<div id="hcf-live-tracking" class="hcf-live-tracking">'
+                . '<div class="hcf-track-line"><strong>📍 Delivery location</strong><span id="hcf-location-state">Checking…</span></div>'
+                . '<button type="button" id="hcf-set-location" class="hcf-location-btn">Use My Current Location</button>'
+                . '<div class="hcf-track-stats"><span>📏 <b id="hcf-distance">—</b></span><span>⏱️ <b id="hcf-eta">—</b></span><span>🔄 Live</span></div>'
+                . '<div id="hcf-route-note" class="hcf-route-note">Route and ETA will appear when both rider and delivery location are available.</div>'
+                . '</div>';
+            $html = preg_replace('/(<div\s+class="map"\s+id="map"[^>]*><\/div>)/i', '$1' . $trackingUi, $html, 1);
+
+            $trackingJs = <<<'JS'
+<script id="hcf-live-tracking-js">
+(function(){
+  const root=document.getElementById('hcf-live-tracking');
+  const btn=document.getElementById('hcf-set-location');
+  if(!root||!btn)return;
+  const params=new URLSearchParams(location.search), orderId=params.get('order_id');
+  if(!orderId)return;
+  let destinationMarker=null, routeLayer=null, lastRouteKey='';
+  const state=document.getElementById('hcf-location-state'), distance=document.getElementById('hcf-distance'), eta=document.getElementById('hcf-eta'), note=document.getElementById('hcf-route-note');
+  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  async function saveLocation(){
+    if(!navigator.geolocation){state.textContent='GPS supported nahi hai';return;}
+    btn.disabled=true;btn.textContent='Location le raha hai…';
+    navigator.geolocation.getCurrentPosition(async p=>{
+      try{
+        const f=new FormData();f.append('order_id',orderId);f.append('latitude',p.coords.latitude);f.append('longitude',p.coords.longitude);f.append('accuracy',p.coords.accuracy||'');
+        const r=await fetch('save-delivery-location.php',{method:'POST',body:f,cache:'no-store'});const d=await r.json();
+        state.textContent=d.ok?'Location saved ✓':'Location save nahi hui';
+      }catch(e){state.textContent='Location save nahi hui';}
+      btn.disabled=false;btn.textContent='Update My Location';load();
+    },()=>{state.textContent='Location permission denied';btn.disabled=false;btn.textContent='Use My Current Location';},{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+  }
+  async function load(){
+    try{
+      const r=await fetch('live-tracking-data.php?order_id='+encodeURIComponent(orderId),{cache:'no-store'});const d=await r.json();if(!d.ok)return;
+      if(d.destination){state.textContent='Location saved ✓';btn.textContent='Update My Location';}
+      else{state.textContent='Location set karna zaroori hai';btn.textContent='Use My Current Location';}
+      if(!d.destination||!d.rider||d.rider.latitude===null||d.rider.longitude===null)return;
+      const a=[parseFloat(d.rider.latitude),parseFloat(d.rider.longitude)], b=[parseFloat(d.destination.latitude),parseFloat(d.destination.longitude)];
+      if(!map||!window.L||isNaN(b[0]))return;
+      if(!destinationMarker)destinationMarker=L.marker(b).addTo(map).bindPopup('📍 Delivery Location');else destinationMarker.setLatLng(b);
+      const key=a.join(',')+'|'+b.join(',');if(key===lastRouteKey)return;lastRouteKey=key;
+      const rr=await fetch('https://router.project-osrm.org/route/v1/driving/'+a[1]+','+a[0]+';'+b[1]+','+b[0]+'?overview=full&geometries=geojson').then(x=>x.json());
+      if(!rr.routes||!rr.routes[0])return;
+      const route=rr.routes[0];
+      if(routeLayer)map.removeLayer(routeLayer);
+      routeLayer=L.geoJSON(route.geometry,{style:{weight:5}}).addTo(map);
+      map.fitBounds(routeLayer.getBounds(),{padding:[30,30]});
+      distance.textContent=(route.distance/1000).toFixed(1)+' km';
+      const mins=Math.max(1,Math.round(route.duration/60));eta.textContent=mins<60?mins+' min':Math.floor(mins/60)+'h '+(mins%60)+'m';
+      note.textContent='Live road route aur estimated arrival time.';
+    }catch(e){note.textContent='Live route temporarily unavailable.';}
+  }
+  btn.addEventListener('click',saveLocation);load();setInterval(load,10000);
+})();
+</script>
+JS;
+            $html = preg_replace('/(<\/body>)/i', $trackingJs . '$1', $html, 1);
+        }
+
         $css = '<style id="humsafar-customer-features-css">'
-            . '.hcf-header-link{position:relative;min-height:41px;padding:0 11px;border:1px solid transparent;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:#fff;color:#333;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}.hcf-header-link:hover{background:#fff1f5;color:#ed0038;border-color:#f2bccd}.hcf-header-link i{font-size:15px}.hcf-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:20px;background:#ed0038;color:#fff;font-size:9px;font-weight:900;margin-left:2px}.hcf-strip{background:#fff;border-bottom:1px solid #eee}.hcf-strip-inner{max-width:1500px;margin:auto;padding:7px 4%;display:flex;gap:8px;flex-wrap:wrap}.hcf-strip-inner a{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:8px;background:#fff1f5;color:#ed0038;text-decoration:none;font-size:11px;font-weight:800}.hcf-favorite-float{position:fixed;right:22px;top:105px;z-index:1900;background:#fff;color:#ed0038;border:1px solid #ed0038;border-radius:22px;padding:10px 15px;text-decoration:none;font-weight:800;font-size:12px;box-shadow:0 7px 22px rgba(0,0,0,.12)}.hcf-order-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px 22px}.hcf-order-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border-radius:9px;text-decoration:none;font-size:11px;font-weight:800}.hcf-order-btn.reorder{background:#ed0038;color:#fff}.hcf-order-btn.review{background:#fff7e6;color:#a86a00;border:1px solid #f0c36a}@media(max-width:750px){.hcf-header-link span{display:none}.hcf-header-link{width:40px;padding:0}.hcf-strip-inner{padding:7px 12px}.hcf-favorite-float{right:12px;top:100px}.hcf-order-actions{margin-left:17px}}'
+            . '.hcf-header-link{position:relative;min-height:41px;padding:0 11px;border:1px solid transparent;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:#fff;color:#333;text-decoration:none;font-size:12px;font-weight:800;white-space:nowrap}.hcf-header-link:hover{background:#fff1f5;color:#ed0038;border-color:#f2bccd}.hcf-header-link i{font-size:15px}.hcf-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;border-radius:20px;background:#ed0038;color:#fff;font-size:9px;font-weight:900;margin-left:2px}.hcf-strip{background:#fff;border-bottom:1px solid #eee}.hcf-strip-inner{max-width:1500px;margin:auto;padding:7px 4%;display:flex;gap:8px;flex-wrap:wrap}.hcf-strip-inner a{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:8px;background:#fff1f5;color:#ed0038;text-decoration:none;font-size:11px;font-weight:800}.hcf-favorite-float{position:fixed;right:22px;top:105px;z-index:1900;background:#fff;color:#ed0038;border:1px solid #ed0038;border-radius:22px;padding:10px 15px;text-decoration:none;font-weight:800;font-size:12px;box-shadow:0 7px 22px rgba(0,0,0,.12)}.hcf-order-actions{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px 22px}.hcf-order-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 13px;border-radius:9px;text-decoration:none;font-size:11px;font-weight:800}.hcf-order-btn.reorder{background:#ed0038;color:#fff}.hcf-order-btn.review{background:#fff7e6;color:#a86a00;border:1px solid #f0c36a}.hcf-live-tracking{margin:14px 0 0;background:#fff;border:1px solid #eee;border-radius:13px;padding:14px}.hcf-track-line{display:flex;justify-content:space-between;gap:10px;font-size:13px}.hcf-track-line span{color:#777}.hcf-location-btn{margin-top:10px;border:0;border-radius:9px;padding:10px 14px;background:#ed0038;color:#fff;font-weight:800;cursor:pointer}.hcf-location-btn:disabled{opacity:.6}.hcf-track-stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.hcf-track-stats span{padding:8px 10px;border-radius:9px;background:#f7f7f8;font-size:12px}.hcf-route-note{margin-top:9px;color:#777;font-size:11px}@media(max-width:750px){.hcf-header-link span{display:none}.hcf-header-link{width:40px;padding:0}.hcf-strip-inner{padding:7px 12px}.hcf-favorite-float{right:12px;top:100px}.hcf-order-actions{margin-left:17px}.hcf-track-line{flex-direction:column}}
+'
             . '</style>';
         $html = preg_replace('/(<\/head>)/i', $css . '$1', $html, 1);
 
