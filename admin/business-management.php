@@ -11,7 +11,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   if($key!==''){$s=$conn->prepare('INSERT INTO business_settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');if($s){$s->bind_param('ss',$key,$value);$s->execute();$s->close();$msg='Business setting saved.';}else $err='Run database/humsafar_business_upgrade.sql first.';}
  }elseif($action==='coupon'){
   $code=strtoupper(trim($_POST['code']??''));$type=$_POST['discount_type']??'percent';$value=(float)($_POST['discount_value']??0);$min=(float)($_POST['minimum_order']??0);$expiry=trim($_POST['expires_at']??'');
-  if($code==='')$err='Coupon code is required.';else{$s=$conn->prepare('INSERT INTO coupons(code,discount_type,discount_value,minimum_order,expires_at,is_active) VALUES(?,?,?,?,?,1)');if($s){$s->bind_param('ssd ds',$code,$type,$value,$min,$expiry);$s->execute();$s->close();$msg='Coupon created.';}else $err='Run database/humsafar_business_upgrade.sql first.';}
+  if($code==='')$err='Coupon code is required.';else{$s=$conn->prepare('INSERT INTO coupons(code,discount_type,discount_value,minimum_order,expires_at,is_active) VALUES(?,?,?,?,?,1)');if($s){$s->bind_param('ssdds',$code,$type,$value,$min,$expiry);$s->execute();$s->close();$msg='Coupon created.';}else $err='Run database/humsafar_business_upgrade.sql first.';}
  }elseif($action==='support'){
   $id=(int)$_POST['ticket_id'];$status=$_POST['status']??'in_progress';$reply=trim($_POST['reply']??'');$s=$conn->prepare('UPDATE support_tickets SET status=?,admin_reply=? WHERE id=?');if($s){$s->bind_param('ssi',$status,$reply,$id);$s->execute();$s->close();$msg='Support ticket updated.';}else $err='Support table is not installed.';
  }
