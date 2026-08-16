@@ -13,6 +13,7 @@
 
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/session.php';
+require_once __DIR__ . '/includes/customer-pricing.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -121,52 +122,6 @@ if (
 ) {
     $selectedCategoryId =
         (int)$_GET['category_id'];
-}
-
-
-/* =========================================================
-   ADMIN MARKUP
-========================================================= */
-
-$markupPercent = 0.00;
-
-$settingsTable =
-    $conn->query(
-        "SHOW TABLES LIKE 'app_settings'"
-    );
-
-if (
-    $settingsTable &&
-    $settingsTable->num_rows > 0
-) {
-
-    $stmt = $conn->prepare("
-        SELECT setting_value
-        FROM app_settings
-        WHERE setting_key = 'platform_markup_percent'
-        LIMIT 1
-    ");
-
-    if ($stmt) {
-
-        $stmt->execute();
-
-        $row =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
-
-        $stmt->close();
-
-        if ($row) {
-
-            $markupPercent =
-                max(
-                    0,
-                    (float)$row['setting_value']
-                );
-        }
-    }
 }
 
 
@@ -429,26 +384,6 @@ foreach (
     }
 }
 
-
-/* =========================================================
-   PRICE CALCULATION
-========================================================= */
-
-function customerFinalPrice(
-    $price,
-    $markupPercent
-) {
-
-    $price =
-        (float)$price;
-
-    return
-        $price +
-        (
-            $price *
-            ((float)$markupPercent / 100)
-        );
-}
 
 ?>
 <!DOCTYPE html>
@@ -2641,14 +2576,9 @@ include __DIR__ . '/includes/customer-header.php';
 
                                 <?php
 
-                                $originalPrice =
-                                    (float)$item['price'];
+                                \$originalPrice = (float)\$item['price'];
 
-                                $customerPrice =
-                                    customerFinalPrice(
-                                        $originalPrice,
-                                        $markupPercent
-                                    );
+                                \$customerPrice = humsafar_customer_price_from_db(\$conn, \$originalPrice);
 
                                 $itemImage =
                                     customerRestaurantImage(
@@ -2749,9 +2679,7 @@ include __DIR__ . '/includes/customer-header.php';
                                                 </div>
 
 
-                                                <?php if (
-                                                    $markupPercent > 0
-                                                ): ?>
+                                                <?php if ($customerPrice != $originalPrice): ?>
 
                                                     <span
                                                         class="menu-old-price"
