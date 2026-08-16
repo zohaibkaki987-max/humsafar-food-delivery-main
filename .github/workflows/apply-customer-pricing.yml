@@ -1,0 +1,60 @@
+name: Apply Customer Pricing
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  pricing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply central customer pricing to customer pages
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          helper="require_once __DIR__ . '/includes/customer-pricing.php';"
+          def add_helper(p):
+              s=p.read_text()
+              if "includes/customer-pricing.php" not in s:
+                  marker="require_once __DIR__ . '/includes/session.php';"
+                  if marker in s:
+                      s=s.replace(marker, marker+"\n"+helper,1)
+                  else:
+                      marker="require_once __DIR__ . '/includes/config.php';"
+                      s=s.replace(marker, marker+"\n"+helper,1)
+              return s
+          
+          # Restaurant menu: convert base menu prices only for customer display.
+          p=Path('restaurant.php')
+          if p.exists():
+              s=add_helper(p)
+              old="""    while ($row = $menuResult->fetch_assoc()) {\n\n        $menuItems[] = $row;\n    }"""
+              new="""    while ($row = $menuResult->fetch_assoc()) {\n\n        $row['price'] = humsafar_customer_price_from_db($conn, $row['price']);\n        $menuItems[] = $row;\n    }"""
+              if old in s: s=s.replace(old,new,1)
+              p.write_text(s)
+          
+          # Cart and checkout: transform the price immediately after loading each row,
+          # so every displayed subtotal uses the exact same customer price.
+          for name in ['cart.php','checkout.php']:
+              p=Path(name)
+              if not p.exists(): continue
+              s=add_helper(p)
+              needle="""    $row['item_price'] =\n        (float)$row['item_price'];"""
+              repl="""    $row['item_price'] =\n        humsafar_customer_price_from_db(\n            $conn,\n            (float)$row['item_price']\n        );"""
+              if needle in s: s=s.replace(needle,repl,1)
+              p.write_text(s)
+          PY
+      - name: Commit pricing integration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add restaurant.php cart.php checkout.php includes/customer-pricing.php
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Apply admin customer markup consistently to menu cart checkout"
+          git push
