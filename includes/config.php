@@ -50,4 +50,48 @@ if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'business-management.php'
     });
 }
 
+// Rider Available Orders must follow the same online rule as the rider sidebar:
+// a rider is ONLINE only while a booked availability session is currently active.
+// Offline riders must not see available orders and cannot accept one by POST either.
+if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'rider-orders.php' && !empty($_SESSION['rider_id'])) {
+    $riderOrdersId = (int)$_SESSION['rider_id'];
+    $riderOrdersOnline = false;
+    $riderOrdersApproved = false;
+
+    $roStatus = $conn->prepare("SELECT status FROM riders WHERE id=? LIMIT 1");
+    if ($roStatus) {
+        $roStatus->bind_param('i', $riderOrdersId);
+        $roStatus->execute();
+        $roStatusRow = $roStatus->get_result()->fetch_assoc();
+        $roStatus->close();
+        $riderOrdersApproved = in_array(strtolower(trim((string)($roStatusRow['status'] ?? ''))), ['active','approved'], true);
+    }
+
+    if ($riderOrdersApproved) {
+        $roSession = $conn->prepare("SELECT id FROM rider_availability WHERE rider_id=? AND available_date=CURDATE() AND start_time<=CURTIME() AND (end_time>CURTIME() OR end_time='00:00:00') LIMIT 1");
+        if ($roSession) {
+            $roSession->bind_param('i', $riderOrdersId);
+            $roSession->execute();
+            $riderOrdersOnline = $roSession->get_result()->num_rows > 0;
+            $roSession->close();
+        }
+    }
+
+    // Block direct/manual attempts to accept an order while offline.
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delivery_action']) && (string)$_POST['delivery_action'] === 'accept' && !$riderOrdersOnline) {
+        header('Location: rider-orders.php');
+        exit;
+    }
+
+    if (!$riderOrdersOnline) {
+        ob_start(function ($html) {
+            // Remove the complete New Deliveries section while offline.
+            $html = preg_replace('/<section class="section"><h2>New Deliveries<\/h2>.*?<\/section><section class="section"><h2>Active Deliveries<\/h2>/s', '<section class="section"><h2>New Deliveries</h2><div class="empty">You are offline. Go online during an active booked session to see available orders.</div></section><section class="section"><h2>Active Deliveries</h2>', $html, 1);
+            // The New Deliveries counter should also be zero while offline.
+            $html = preg_replace('/(<div class="stat"><small>New Deliveries<\/small><strong>)\d+(<\/strong>)/', '$10$2', $html, 1);
+            return $html;
+        });
+    }
+}
+
 ?>
