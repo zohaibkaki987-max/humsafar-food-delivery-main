@@ -51,13 +51,23 @@ jobs:
               if needle in s: s=s.replace(needle,repl,1)
               p.write_text(s)
 
+          # Restaurant owner menu: show the same live customer markup configured by Admin.
+          p=Path('restaurant/restaurant-owner-manage-menu.php')
+          if p.exists():
+              s=add_helper(p)
+              admin_block = re.compile(
+                  r'/\* =========================================================\s+ADMIN MARKUP\s+========================================================= \*/\s+\$adminPercentage\s*=\s*0\.00;.*?(?=/\* =========================================================\s+MENU_ITEMS COLUMN CHECK)',
+                  re.S
+              )
+              replacement = "/* =========================================================\n   ADMIN MARKUP\n========================================================= */\n\n$adminPercentage = humsafar_customer_markup_percent($conn);\n\n\n"
+              s=admin_block.sub(replacement,s,count=1)
+              p.write_text(s)
+
           # Home page: remove legacy markup and repair any previous escaped PHP variables.
           p=Path('index.php')
           if p.exists():
               s=add_helper(p)
 
-              # Previous bad patch accidentally wrote PHP variables as \$var.
-              # Normalize those back to valid PHP variables before further processing.
               s=s.replace('\\$originalPrice','$originalPrice')
               s=s.replace('\\$customerPrice','$customerPrice')
               s=s.replace('\\$conn','$conn')
@@ -81,7 +91,6 @@ jobs:
               new_calc = "$originalPrice = (float)$item['price'];\n\n                                $customerPrice = humsafar_customer_price_from_db($conn, $originalPrice);"
               s=old_calc.sub(new_calc,s,count=1)
 
-              # If the old calculation is already gone, ensure the customer price assignment exists.
               if 'humsafar_customer_price_from_db($conn, $originalPrice)' not in s:
                   marker="$originalPrice = (float)$item['price'];"
                   if marker in s:
@@ -101,12 +110,13 @@ jobs:
           php -l cart.php
           php -l checkout.php
           php -l includes/customer-pricing.php
+          php -l restaurant/restaurant-owner-manage-menu.php
       - name: Commit pricing integration
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.php restaurant.php cart.php checkout.php includes/customer-pricing.php .github/workflows/apply-customer-pricing.yml
+          git add index.php restaurant.php cart.php checkout.php includes/customer-pricing.php restaurant/restaurant-owner-manage-menu.php .github/workflows/apply-customer-pricing.yml
           if git diff --cached --quiet; then exit 0; fi
-          git commit -m "Fix homepage PHP syntax and live commission pricing"
+          git commit -m "Use live admin markup in restaurant menu"
           git push
