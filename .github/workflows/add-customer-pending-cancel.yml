@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Add pending-order cancel button
+      - name: Fix pending-order cancel button
         shell: bash
         run: |
           python3 - <<'PY'
@@ -26,94 +26,25 @@ jobs:
               raise SystemExit('my_orders.php not found')
 
           text = path.read_text(encoding='utf-8')
-          marker = 'HUMSAFAR_PENDING_CANCEL_BUTTON_V1'
 
-          if marker in text:
-              print('Cancel button patch already present.')
-              raise SystemExit(0)
+          # The previous patch wrote a double backslash into the JavaScript regex.
+          # That made the selector look for literal "\\d" instead of digits.
+          old = r'(?i)'
+          broken = r'[?&]id=(\\\\d+)'
+          fixed = r'[?&]id=(\\d+)'
 
-          injection = r'''
-          <!-- HUMSAFAR_PENDING_CANCEL_BUTTON_V1 -->
-          <style id="humsafar-pending-cancel-css">
-              .humsafar-cancel-order-btn {
-                  display: inline-flex;
-                  align-items: center;
-                  justify-content: center;
-                  gap: 7px;
-                  padding: 9px 13px;
-                  border-radius: 9px;
-                  border: 1px solid #dc3545;
-                  background: #fff;
-                  color: #dc3545;
-                  text-decoration: none;
-                  font-size: 11px;
-                  font-weight: 800;
-                  cursor: pointer;
-              }
-              .humsafar-cancel-order-btn:hover {
-                  background: #dc3545;
-                  color: #fff;
-              }
-          </style>
-          <script>
-          (function () {
-              function addPendingCancelButtons() {
-                  document.querySelectorAll('.order-card').forEach(function (card) {
-                      if (!card.querySelector('.status-pending')) return;
-                      if (card.querySelector('.humsafar-cancel-order-btn')) return;
-
-                      var viewLink = card.querySelector('a[href*="order-details.php?id="]');
-                      if (!viewLink) return;
-
-                      var match = viewLink.getAttribute('href').match(/[?&]id=(\\d+)/i);
-                      if (!match) return;
-
-                      var orderId = match[1];
-                      var actions = card.querySelector('.hcf-order-actions');
-
-                      if (!actions) {
-                          actions = document.createElement('div');
-                          actions.className = 'hcf-order-actions';
-                          viewLink.parentNode.insertBefore(actions, viewLink);
-                      }
-
-                      var button = document.createElement('a');
-                      button.className = 'humsafar-cancel-order-btn';
-                      button.href = 'cancel_order.php?order_id=' + encodeURIComponent(orderId);
-                      button.innerHTML = '<i class="fas fa-xmark"></i> Cancel Order';
-                      button.addEventListener('click', function (event) {
-                          if (!window.confirm('Are you sure you want to cancel this pending order?')) {
-                              event.preventDefault();
-                          }
-                      });
-
-                      actions.appendChild(button);
-                  });
-              }
-
-              if (document.readyState === 'loading') {
-                  document.addEventListener('DOMContentLoaded', addPendingCancelButtons);
-              } else {
-                  addPendingCancelButtons();
-              }
-          })();
-          </script>
-          '''
-
-          closing = '</body>'
-          if closing not in text.lower():
-              raise SystemExit('Could not find </body> in my_orders.php')
-
-          idx = text.lower().rfind(closing)
-          text = text[:idx] + injection + '\n' + text[idx:]
-          path.write_text(text, encoding='utf-8')
-          print('Pending-order cancel button added to my_orders.php')
+          if broken in text:
+              text = text.replace(broken, fixed)
+              path.write_text(text, encoding='utf-8')
+              print('Fixed pending-order cancel button order-id regex.')
+          else:
+              print('Regex already correct or not found.')
           PY
 
       - name: Validate PHP
         run: php -l my_orders.php
 
-      - name: Commit patch
+      - name: Commit fix
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -123,5 +54,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Add cancel button for pending customer orders"
+          git commit -m "Fix pending order cancel button selector"
           git push
