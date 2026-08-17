@@ -17,6 +17,8 @@ $conn->set_charset("utf8mb4");
 require_once __DIR__ . '/customer-feature-injector.php';
 // Customer cancellation UI guard. Server-side enforcement is in cancel_order.php.
 require_once __DIR__ . '/customer-cancellation-injector.php';
+// Automatically create one rider payout for every completed delivery using Admin's setting.
+require_once __DIR__ . '/rider-payout-sync.php';
 
 // Global fixed delivery fee: whenever business_settings exists,
 // keep every restaurant's delivery_fee synchronized to Admin's value.
@@ -92,6 +94,46 @@ if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'rider-orders.php' && !em
             return $html;
         });
     }
+}
+
+// On Rider Orders, show the Admin-controlled payout beside every completed delivery.
+if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'rider-orders.php') {
+    ob_start(function ($html) {
+        $script = <<<'HTML'
+<script>
+(function(){
+    function addRiderEarnings(){
+        var completedSection = Array.from(document.querySelectorAll('.section')).find(function(s){
+            var h = s.querySelector('h2');
+            return h && h.textContent.trim().toLowerCase() === 'completed deliveries';
+        });
+        if(!completedSection) return;
+        var cards = completedSection.querySelectorAll('article.card');
+        if(!cards.length) return;
+        fetch('rider-payout-api.php', {credentials:'same-origin'})
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                if(!data.ok || !data.payouts) return;
+                cards.forEach(function(card){
+                    var text = card.textContent || '';
+                    var match = text.match(/Order #([^\s·]+)/);
+                    if(!match) return;
+                    var payout = data.payouts[match[1]];
+                    if(!payout || card.querySelector('.rider-earned-box')) return;
+                    var box = document.createElement('div');
+                    box.className = 'rider-earned-box';
+                    box.style.cssText = 'margin-top:12px;padding:10px 12px;border-radius:9px;background:#eaf9ef;border:1px solid #cfeeda;color:#176c36;font-weight:800;display:flex;justify-content:space-between;gap:10px;';
+                    box.innerHTML = '<span>💰 Your Earning</span><span>Rs ' + Number(payout.amount).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2}) + '</span>';
+                    card.querySelector('.body').appendChild(box);
+                });
+            }).catch(function(){});
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addRiderEarnings); else addRiderEarnings();
+})();
+</script>
+HTML;
+        return str_ireplace('</body>', $script . '</body>', $html);
+    });
 }
 
 ?>
