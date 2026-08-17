@@ -15,33 +15,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fix pending-order cancel button
+      - name: Fix pending cancel button
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('my_orders.php')
-          if not path.exists():
-              raise SystemExit('my_orders.php not found')
-
           text = path.read_text(encoding='utf-8')
 
-          # The button is already rendered by the page's pending-cancel block.
-          # The remaining bug is the JavaScript regex: the source currently
-          # contains two backslashes (\\\\d), so the regex searches for a
-          # literal backslash+d instead of a digit. Replace it with \\d.
-          broken = r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);'
-          fixed = r'var match = viewLink.getAttribute("href").match(/[?&]id=(\d+)/i);'
+          old = 'var match = viewLink.getAttribute(\"href\").match(/[?&]id='
+          start = text.find(old)
+          if start < 0:
+              raise SystemExit('Pending cancel matcher not found')
+          end = text.find(';', start)
+          if end < 0:
+              raise SystemExit('Pending cancel matcher line is incomplete')
 
-          if broken in text:
-              text = text.replace(broken, fixed)
-              path.write_text(text, encoding='utf-8')
-              print('Fixed pending-order cancel button order-id regex.')
-          elif fixed in text:
-              print('Cancel button regex is already correct.')
-          else:
-              raise SystemExit('Expected cancel-button regex was not found.')
+          line_end = end + 1
+          replacement = '''var href = viewLink.getAttribute(\"href\") || \"\";\n            var idPos = href.indexOf(\"id=\");\n            if (idPos < 0) return;\n            var orderId = href.slice(idPos + 3).split(\"&\")[0].replace(/[^0-9]/g, \"\");\n            if (!orderId) return;'''
+
+          text = text[:start] + replacement + text[line_end:]
+
+          # Remove the old duplicate orderId declaration immediately after the matcher block.
+          text = text.replace('            var orderId = match[1];\n', '', 1)
+          path.write_text(text, encoding='utf-8')
+          print('Replaced fragile regex with deterministic order-id extraction.')
           PY
 
       - name: Validate PHP
@@ -57,5 +57,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Fix pending order cancel button order id regex"
+          git commit -m "Fix pending order cancel button rendering"
           git push
