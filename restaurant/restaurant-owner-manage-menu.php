@@ -17,6 +17,7 @@
 */
 
 require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/customer-pricing.php';
 require_once __DIR__ . '/../includes/config.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -4403,10 +4404,10 @@ if (
                                         );
 
 
-                                    $customerPrice =
-                                        calculateCustomerPrice(
-                                            $itemPrice,
-                                            $adminPercentage
+
+                                        $customerPrice = humsafar_customer_price_from_db(
+                                        $conn,
+                                        $itemPrice
                                         );
 
 
