@@ -49,6 +49,7 @@ $slots = [
 
 $today = new DateTimeImmutable('today');
 $dates = [$today, $today->modify('+1 day')];
+$now = new DateTimeImmutable('now');
 $message = '';
 $error = '';
 
@@ -57,23 +58,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_session'])) {
     $slot = (int) ($_POST['slot'] ?? -1);
     $action = (string) ($_POST['action'] ?? 'add');
 
-    $validDate = in_array($date, [$today->format('Y-m-d'), $today->modify('+1 day')->format('Y-m-d')], true);
+    $validDate = in_array(
+        $date,
+        [$today->format('Y-m-d'), $today->modify('+1 day')->format('Y-m-d')],
+        true
+    );
+
     if (!$isApproved) {
         $error = 'Your rider account must be approved before booking a session.';
     } elseif (!$validDate || !isset($slots[$slot])) {
         $error = 'Invalid session selected.';
     } else {
         [$start, $end] = $slots[$slot];
+
+        // A session can only be booked until 30 minutes before it starts.
+        $sessionStart = new DateTimeImmutable($date . ' ' . $start);
+        $bookingDeadline = $sessionStart->modify('-30 minutes');
+
         if ($action === 'remove') {
-            $q = $conn->prepare('DELETE FROM rider_availability WHERE rider_id = ? AND available_date = ? AND start_time = ? LIMIT 1');
+            $q = $conn->prepare(
+                'DELETE FROM rider_availability
+                 WHERE rider_id = ? AND available_date = ? AND start_time = ?
+                 LIMIT 1'
+            );
             if ($q) {
                 $q->bind_param('iss', $riderId, $date, $start);
                 $q->execute();
                 $q->close();
             }
             $message = 'Session removed from your schedule.';
+        } elseif ($now >= $bookingDeadline) {
+            $error = 'This session can no longer be booked. Sessions must be booked at least 30 minutes before they start.';
         } else {
-            $q = $conn->prepare('SELECT id FROM rider_availability WHERE rider_id = ? AND available_date = ? AND start_time = ? LIMIT 1');
+            $q = $conn->prepare(
+                'SELECT id FROM rider_availability
+                 WHERE rider_id = ? AND available_date = ? AND start_time = ?
+                 LIMIT 1'
+            );
             $exists = false;
             if ($q) {
                 $q->bind_param('iss', $riderId, $date, $start);
@@ -81,14 +102,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_session'])) {
                 $exists = $q->get_result()->num_rows > 0;
                 $q->close();
             }
+
             if ($exists) {
                 $error = 'You have already selected this session.';
             } else {
-                $q = $conn->prepare('INSERT INTO rider_availability (rider_id, available_date, start_time, end_time) VALUES (?, ?, ?, ?)');
+                $q = $conn->prepare(
+                    'INSERT INTO rider_availability
+                     (rider_id, available_date, start_time, end_time)
+                     VALUES (?, ?, ?, ?)'
+                );
                 if ($q) {
                     $q->bind_param('isss', $riderId, $date, $start, $end);
-                    if ($q->execute()) $message = 'Session booked successfully.';
-                    else $error = 'Unable to save the session.';
+                    if ($q->execute()) {
+                        $message = 'Session booked successfully.';
+                    } else {
+                        $error = 'Unable to save the session.';
+                    }
                     $q->close();
                 } else {
                     $error = 'Unable to prepare the session request.';
@@ -99,16 +128,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_session'])) {
 }
 
 $selected = [];
-$q = $conn->prepare('SELECT available_date, start_time, end_time FROM rider_availability WHERE rider_id = ? AND available_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 1 DAY) ORDER BY available_date, start_time');
+$q = $conn->prepare(
+    'SELECT available_date, start_time, end_time
+     FROM rider_availability
+     WHERE rider_id = ?
+       AND available_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 1 DAY)
+     ORDER BY available_date, start_time'
+);
 if ($q) {
     $q->bind_param('i', $riderId);
     $q->execute();
     $rs = $q->get_result();
-    while ($row = $rs->fetch_assoc()) $selected[$row['available_date'] . '|' . $row['start_time']] = true;
+    while ($row = $rs->fetch_assoc()) {
+        $selected[$row['available_date'] . '|' . $row['start_time']] = true;
+    }
     $q->close();
 }
 
-function rs_e($value) { return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8'); }
+function rs_e($value) {
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -128,16 +167,34 @@ function rs_e($value) { return htmlspecialchars((string) $value, ENT_QUOTES, 'UT
 <p class="subtitle">Choose the sessions when you want to be available for deliveries.</p>
 <?php if ($message): ?><div class="alert success"><?=rs_e($message)?></div><?php endif; ?>
 <?php if ($error): ?><div class="alert error"><?=rs_e($error)?></div><?php endif; ?>
-<div class="info"><i class="fa-regular fa-bell"></i> You will receive a reminder <strong>15 minutes before</strong> your selected session starts.</div>
+<div class="info"><i class="fa-regular fa-bell"></i> You will receive a reminder <strong>15 minutes before</strong> your selected session starts. Sessions can be booked up to <strong>30 minutes before</strong> their start time.</div>
 <?php foreach ($dates as $index => $dateObj): $date = $dateObj->format('Y-m-d'); ?>
 <section class="day">
 <div class="day-head"><div class="day-title"><?= $index === 0 ? 'Today' : 'Tomorrow' ?></div><div class="day-date"><?=rs_e($dateObj->format('l, d M Y'))?></div></div>
 <div class="slots">
-<?php foreach ($slots as $slotIndex => $slot): $key = $date . '|' . $slot[0]; $isSelected = isset($selected[$key]); ?>
-<div class="slot <?=$isSelected?'selected':''?> <?=!$isApproved?'locked':''?>">
+<?php foreach ($slots as $slotIndex => $slot):
+    $key = $date . '|' . $slot[0];
+    $isSelected = isset($selected[$key]);
+    $sessionStart = new DateTimeImmutable($date . ' ' . $slot[0]);
+    $bookingDeadline = $sessionStart->modify('-30 minutes');
+    $canBook = $now < $bookingDeadline;
+    $isLocked = !$isApproved || (!$isSelected && !$canBook);
+?>
+<div class="slot <?=$isSelected?'selected':''?> <?=$isLocked?'locked':''?>">
 <div class="slot-time"><i class="fa-regular fa-clock"></i> <?=rs_e($slot[2])?></div>
-<div class="slot-status"><?=$isSelected?'Selected':'Available session'?></div>
-<form method="post"><input type="hidden" name="toggle_session" value="1"><input type="hidden" name="date" value="<?=rs_e($date)?>"><input type="hidden" name="slot" value="<?=$slotIndex?>"><input type="hidden" name="action" value="<?=$isSelected?'remove':'add'?>"><button class="<?=$isSelected?'remove':'book'?>" type="submit" <?=$isApproved?'':'disabled'?>><?=$isSelected?'Remove Session':'Book Session'?></button></form>
+<div class="slot-status"><?php
+    if ($isSelected) echo 'Selected';
+    elseif (!$isApproved) echo 'Waiting for approval';
+    elseif (!$canBook) echo 'Closed - booking deadline passed';
+    else echo 'Available session';
+?></div>
+<form method="post">
+<input type="hidden" name="toggle_session" value="1">
+<input type="hidden" name="date" value="<?=rs_e($date)?>">
+<input type="hidden" name="slot" value="<?=$slotIndex?>">
+<input type="hidden" name="action" value="<?=$isSelected?'remove':'add'?>">
+<button class="<?=$isSelected?'remove':'book'?>" type="submit" <?=($isApproved && ($isSelected || $canBook))?'':'disabled'?>><?=$isSelected?'Remove Session':($canBook?'Book Session':'Closed')?></button>
+</form>
 </div>
 <?php endforeach; ?>
 </div>
