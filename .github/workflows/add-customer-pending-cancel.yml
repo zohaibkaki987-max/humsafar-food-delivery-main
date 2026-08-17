@@ -20,31 +20,26 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('my_orders.php')
-          if not path.exists():
-              raise SystemExit('my_orders.php not found')
-
           text = path.read_text(encoding='utf-8')
 
-          # Replace the faulty JS regex regardless of whether the PHP file
-          # currently contains one or two escaped backslashes.
-          replacements = {
-              r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\\\d+)/i);': r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);',
-              r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);': r'var match = viewLink.getAttribute("href").match(/[?&]id=(\d+)/i);',
-          }
+          # The browser needs exactly one regex escape: \d+.
+          # Normalize any number of backslashes before d+ in this specific matcher.
+          pattern = r'(var match = viewLink\.getAttribute\("href"\)\.match\(/\[\?&\]id=\()\\+d(\+\)/i\);)'
+          fixed = r'\1\\d\2'
+          new_text, count = re.subn(pattern, fixed, text)
 
-          changed = False
-          for old, new in replacements.items():
-              if old in text:
-                  text = text.replace(old, new)
-                  changed = True
-
-          if changed:
-              path.write_text(text, encoding='utf-8')
-              print('Fixed pending-order cancel button order-id regex.')
+          if count:
+              path.write_text(new_text, encoding='utf-8')
+              print(f'Fixed pending cancel order-id regex ({count} occurrence(s)).')
           else:
-              print('Regex already correct; no page change required.')
+              # If the matcher is already correct, leave it alone.
+              if 'match(/[?&]id=(\\d+)/i)' in text:
+                  print('Cancel button regex already correct.')
+              else:
+                  raise SystemExit('Pending cancel order-id matcher not found; refusing to modify unrelated code.')
           PY
 
       - name: Validate PHP
@@ -60,5 +55,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Fix pending order cancel button regex"
+          git commit -m "Fix pending order cancel button rendering"
           git push
