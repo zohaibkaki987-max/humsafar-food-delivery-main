@@ -36,4 +36,18 @@ if ($globalFeeTable && $globalFeeTable->num_rows > 0) {
     }
 }
 
+// The existing Admin page uses the old setting key internally for compatibility,
+// but the customer-facing meaning is now a fixed fee per order, not a KM rate.
+if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'business-management.php') {
+    ob_start(function ($html) {
+        $html = str_replace('Delivery fee per KM and rider payout are controlled here by Admin and are applied system-wide to all restaurants and deliveries.', 'One fixed delivery fee and rider payout are controlled here by Admin and applied system-wide to all restaurants and deliveries.', $html);
+        $html = str_replace('Admin sets one delivery rate per started KM. This is the <b>global rate for every restaurant</b>.', 'Admin sets one fixed delivery fee. The same amount is automatically applied to every restaurant and shown to every customer.', $html);
+        $html = str_replace('Delivery Fee per KM (PKR)', 'Delivery Fee per Order (PKR)', $html);
+        $html = str_replace('Current:</b> <?=$rate?> PKR per started KM<br><small>Example: 3.2 KM = 4 KM × <?=$rate?> PKR.</small>', 'Current:</b> <?=$rate?> PKR fixed delivery fee per order.<br><small>No KM calculation. This amount is synchronized to all restaurants.</small>', $html);
+        $html = str_replace('<b>Delivery fee</b> = CEIL(distance in KM) × Admin Global Delivery Fee/KM', '<b>Delivery fee</b> = Admin Global Fixed Delivery Fee (same for every restaurant)', $html);
+        $html = str_replace('<b>Customer total</b> = Marked-up items + Delivery fee − Coupon discount', '<b>Customer total</b> = Marked-up items + Fixed Delivery Fee − Coupon discount', $html);
+        return $html;
+    });
+}
+
 ?>
