@@ -1842,6 +1842,27 @@ foreach (
             }
 
         }
+        .order-actions {
+            margin-top: 18px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .cancel-order-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            color: #fff;
+            background: #dc3545;
+            transition: opacity .2s ease;
+        }
+        .cancel-order-btn:hover {
+            opacity: .9;
+        }
 
     </style>
 
@@ -2541,6 +2562,18 @@ require_once __DIR__ . '/includes/customer-header.php';
                 </div>
 
 
+                <?php if (strtolower(trim((string)$status)) === 'pending'): ?>
+                    <div class="order-actions">
+                    <a
+                    href="cancel_order.php?order_id=<?php echo (int)$order['id']; ?>"
+                    class="cancel-order-btn"
+                    onclick="return confirm('Are you sure you want to cancel this order?');"
+                    >
+                    <i class="fas fa-times-circle"></i>
+                    Cancel Order
+                </a>
+            </div>
+            <?php endif; ?>
 
                 <?php if (!$isCancelled): ?>
 
