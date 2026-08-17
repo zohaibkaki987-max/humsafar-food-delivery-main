@@ -13,6 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Make rider CSS patch robust
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/update_shared_live_map.py')
+          s = p.read_text(encoding='utf-8')
+          old = "    else:\n        raise SystemExit('Rider GPS CSS marker not found')"
+          new = "    else:\n        pos = s.rfind('</style>')\n        if pos < 0:\n            raise SystemExit('Rider style end not found')\n        s = s[:pos] + '.gps{margin-top:15px;padding:0;background:#f3f9ff;border:1px solid #d9eafa;border-radius:10px;overflow:hidden}.gps-head{padding:12px}.rider-live-map{height:260px;width:100%}' + s[pos:]"
+          if old not in s:
+              raise SystemExit('Updater fallback marker not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Apply shared live map changes
         run: python3 scripts/update_shared_live_map.py
 
