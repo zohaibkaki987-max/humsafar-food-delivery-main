@@ -457,59 +457,7 @@ if ($isApproved) {
    ADMIN MARKUP
 ========================================================= */
 
-$adminPercentage = 0.00;
-
-
-/*
-|--------------------------------------------------------------------------
-| First use global app_settings percentage
-|--------------------------------------------------------------------------
-*/
-
-$settingsTable =
-    $conn->query(
-        "SHOW TABLES LIKE 'app_settings'"
-    );
-
-
-if (
-    $settingsTable &&
-    $settingsTable->num_rows > 0
-) {
-
-    $stmt = $conn->prepare("
-        SELECT
-            setting_value
-        FROM app_settings
-        WHERE setting_key =
-              'platform_markup_percent'
-        LIMIT 1
-    ");
-
-
-    if ($stmt) {
-
-        $stmt->execute();
-
-        $setting =
-            $stmt
-                ->get_result()
-                ->fetch_assoc();
-
-        $stmt->close();
-
-
-        if ($setting) {
-
-            $adminPercentage =
-                max(
-                    0,
-                    (float)$setting['setting_value']
-                );
-        }
-    }
-}
-
+$adminPercentage = humsafar_customer_markup_percent($conn);
 
 
 /* =========================================================
