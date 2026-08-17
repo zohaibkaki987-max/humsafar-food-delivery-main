@@ -77,3 +77,6 @@ function humsafar_customer_price_from_db($conn, $basePrice): float
 
     return humsafar_customer_price($basePrice, $commission, $markup);
 }
+
+/* Hide the old/base price on customer menu cards. */
+echo '<style>.menu-old-price{display:none!important;}</style>';
