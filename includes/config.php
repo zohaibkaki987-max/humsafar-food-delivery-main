@@ -13,17 +13,11 @@ if ($conn->connect_error) {
 
 $conn->set_charset("utf8mb4");
 
-// Safe additive customer features integration.
 require_once __DIR__ . '/customer-feature-injector.php';
-// Customer cancellation UI guard. Server-side enforcement is in cancel_order.php.
 require_once __DIR__ . '/customer-cancellation-injector.php';
-// Automatically create one rider payout for every completed delivery using Admin's setting.
 require_once __DIR__ . '/rider-payout-sync.php';
 
-// Global fixed delivery fee: whenever business_settings exists,
-// keep every restaurant's delivery_fee synchronized to Admin's value.
-// Customer and checkout pages already read restaurants.delivery_fee,
-// so this removes any per-restaurant/per-KM customer delivery pricing.
+// Global fixed delivery fee for every restaurant/customer.
 $globalFeeTable = $conn->query("SHOW TABLES LIKE 'business_settings'");
 if ($globalFeeTable && $globalFeeTable->num_rows > 0) {
     $globalFeeResult = $conn->query("SELECT setting_value FROM business_settings WHERE setting_key = 'delivery_fee_per_km' LIMIT 1");
@@ -38,8 +32,6 @@ if ($globalFeeTable && $globalFeeTable->num_rows > 0) {
     }
 }
 
-// The existing Admin page uses the old setting key internally for compatibility,
-// but the customer-facing meaning is now a fixed fee per order, not a KM rate.
 if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'business-management.php') {
     ob_start(function ($html) {
         $html = str_replace('Delivery fee per KM and rider payout are controlled here by Admin and are applied system-wide to all restaurants and deliveries.', 'One fixed delivery fee and rider payout are controlled here by Admin and applied system-wide to all restaurants and deliveries.', $html);
@@ -52,9 +44,7 @@ if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'business-management.php'
     });
 }
 
-// Rider Available Orders must follow the same online rule as the rider sidebar:
-// a rider is ONLINE only while a booked availability session is currently active.
-// Offline riders must not see available orders and cannot accept one by POST either.
+// Rider Available Orders: rider must be approved AND online in a booked session.
 if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'rider-orders.php' && !empty($_SESSION['rider_id'])) {
     $riderOrdersId = (int)$_SESSION['rider_id'];
     $riderOrdersOnline = false;
@@ -79,60 +69,62 @@ if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'rider-orders.php' && !em
         }
     }
 
-    // Block direct/manual attempts to accept an order while offline.
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delivery_action']) && (string)$_POST['delivery_action'] === 'accept' && !$riderOrdersOnline) {
+    // COD settlement lock: any COD amount not yet approved by Admin blocks new orders.
+    $riderCodLocked = false;
+    $codWalletExists = $conn->query("SHOW TABLES LIKE 'rider_cod_wallet'");
+    $codSettlementExists = $conn->query("SHOW TABLES LIKE 'rider_cod_settlements'");
+    if ($codWalletExists && $codWalletExists->num_rows > 0 && $codSettlementExists && $codSettlementExists->num_rows > 0) {
+        $lockStmt = $conn->prepare("SELECT GREATEST(0, COALESCE((SELECT SUM(net_payable) FROM rider_cod_wallet WHERE rider_id=?),0) - COALESCE((SELECT SUM(amount) FROM rider_cod_settlements WHERE rider_id=? AND status='approved'),0)) outstanding");
+        if ($lockStmt) {
+            $lockStmt->bind_param('ii', $riderOrdersId, $riderOrdersId);
+            $lockStmt->execute();
+            $riderCodLocked = (float)($lockStmt->get_result()->fetch_assoc()['outstanding'] ?? 0) > 0.009;
+            $lockStmt->close();
+        }
+    }
+
+    // Server-side protection: even a manually crafted POST cannot accept another order.
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delivery_action']) && (string)$_POST['delivery_action'] === 'accept' && (!$riderOrdersOnline || $riderCodLocked)) {
         header('Location: rider-orders.php');
         exit;
     }
 
-    if (!$riderOrdersOnline) {
-        ob_start(function ($html) {
-            // Remove the complete New Deliveries section while offline.
-            $html = preg_replace('/<section class="section"><h2>New Deliveries<\/h2>.*?<\/section><section class="section"><h2>Active Deliveries<\/h2>/s', '<section class="section"><h2>New Deliveries</h2><div class="empty">You are offline. Go online during an active booked session to see available orders.</div></section><section class="section"><h2>Active Deliveries</h2>', $html, 1);
-            // The New Deliveries counter should also be zero while offline.
+    if (!$riderOrdersOnline || $riderCodLocked) {
+        ob_start(function ($html) use ($riderCodLocked) {
+            $notice = $riderCodLocked
+                ? '<div class="empty">COD payment is pending Admin approval. You cannot receive another order until your outstanding COD is settled and approved.</div>'
+                : '<div class="empty">You are offline. Go online during an active booked session to see available orders.</div>';
+            $html = preg_replace('/<section class="section"><h2>New Deliveries<\/h2>.*?<\/section><section class="section"><h2>Active Deliveries<\/h2>/s', '<section class="section"><h2>New Deliveries</h2>'.$notice.'</section><section class="section"><h2>Active Deliveries</h2>', $html, 1);
             $html = preg_replace('/(<div class="stat"><small>New Deliveries<\/small><strong>)\d+(<\/strong>)/', '$10$2', $html, 1);
             return $html;
         });
     }
 }
 
-// On Rider Orders, show the Admin-controlled payout beside every completed delivery.
+// Show Admin-controlled rider payout beside completed deliveries.
 if (basename((string)($_SERVER['PHP_SELF'] ?? '')) === 'rider-orders.php') {
     ob_start(function ($html) {
         $script = <<<'HTML'
 <script>
 (function(){
     function addRiderEarnings(){
-        var completedSection = Array.from(document.querySelectorAll('.section')).find(function(s){
-            var h = s.querySelector('h2');
-            return h && h.textContent.trim().toLowerCase() === 'completed deliveries';
-        });
-        if(!completedSection) return;
-        var cards = completedSection.querySelectorAll('article.card');
-        if(!cards.length) return;
-        fetch('rider-payout-api.php', {credentials:'same-origin'})
-            .then(function(r){ return r.json(); })
-            .then(function(data){
-                if(!data.ok || !data.payouts) return;
-                cards.forEach(function(card){
-                    var text = card.textContent || '';
-                    var match = text.match(/Order #([^\s·]+)/);
-                    if(!match) return;
-                    var payout = data.payouts[match[1]];
-                    if(!payout || card.querySelector('.rider-earned-box')) return;
-                    var box = document.createElement('div');
-                    box.className = 'rider-earned-box';
-                    box.style.cssText = 'margin-top:12px;padding:10px 12px;border-radius:9px;background:#eaf9ef;border:1px solid #cfeeda;color:#176c36;font-weight:800;display:flex;justify-content:space-between;gap:10px;';
-                    box.innerHTML = '<span>💰 Your Earning</span><span>Rs ' + Number(payout.amount).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2}) + '</span>';
-                    card.querySelector('.body').appendChild(box);
-                });
-            }).catch(function(){});
+        var completedSection = Array.from(document.querySelectorAll('.section')).find(function(s){var h=s.querySelector('h2');return h&&h.textContent.trim().toLowerCase()==='completed deliveries';});
+        if(!completedSection)return;
+        var cards=completedSection.querySelectorAll('article.card');if(!cards.length)return;
+        fetch('rider-payout-api.php',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(data){
+            if(!data.ok||!data.payouts)return;
+            cards.forEach(function(card){
+                var text=card.textContent||'',match=text.match(/Order #([^\s·]+)/);if(!match)return;
+                var payout=data.payouts[match[1]];if(!payout||card.querySelector('.rider-earned-box'))return;
+                var box=document.createElement('div');box.className='rider-earned-box';box.style.cssText='margin-top:12px;padding:10px 12px;border-radius:9px;background:#eaf9ef;border:1px solid #cfeeda;color:#176c36;font-weight:800;display:flex;justify-content:space-between;gap:10px;';box.innerHTML='<span>💰 Your Earning</span><span>Rs '+Number(payout.amount).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2})+'</span>';card.querySelector('.body').appendChild(box);
+            });
+        }).catch(function(){});
     }
-    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addRiderEarnings); else addRiderEarnings();
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addRiderEarnings);else addRiderEarnings();
 })();
 </script>
 HTML;
-        return str_ireplace('</body>', $script . '</body>', $html);
+        return str_ireplace('</body>',$script.'</body>',$html);
     });
 }
 
