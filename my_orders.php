@@ -2977,6 +2977,73 @@ require_once __DIR__ . '/includes/customer-header.php';
 </main>
 
 
+
+<!-- HUMSAFAR_PENDING_CANCEL_BUTTON_V1 -->
+<style id="humsafar-pending-cancel-css">
+    .humsafar-cancel-order-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 9px 13px;
+        border-radius: 9px;
+        border: 1px solid #dc3545;
+        background: #fff;
+        color: #dc3545;
+        text-decoration: none;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+    .humsafar-cancel-order-btn:hover {
+        background: #dc3545;
+        color: #fff;
+    }
+</style>
+<script>
+(function () {
+    function addPendingCancelButtons() {
+        document.querySelectorAll('.order-card').forEach(function (card) {
+            if (!card.querySelector('.status-pending')) return;
+            if (card.querySelector('.humsafar-cancel-order-btn')) return;
+
+            var viewLink = card.querySelector('a[href*="order-details.php?id="]');
+            if (!viewLink) return;
+
+            var match = viewLink.getAttribute('href').match(/[?&]id=(\\d+)/i);
+            if (!match) return;
+
+            var orderId = match[1];
+            var actions = card.querySelector('.hcf-order-actions');
+
+            if (!actions) {
+                actions = document.createElement('div');
+                actions.className = 'hcf-order-actions';
+                viewLink.parentNode.insertBefore(actions, viewLink);
+            }
+
+            var button = document.createElement('a');
+            button.className = 'humsafar-cancel-order-btn';
+            button.href = 'cancel_order.php?order_id=' + encodeURIComponent(orderId);
+            button.innerHTML = '<i class="fas fa-xmark"></i> Cancel Order';
+            button.addEventListener('click', function (event) {
+                if (!window.confirm('Are you sure you want to cancel this pending order?')) {
+                    event.preventDefault();
+                }
+            });
+
+            actions.appendChild(button);
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', addPendingCancelButtons);
+    } else {
+        addPendingCancelButtons();
+    }
+})();
+</script>
+
 </body>
 
 </html>
