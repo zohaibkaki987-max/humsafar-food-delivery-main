@@ -510,39 +510,6 @@ if (
 }
 
 
-/*
-|--------------------------------------------------------------------------
-| Fallback: restaurants.admin_percentage
-|--------------------------------------------------------------------------
-*/
-
-if (
-    $adminPercentage <= 0 &&
-    $restaurant
-) {
-
-    $percentageColumn =
-        $conn->query(
-            "SHOW COLUMNS FROM restaurants LIKE 'admin_percentage'"
-        );
-
-
-    if (
-        $percentageColumn &&
-        $percentageColumn->num_rows > 0
-    ) {
-
-        $adminPercentage =
-            max(
-                0,
-                (float)(
-                    $restaurant['admin_percentage']
-                    ?? 0
-                )
-            );
-    }
-}
-
 
 /* =========================================================
    MENU_ITEMS COLUMN CHECK
