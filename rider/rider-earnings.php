@@ -6,38 +6,26 @@ if(empty($_SESSION['rider_id'])){header('Location:rider-login.php');exit;}
 $rid=(int)$_SESSION['rider_id'];
 function eh($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 
-// Rider delivery earnings are controlled by Admin's rider_base_payout setting.
 $conn->query("CREATE TABLE IF NOT EXISTS rider_payouts(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,rider_id INT UNSIGNED NOT NULL,order_id BIGINT UNSIGNED NULL,amount DECIMAL(12,2) NOT NULL DEFAULT 0,status ENUM('pending','approved','paid','cancelled') NOT NULL DEFAULT 'pending',paid_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX(rider_id,status),INDEX(order_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-// COD wallet ledger. One row per delivered COD order; this prevents duplicate COD counting.
 $conn->query("CREATE TABLE IF NOT EXISTS rider_cod_wallet(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,rider_id INT UNSIGNED NOT NULL,order_id BIGINT UNSIGNED NOT NULL,cod_amount DECIMAL(12,2) NOT NULL DEFAULT 0,rider_earning DECIMAL(12,2) NOT NULL DEFAULT 0,net_payable DECIMAL(12,2) NOT NULL DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_rider_order(rider_id,order_id),INDEX(rider_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $conn->query("CREATE TABLE IF NOT EXISTS rider_cod_settlements(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,rider_id INT UNSIGNED NOT NULL,wallet_id VARCHAR(50) NOT NULL,amount DECIMAL(12,2) NOT NULL DEFAULT 0,payment_method VARCHAR(40) NOT NULL DEFAULT '',reference_no VARCHAR(120) NULL,status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',admin_note VARCHAR(255) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,verified_at DATETIME NULL,INDEX(rider_id,status)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-// Stable wallet ID for every rider.
 $walletId='HUM-WALLET-RD-'.str_pad((string)$rid,5,'0',STR_PAD_LEFT);
-
-// Read Admin payout amount.
 $base=80.00;$q=$conn->query("SELECT setting_value FROM business_settings WHERE setting_key='rider_base_payout' LIMIT 1");if($q&&($x=$q->fetch_assoc()))$base=(float)$x['setting_value'];
 
-// Repair/create payout records for delivered orders that pre-date the payout trigger.
 $s=$conn->prepare("INSERT INTO rider_payouts(rider_id,order_id,amount,status,created_at) SELECT rd.rider_id,rd.order_id,?,'pending',COALESCE(rd.delivered_at,NOW()) FROM rider_deliveries rd LEFT JOIN rider_payouts rp ON rp.rider_id=rd.rider_id AND rp.order_id=rd.order_id WHERE rd.rider_id=? AND LOWER(COALESCE(rd.status,''))='delivered' AND rp.id IS NULL");if($s){$s->bind_param('di',$base,$rid);$s->execute();$s->close();}
 
-// Detect the existing order amount/payment columns so this feature works with the project's current schema.
 function first_col($conn,$table,$candidates){
     foreach($candidates as $c){$e=$conn->real_escape_string($c);$r=$conn->query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='".$conn->real_escape_string($table)."' AND column_name='$e' LIMIT 1");if($r&&$r->num_rows)return $c;}
     return null;
 }
 $amountCol=first_col($conn,'orders',['total_amount','grand_total','final_total','order_total','total','amount']);
-paymentCol=first_col($conn,'orders',['payment_method','payment_type','payment']);
+$paymentCol=first_col($conn,'orders',['payment_method','payment_type','payment']);
 
-// Build the COD ledger from delivered rider orders. Only explicit COD orders enter this wallet.
 if($amountCol){
-    $payExpr=$paymentCol ? "LOWER(TRIM(COALESCE(o.`".$conn->real_escape_string($paymentCol)."`,'')))" : "''";
     $sql="SELECT rd.order_id,COALESCE(o.`".$conn->real_escape_string($amountCol)."`,0) cod_amount,rp.amount rider_earning FROM rider_deliveries rd JOIN orders o ON o.id=rd.order_id LEFT JOIN rider_payouts rp ON rp.rider_id=rd.rider_id AND rp.order_id=rd.order_id WHERE rd.rider_id=? AND LOWER(COALESCE(rd.status,''))='delivered'";
     $st=$conn->prepare($sql);if($st){$st->bind_param('i',$rid);$st->execute();$rs=$st->get_result();while($x=$rs->fetch_assoc()){
         $isCod=true;
-        if($paymentCol){$pm=strtolower(trim((string)$x['cod_amount'])); /* keep amount handling below */ $pstmt=null;}
-        // Fetch payment method separately only when the schema has the column, keeping the query portable.
         if($paymentCol){$ps=$conn->prepare("SELECT LOWER(TRIM(COALESCE(`".$conn->real_escape_string($paymentCol)."`,''))) pm FROM orders WHERE id=? LIMIT 1");if($ps){$oid=(int)$x['order_id'];$ps->bind_param('i',$oid);$ps->execute();$pr=$ps->get_result()->fetch_assoc();$ps->close();$pm=(string)($pr['pm']??'');$isCod=in_array($pm,['cod','cash_on_delivery','cash on delivery','cash'],true);}}
         if(!$isCod)continue;
         $cod=max(0,(float)$x['cod_amount']);$earn=max(0,(float)$x['rider_earning']);$net=max(0,$cod-$earn);
@@ -46,7 +34,6 @@ if($amountCol){
 }
 
 $message='';$messageType='';
-// Rider submits a settlement/payment to Admin. Admin verification is required before it is cleared.
 if($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='submit_cod_settlement'){
     $method=trim((string)($_POST['payment_method']??''));$ref=trim((string)($_POST['reference_no']??''));
     $allowedMethods=['Bank Transfer','Easypaisa','JazzCash','Cash'];
@@ -56,7 +43,7 @@ if($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='submit_cod_s
     if(!in_array($method,$allowedMethods,true)){$message='Please select a valid payment method.';$messageType='error';}
     elseif($payable<=0){$message='There is no COD amount currently payable to Admin.';$messageType='error';}
     else{
-        $ins=$conn->prepare('INSERT INTO rider_cod_settlements(rider_id,wallet_id,amount,payment_method,reference_no,status) VALUES(?,?,?,?,?,\'pending\')');
+        $ins=$conn->prepare("INSERT INTO rider_cod_settlements(rider_id,wallet_id,amount,payment_method,reference_no,status) VALUES(?,?,?,?,?,'pending')");
         if($ins){$ins->bind_param('isdss',$rid,$walletId,$payable,$method,$ref);if($ins->execute()){$message='Payment submitted to Admin for verification.';$messageType='success';}else{$message='Unable to submit payment.';$messageType='error';}$ins->close();}
     }
 }
@@ -64,9 +51,8 @@ if($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='submit_cod_s
 $completed=0;$earned=0;$pending=0;$paid=0;$history=[];
 $sql="SELECT rp.id,rp.order_id,rp.amount,rp.status,rp.created_at,rp.paid_at,o.order_number,r.name restaurant_name FROM rider_payouts rp LEFT JOIN orders o ON o.id=rp.order_id LEFT JOIN restaurants r ON r.id=o.restaurant_id WHERE rp.rider_id=? ORDER BY rp.id DESC";$st=$conn->prepare($sql);if($st){$st->bind_param('i',$rid);$st->execute();$rs=$st->get_result();while($x=$rs->fetch_assoc()){$history[]=$x;$completed++;$amt=(float)$x['amount'];if($x['status']!=='cancelled')$earned+=$amt;if($x['status']==='pending'||$x['status']==='approved')$pending+=$amt;if($x['status']==='paid')$paid+=$amt;}$st->close();}
 $today=0;$month=0;foreach($history as $x){if($x['status']==='cancelled')continue;$d=strtotime($x['created_at']);if(date('Y-m-d',$d)===date('Y-m-d'))$today+=(float)$x['amount'];if(date('Y-m',$d)===date('Y-m'))$month+=(float)$x['amount'];}
-
 $totalCod=0;$totalEarnFromCod=0;$grossPayable=0;$cw=$conn->prepare('SELECT COALESCE(SUM(cod_amount),0) cod,COALESCE(SUM(rider_earning),0) earn,COALESCE(SUM(net_payable),0) payable FROM rider_cod_wallet WHERE rider_id=?');if($cw){$cw->bind_param('i',$rid);$cw->execute();$z=$cw->get_result()->fetch_assoc();$totalCod=(float)($z['cod']??0);$totalEarnFromCod=(float)($z['earn']??0);$grossPayable=(float)($z['payable']??0);$cw->close();}
-$settled=0;$sw=$conn->prepare("SELECT COALESCE(SUM(amount),0) total FROM rider_cod_settlements WHERE rider_id=? AND status IN('pending','approved','rejected')");if($sw){$sw->bind_param('i',$rid);$sw->execute();$settled=(float)($sw->get_result()->fetch_assoc()['total']??0);$sw->close();}
+$settled=0;$sw=$conn->prepare("SELECT COALESCE(SUM(amount),0) total FROM rider_cod_settlements WHERE rider_id=? AND status IN('pending','approved')");if($sw){$sw->bind_param('i',$rid);$sw->execute();$settled=(float)($sw->get_result()->fetch_assoc()['total']??0);$sw->close();}
 $pendingSettlement=0;$ps=$conn->prepare("SELECT COALESCE(SUM(amount),0) total FROM rider_cod_settlements WHERE rider_id=? AND status='pending'");if($ps){$ps->bind_param('i',$rid);$ps->execute();$pendingSettlement=(float)($ps->get_result()->fetch_assoc()['total']??0);$ps->close();}
 $payable=max(0,$grossPayable-$settled+$pendingSettlement);
 $settlementHistory=[];$sh=$conn->prepare('SELECT amount,payment_method,reference_no,status,created_at,verified_at FROM rider_cod_settlements WHERE rider_id=? ORDER BY id DESC LIMIT 20');if($sh){$sh->bind_param('i',$rid);$sh->execute();$sr=$sh->get_result();while($x=$sr->fetch_assoc())$settlementHistory[]=$x;$sh->close();}
