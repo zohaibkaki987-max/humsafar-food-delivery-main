@@ -115,6 +115,25 @@ while (
 
 $stmt->close();
 
+/* HUMSAFAR_SHARED_LIVE_MAP_CUSTOMER */
+$customerTracking = [];
+foreach ($orders as $trackingOrder) {
+    $trackingOrderId = (int)($trackingOrder['id'] ?? 0);
+    if ($trackingOrderId < 1) continue;
+    $trackingStmt = $conn->prepare("SELECT rd.status AS delivery_status,r.id AS rider_id,r.full_name AS rider_name,r.phone AS rider_phone,r.vehicle_type,r.bike_number,rl.latitude,rl.longitude,rl.updated_at AS location_updated_at
+        FROM rider_deliveries rd
+        INNER JOIN riders r ON r.id=rd.rider_id
+        LEFT JOIN rider_locations rl ON rl.id=(SELECT x.id FROM rider_locations x WHERE x.rider_id=r.id ORDER BY x.id DESC LIMIT 1)
+        WHERE rd.order_id=? ORDER BY rd.id DESC LIMIT 1");
+    if ($trackingStmt) {
+        $trackingStmt->bind_param('i', $trackingOrderId);
+        $trackingStmt->execute();
+        $customerTracking[$trackingOrderId] = $trackingStmt->get_result()->fetch_assoc();
+        $trackingStmt->close();
+    }
+}
+
+
 
 /*
 |--------------------------------------------------------------------------
@@ -439,6 +458,8 @@ foreach (
         rel="stylesheet"
         href="css/style.css"
     >
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
 
     <style>
@@ -1864,7 +1885,15 @@ foreach (
             opacity: .9;
         }
 
-    </style>
+    
+        /* HUMSAFAR_SHARED_LIVE_MAP_CUSTOMER_CSS */
+        .live-map-card{margin:5px 22px 20px;padding:14px;background:#f8fbff;border:1px solid #dcecf6;border-radius:13px}
+        .live-map-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;color:#333;font-size:13px;font-weight:800}
+        .live-map-status{color:#1672b8;font-size:11px;font-weight:800}
+        .live-map{height:260px;border-radius:11px;overflow:hidden;border:1px solid #dbe8ef}
+        .live-map-meta{margin-top:8px;color:#777;font-size:11px}
+        @media (max-width:750px){.live-map-card{margin-left:17px;margin-right:17px}.live-map{height:230px}}
+</style>
 
 </head>
 
@@ -2868,7 +2897,21 @@ require_once __DIR__ . '/includes/customer-header.php';
                     </div>
 
 
-                <?php else: ?>
+                
+
+                <?php $liveTracking = $customerTracking[(int)$order['id']] ?? null; ?>
+                <?php if ($liveTracking): ?>
+                <div class="live-map-card" data-live-order="<?php echo (int)$order['id']; ?>">
+                    <div class="live-map-header">
+                        <span><i class="fas fa-location-dot"></i> Live Delivery Location</span>
+                        <span class="live-map-status" data-live-status>Waiting for rider GPS...</span>
+                    </div>
+                    <div class="live-map" id="customer-live-map-<?php echo (int)$order['id']; ?>"></div>
+                    <div class="live-map-meta" data-live-meta>Map will update automatically when the rider sends a location.</div>
+                </div>
+                <?php endif; ?>
+
+<?php else: ?>
 
 
                     <!-- =================================================
@@ -3010,6 +3053,56 @@ require_once __DIR__ . '/includes/customer-header.php';
 </main>
 
 
+
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* HUMSAFAR_SHARED_LIVE_MAP_CUSTOMER_JS */
+(function(){
+    const maps = {};
+    const defaultCenter = [25.3960, 68.3578];
+    function initCustomerMap(orderId, lat, lng){
+        const el = document.getElementById('customer-live-map-'+orderId);
+        if(!el) return;
+        const valid = Number.isFinite(lat) && Number.isFinite(lng);
+        if(!maps[orderId]){
+            maps[orderId] = L.map(el).setView(valid ? [lat,lng] : defaultCenter, 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(maps[orderId]);
+        }
+        if(valid){
+            if(!maps[orderId].marker) maps[orderId].marker = L.marker([lat,lng]).addTo(maps[orderId]);
+            else maps[orderId].marker.setLatLng([lat,lng]);
+            maps[orderId].setView([lat,lng],15);
+        }
+    }
+    async function poll(orderId){
+        try{
+            const r = await fetch('live-tracking-data.php?order_id='+encodeURIComponent(orderId),{cache:'no-store'});
+            const d = await r.json();
+            const card = document.querySelector('[data-live-order="'+orderId+'"]');
+            if(!card) return;
+            const status = card.querySelector('[data-live-status]');
+            const meta = card.querySelector('[data-live-meta]');
+            if(d.rider){
+                const lat = parseFloat(d.rider.latitude), lng = parseFloat(d.rider.longitude);
+                initCustomerMap(orderId, Number.isFinite(lat)?lat:NaN, Number.isFinite(lng)?lng:NaN);
+                if(Number.isFinite(lat) && Number.isFinite(lng)){
+                    if(status) status.textContent = 'Rider location is live';
+                    if(meta) meta.textContent = 'Rider: '+(d.rider.rider_name||'Rider')+' · Last update: '+(d.rider.location_updated_at||'just now');
+                }else if(status){
+                    status.textContent = 'Waiting for rider GPS...';
+                }
+            }
+        }catch(e){}
+    }
+    document.querySelectorAll('[data-live-order]').forEach(function(el){
+        const id = el.getAttribute('data-live-order');
+        initCustomerMap(id,NaN,NaN);
+        poll(id);
+        setInterval(function(){poll(id)},5000);
+    });
+})();
+</script>
 </body>
 
 </html>
