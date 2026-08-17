@@ -1,0 +1,67 @@
+name: One-time customer map visibility update
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/one-time-hide-customer-map.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update my_orders.php
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('my_orders.php')
+          s = p.read_text(encoding='utf-8')
+
+          old = """            $isCancelled =\n                in_array(\n                    strtolower(\n                        trim(\n                            (string)\n                            $status\n                        )\n                    ),\n                    [\n                        'cancelled',\n                        'canceled'\n                    ],\n                    true\n                );\n\n            ?>"""
+
+          new = """            $isCancelled =\n                in_array(\n                    strtolower(\n                        trim(\n                            (string)\n                            $status\n                        )\n                    ),\n                    [\n                        'cancelled',\n                        'canceled'\n                    ],\n                    true\n                );\n\n            $isDelivered =\n                in_array(\n                    strtolower(\n                        trim(\n                            (string)\n                            $status\n                        )\n                    ),\n                    [\n                        'delivered',\n                        'completed'\n                    ],\n                    true\n                );\n\n            ?>"""
+
+          if old not in s:
+              raise SystemExit('Could not find order status block')
+          s = s.replace(old, new, 1)
+
+          old = """                <?php if ($liveTracking): ?>\n                <div class=\"live-map-card\" data-live-order=\"<?php echo (int)$order['id']; ?>\">"""
+          new = """                <?php if (!$isDelivered && $liveTracking): ?>\n                <div class=\"live-map-card\" data-live-order=\"<?php echo (int)$order['id']; ?>\">"""
+
+          if old not in s:
+              raise SystemExit('Could not find live map condition')
+          s = s.replace(old, new, 1)
+
+          old = """            if(d.rider){\n                const lat = parseFloat(d.rider.latitude), lng = parseFloat(d.rider.longitude);\n                initCustomerMap(orderId, Number.isFinite(lat)?lat:NaN, Number.isFinite(lng)?lng:NaN);\n                if(Number.isFinite(lat) && Number.isFinite(lng)){\n                    if(status) status.textContent = 'Rider location is live';\n                    if(meta) meta.textContent = 'Rider: '+(d.rider.rider_name||'Rider')+' · Last update: '+(d.rider.location_updated_at||'just now');\n                }else if(status){\n                    status.textContent = 'Waiting for rider GPS...';\n                }\n            }"""
+          new = """            if(d.rider){\n                const deliveryStatus = String(d.rider.delivery_status || '').toLowerCase().trim();\n                if(deliveryStatus === 'delivered' || deliveryStatus === 'completed'){\n                    const mapCard = document.querySelector('[data-live-order=\"'+orderId+'\"]');\n                    if(mapCard) mapCard.remove();\n                    if(maps[orderId]){\n                        maps[orderId].remove();\n                        delete maps[orderId];\n                    }\n                    return true;\n                }\n                const lat = parseFloat(d.rider.latitude), lng = parseFloat(d.rider.longitude);\n                initCustomerMap(orderId, Number.isFinite(lat)?lat:NaN, Number.isFinite(lng)?lng:NaN);\n                if(Number.isFinite(lat) && Number.isFinite(lng)){\n                    if(status) status.textContent = 'Rider location is live';\n                    if(meta) meta.textContent = 'Rider: '+(d.rider.rider_name||'Rider')+' · Last update: '+(d.rider.location_updated_at||'just now');\n                }else if(status){\n                    status.textContent = 'Waiting for rider GPS...';\n                }\n            }"""
+
+          if old not in s:
+              raise SystemExit('Could not find live tracking JS block')
+          s = s.replace(old, new, 1)
+
+          old = """        poll(id);\n        setInterval(function(){poll(id)},5000);"""
+          new = """        poll(id);\n        const timer = setInterval(async function(){\n            const removed = await poll(id);\n            if(removed) clearInterval(timer);\n        },5000);"""
+
+          if old not in s:
+              raise SystemExit('Could not find polling block')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit update and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add my_orders.php .github/workflows/one-time-hide-customer-map.yml
+          git rm .github/workflows/one-time-hide-customer-map.yml
+          git commit -m 'Hide customer live map after delivery [skip ci]'
+          git push
