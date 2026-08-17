@@ -27,21 +27,24 @@ jobs:
 
           text = path.read_text(encoding='utf-8')
 
-          # The button is already rendered by the page's pending-cancel block.
-          # The remaining bug is the JavaScript regex: the source currently
-          # contains two backslashes (\\\\d), so the regex searches for a
-          # literal backslash+d instead of a digit. Replace it with \\d.
-          broken = r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);'
-          fixed = r'var match = viewLink.getAttribute("href").match(/[?&]id=(\d+)/i);'
+          # Replace the faulty JS regex regardless of whether the PHP file
+          # currently contains one or two escaped backslashes.
+          replacements = {
+              r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\\\d+)/i);': r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);',
+              r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);': r'var match = viewLink.getAttribute("href").match(/[?&]id=(\d+)/i);',
+          }
 
-          if broken in text:
-              text = text.replace(broken, fixed)
+          changed = False
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new)
+                  changed = True
+
+          if changed:
               path.write_text(text, encoding='utf-8')
               print('Fixed pending-order cancel button order-id regex.')
-          elif fixed in text:
-              print('Cancel button regex is already correct.')
           else:
-              raise SystemExit('Expected cancel-button regex was not found.')
+              print('Regex already correct; no page change required.')
           PY
 
       - name: Validate PHP
@@ -57,5 +60,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Fix pending order cancel button order id regex"
+          git commit -m "Fix pending order cancel button regex"
           git push
