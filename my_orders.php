@@ -2604,7 +2604,20 @@ require_once __DIR__ . '/includes/customer-header.php';
             </div>
             <?php endif; ?>
 
-                <?php if (!$isCancelled): ?>
+                <?php if (!$isCancelled):
+                    $isDelivered =
+    in_array(
+        strtolower(
+            trim(
+                (string)$status
+            )
+            ),
+            [
+                'delivered',
+                'completed'
+                ],
+                true
+                ); ?>
 
 
                     <!-- =================================================
@@ -2900,7 +2913,7 @@ require_once __DIR__ . '/includes/customer-header.php';
                 
 
                 <?php $liveTracking = $customerTracking[(int)$order['id']] ?? null; ?>
-                <?php if ($liveTracking): ?>
+                <?php if (!$isDelivered && $liveTracking): ?>
                 <div class="live-map-card" data-live-order="<?php echo (int)$order['id']; ?>">
                     <div class="live-map-header">
                         <span><i class="fas fa-location-dot"></i> Live Delivery Location</span>
@@ -3084,6 +3097,19 @@ require_once __DIR__ . '/includes/customer-header.php';
             const status = card.querySelector('[data-live-status]');
             const meta = card.querySelector('[data-live-meta]');
             if(d.rider){
+            const deliveryStatus = String(d.rider.delivery_status || '').toLowerCase().trim();
+            if(deliveryStatus === 'delivered' || deliveryStatus === 'completed'){
+                const mapCard = document.querySelector('[data-live-order="'+orderId+'"]');
+                if(mapCard){
+                    mapCard.remove();
+                }
+                if(maps[orderId]){
+                    maps[orderId].remove();
+                    delete maps[orderId];
+                }
+                
+                return true;
+            }
                 const lat = parseFloat(d.rider.latitude), lng = parseFloat(d.rider.longitude);
                 initCustomerMap(orderId, Number.isFinite(lat)?lat:NaN, Number.isFinite(lng)?lng:NaN);
                 if(Number.isFinite(lat) && Number.isFinite(lng)){
@@ -3099,8 +3125,13 @@ require_once __DIR__ . '/includes/customer-header.php';
         const id = el.getAttribute('data-live-order');
         initCustomerMap(id,NaN,NaN);
         poll(id);
-        setInterval(function(){poll(id)},5000);
-    });
+        const timer = setInterval(async function(){
+        const removed = await poll(id);
+        if(removed){
+            clearInterval(timer);
+        }
+    },5000);
+});
 })();
 </script>
 </body>
