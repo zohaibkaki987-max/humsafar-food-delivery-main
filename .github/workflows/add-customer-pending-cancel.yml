@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fix pending-order cancel button
+      - name: Fix pending cancel button
         shell: bash
         run: |
           python3 - <<'PY'
@@ -25,21 +25,23 @@ jobs:
           path = Path('my_orders.php')
           text = path.read_text(encoding='utf-8')
 
-          # The browser needs exactly one regex escape: \d+.
-          # Normalize any number of backslashes before d+ in this specific matcher.
-          pattern = r'(var match = viewLink\.getAttribute\("href"\)\.match\(/\[\?&\]id=\()\\+d(\+\)/i\);)'
-          fixed = r'\1\\d\2'
-          new_text, count = re.subn(pattern, fixed, text)
+          old = 'var match = viewLink.getAttribute(\"href\").match(/[?&]id='
+          start = text.find(old)
+          if start < 0:
+              raise SystemExit('Pending cancel matcher not found')
+          end = text.find(';', start)
+          if end < 0:
+              raise SystemExit('Pending cancel matcher line is incomplete')
 
-          if count:
-              path.write_text(new_text, encoding='utf-8')
-              print(f'Fixed pending cancel order-id regex ({count} occurrence(s)).')
-          else:
-              # If the matcher is already correct, leave it alone.
-              if 'match(/[?&]id=(\\d+)/i)' in text:
-                  print('Cancel button regex already correct.')
-              else:
-                  raise SystemExit('Pending cancel order-id matcher not found; refusing to modify unrelated code.')
+          line_end = end + 1
+          replacement = '''var href = viewLink.getAttribute(\"href\") || \"\";\n            var idPos = href.indexOf(\"id=\");\n            if (idPos < 0) return;\n            var orderId = href.slice(idPos + 3).split(\"&\")[0].replace(/[^0-9]/g, \"\");\n            if (!orderId) return;'''
+
+          text = text[:start] + replacement + text[line_end:]
+
+          # Remove the old duplicate orderId declaration immediately after the matcher block.
+          text = text.replace('            var orderId = match[1];\n', '', 1)
+          path.write_text(text, encoding='utf-8')
+          print('Replaced fragile regex with deterministic order-id extraction.')
           PY
 
       - name: Validate PHP
