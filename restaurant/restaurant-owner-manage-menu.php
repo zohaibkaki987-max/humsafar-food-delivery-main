@@ -4551,34 +4551,12 @@ if (
 
                                                         <?= number_format(
                                                             $itemPrice,
-                                                            2
+                                                            0
                                                         ) ?>
 
                                                     </strong>
 
                                                 </div>
-
-
-                                                <div
-                                                    class="price-row"
-                                                >
-
-                                                    <span>
-                                                        Admin Markup
-                                                    </span>
-
-
-                                                    <strong>
-
-                                                        <?= number_format(
-                                                            $adminPercentage,
-                                                            2
-                                                        ) ?>%
-
-                                                    </strong>
-
-                                                </div>
-
 
                                                 <div
                                                     class="price-row"
@@ -4597,7 +4575,7 @@ if (
 
                                                         <?= number_format(
                                                             $customerPrice,
-                                                            2
+                                                            0
                                                         ) ?>
 
                                                     </strong>

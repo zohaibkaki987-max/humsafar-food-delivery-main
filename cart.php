@@ -2308,7 +2308,7 @@ require_once __DIR__ .
                                     $item[
                                         'item_price'
                                     ],
-                                    2
+                                    0
                                 );
                                 ?>
 
@@ -2426,7 +2426,7 @@ require_once __DIR__ .
                                     $item[
                                         'item_subtotal'
                                     ],
-                                    2
+                                    0
                                 );
                                 ?>
 
@@ -2516,7 +2516,7 @@ require_once __DIR__ .
                         <?php
                         echo number_format(
                             $subtotal,
-                            2
+                            0
                         );
                         ?>
 

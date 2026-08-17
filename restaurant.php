@@ -2285,7 +2285,7 @@ require_once
                                             echo number_format(
                                                 (float)
                                                 $item['price'],
-                                                2
+                                                0
                                             );
                                             ?>
 
