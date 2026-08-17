@@ -27,18 +27,21 @@ jobs:
 
           text = path.read_text(encoding='utf-8')
 
-          # The previous patch wrote a double backslash into the JavaScript regex.
-          # That made the selector look for literal "\\d" instead of digits.
-          old = r'(?i)'
-          broken = r'[?&]id=(\\\\d+)'
-          fixed = r'[?&]id=(\\d+)'
+          # The button is already rendered by the page's pending-cancel block.
+          # The remaining bug is the JavaScript regex: the source currently
+          # contains two backslashes (\\\\d), so the regex searches for a
+          # literal backslash+d instead of a digit. Replace it with \\d.
+          broken = r'var match = viewLink.getAttribute("href").match(/[?&]id=(\\d+)/i);'
+          fixed = r'var match = viewLink.getAttribute("href").match(/[?&]id=(\d+)/i);'
 
           if broken in text:
               text = text.replace(broken, fixed)
               path.write_text(text, encoding='utf-8')
               print('Fixed pending-order cancel button order-id regex.')
+          elif fixed in text:
+              print('Cancel button regex is already correct.')
           else:
-              print('Regex already correct or not found.')
+              raise SystemExit('Expected cancel-button regex was not found.')
           PY
 
       - name: Validate PHP
@@ -54,5 +57,5 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          git commit -m "Fix pending order cancel button selector"
+          git commit -m "Fix pending order cancel button order id regex"
           git push
