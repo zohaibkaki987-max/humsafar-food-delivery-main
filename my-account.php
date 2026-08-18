@@ -50,7 +50,7 @@ if ($customerId > 0) {
     $stmt = $conn->prepare("
         SELECT
             id,
-            name,
+            full_name,
             email,
             phone,
             created_at

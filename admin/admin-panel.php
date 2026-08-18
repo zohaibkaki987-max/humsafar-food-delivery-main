@@ -23,26 +23,15 @@ function tableExists($connection, $table)
 
 function columnExists($connection, $table, $column)
 {
-    $statement = $connection->prepare(
-        "SHOW COLUMNS FROM `$table` LIKE ?"
+    $table = $connection->real_escape_string($table);
+    $column = $connection->real_escape_string($column);
+
+    $result = $connection->query(
+        "SHOW COLUMNS FROM `$table` LIKE '$column'"
     );
 
-    if (!$statement) {
-        return false;
-    }
-
-    $statement->bind_param('s', $column);
-    $statement->execute();
-
-    $result = $statement->get_result();
-
-    $exists = $result && $result->num_rows > 0;
-
-    $statement->close();
-
-    return $exists;
+    return $result && $result->num_rows > 0;
 }
-
 
 /*
 |--------------------------------------------------------------------------

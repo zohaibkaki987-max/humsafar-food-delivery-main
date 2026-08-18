@@ -24,6 +24,26 @@ $conn->query("CREATE TABLE IF NOT EXISTS rider_payouts (
 $conn->query("ALTER TABLE rider_payouts ADD COLUMN IF NOT EXISTS order_id BIGINT UNSIGNED NULL AFTER rider_id");
 $conn->query("ALTER TABLE rider_payouts ADD INDEX IF NOT EXISTS idx_rider_payout_order (order_id)");
 
+// Ensure existing rider_payouts table has order_id column
+$tableCheck = $conn->query("SHOW COLUMNS FROM rider_payouts LIKE 'order_id'");
+
+if ($tableCheck && $tableCheck->num_rows === 0) {
+    $conn->query("ALTER TABLE rider_payouts ADD COLUMN order_id BIGINT UNSIGNED NULL");
+}
+
+$indexCheck = $conn->query("
+    SELECT 1
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'rider_payouts'
+      AND index_name = 'idx_rider_payout_order'
+    LIMIT 1
+");
+
+if ($indexCheck && $indexCheck->num_rows === 0) {
+    $conn->query("ALTER TABLE rider_payouts ADD INDEX idx_rider_payout_order (order_id)");
+}
+
 $basePayout = 80.00;
 $settingResult = $conn->query("SELECT setting_value FROM business_settings WHERE setting_key='rider_base_payout' LIMIT 1");
 if ($settingResult && ($setting = $settingResult->fetch_assoc())) {
