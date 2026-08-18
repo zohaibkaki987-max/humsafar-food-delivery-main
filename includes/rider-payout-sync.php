@@ -2,7 +2,7 @@
 /*
  * Global rider payout sync.
  * Every delivered order gets exactly one payout using Admin's rider_base_payout setting.
- * The payout is created idempotently, so refreshing pages never duplicates earnings.
+ * The schema checks below also upgrade older rider_payouts tables created before order_id existed.
  */
 if (!isset($conn) || !$conn) {
     return;
@@ -20,6 +20,10 @@ $conn->query("CREATE TABLE IF NOT EXISTS rider_payouts (
     INDEX(order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+/* Upgrade an existing rider_payouts table from an older project version. */
+$conn->query("ALTER TABLE rider_payouts ADD COLUMN IF NOT EXISTS order_id BIGINT UNSIGNED NULL AFTER rider_id");
+$conn->query("ALTER TABLE rider_payouts ADD INDEX IF NOT EXISTS idx_rider_payout_order (order_id)");
+
 $basePayout = 80.00;
 $settingResult = $conn->query("SELECT setting_value FROM business_settings WHERE setting_key='rider_base_payout' LIMIT 1");
 if ($settingResult && ($setting = $settingResult->fetch_assoc())) {
@@ -28,7 +32,7 @@ if ($settingResult && ($setting = $settingResult->fetch_assoc())) {
 
 /*
  * Use rider_deliveries as the source of truth for completed deliveries.
- * A unique logical check on rider + order prevents duplicate payout rows.
+ * The rider + order check prevents duplicate payout rows.
  */
 $sql = "INSERT INTO rider_payouts (rider_id, order_id, amount, status, created_at)
         SELECT rd.rider_id, rd.order_id, ?, 'pending', COALESCE(rd.delivered_at, NOW())
